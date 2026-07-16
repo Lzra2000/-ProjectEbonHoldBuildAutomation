@@ -661,16 +661,32 @@ end
 ------------------------------------------------------------------------
 
 local missingState = { missingOnly = false }
-local missingToggleBtn, missingCountLabel
+local missingToggleBtn, missingCountLabel, missingRefreshBtn
 local RefreshMissing
 
 local function BuildMissingTab(parent)
     missingCountLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     missingCountLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -4)
 
+    missingRefreshBtn = EbonBuilds.Theme.CreateButton(parent)
+    missingRefreshBtn:SetSize(70, 20)
+    missingRefreshBtn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -20, -2)
+    missingRefreshBtn:SetText("Refresh")
+    missingRefreshBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Refresh", 1, 1, 1)
+        GameTooltip:AddLine("Re-reads your spellbook for learned echoes right now, " ..
+            "instead of waiting for the automatic retry.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    missingRefreshBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    missingRefreshBtn:SetScript("OnClick", function()
+        RefreshMissing()
+    end)
+
     missingToggleBtn = EbonBuilds.Theme.CreateButton(parent)
     missingToggleBtn:SetSize(130, 20)
-    missingToggleBtn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -20, -2)
+    missingToggleBtn:SetPoint("RIGHT", missingRefreshBtn, "LEFT", -8, 0)
     missingToggleBtn:SetText("Show: All")
     missingToggleBtn:SetScript("OnClick", function(self)
         missingState.missingOnly = not missingState.missingOnly

@@ -15,8 +15,15 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.24",
+    title = "What's New in 2.25",
     lines = {
+        GOLD .. "2.25: Missing tab Refresh button" .. R,
+        "- New: Refresh button forces an immediate spellbook re-scan",
+        "- No more waiting on the automatic retry or leaving and",
+        "  re-entering the tab to force a re-check",
+        "- Local re-scan only -- Echoes come from your own spellbook,",
+        "  no server request needed (unlike Affixes' Refresh)",
+        "",
         GOLD .. "2.24: fixed freeze/hang after syncing" .. R,
         "- Likely cause found: Tome Atlas + Public Builds re-rendered",
         "  the ENTIRE list on every single incoming sync message --",

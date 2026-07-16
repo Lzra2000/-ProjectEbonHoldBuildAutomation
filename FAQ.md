@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.24 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.25 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -155,7 +155,16 @@ Yes (2.24), most likely cause found and fixed. Tome Atlas (and Public Builds) re
 ### How do I know a Settings toggle actually saved?
 As of 2.24, clicking Save in the gear-icon Settings dialog shows a toast confirming what was saved (e.g. "Settings saved (Auto-sell ON, Bag dots OFF)") -- previously it just closed the popup with no feedback at all.
 
+### The Missing tab has no way to re-check what I've learned. New?
+Fixed (2.25): a **Refresh** button next to Show: All/Missing only. Unlike Affixes' Refresh (which asks the server), this one is a local spellbook re-scan -- Echoes come straight from your own client's spellbook, no server round-trip needed. Previously the only way to force a re-check was leaving the tab and coming back.
+
+If the tab says "0 learned" and that looks wrong: the count only reflects what your current character's spellbook "Echoes" category actually contains right now. A fresh character (or one who just reset) legitimately shows 0 until the server grants that category. Try Refresh first; if it's still 0 after you know you've picked up an echo, that's worth a bug report (`/ebb errors`).
+
 ## Changelog
+
+### 2.25 (2026-07-16) -- Missing tab: manual Refresh button
+
+- **New: Refresh button on the Missing tab**, next to Show: All/Missing only. Forces an immediate spellbook re-scan instead of relying on the automatic retry (which polls every 1.5s for up to 15s then gives up) or having to leave and re-enter the tab.
 
 ### 2.24 (2026-07-16) -- fix Tome Atlas/Public Builds freeze during sync, Settings save feedback
 
