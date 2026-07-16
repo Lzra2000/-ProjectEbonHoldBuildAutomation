@@ -209,13 +209,28 @@ local function BuildSettingsPopup()
         local gs = EbonBuildsDB.globalSettings
         gs.evalDelay = delaySlider:GetValue()
         gs.toastDuration = toastSlider:GetValue()
+        local autoSellOn, bagDotsOn
         if EbonBuilds.AutoSell then
-            EbonBuilds.AutoSell.SetEnabled(autoSellCB:GetChecked() and true or false)
+            autoSellOn = autoSellCB:GetChecked() and true or false
+            EbonBuilds.AutoSell.SetEnabled(autoSellOn)
         end
         if EbonBuilds.BagAffixDots then
-            EbonBuilds.BagAffixDots.SetEnabled(bagDotsCB:GetChecked() and true or false)
+            bagDotsOn = bagDotsCB:GetChecked() and true or false
+            EbonBuilds.BagAffixDots.SetEnabled(bagDotsOn)
         end
         popup:Hide()
+        -- Confirms the settings actually took effect -- previously Save
+        -- just closed the popup silently with no feedback at all, so
+        -- there was no way to tell a toggle click had actually been
+        -- saved versus just visually checked in the box.
+        if EbonBuilds.Toast and EbonBuilds.Toast.Show then
+            local parts = {}
+            if autoSellOn ~= nil then parts[#parts + 1] = "Auto-sell " .. (autoSellOn and "ON" or "OFF") end
+            if bagDotsOn ~= nil then parts[#parts + 1] = "Bag dots " .. (bagDotsOn and "ON" or "OFF") end
+            local msg = "Settings saved"
+            if #parts > 0 then msg = msg .. " (" .. table.concat(parts, ", ") .. ")" end
+            EbonBuilds.Toast.Show(msg)
+        end
     end)
 
     local cancelBtn = EbonBuilds.Theme.CreateButton(popup)

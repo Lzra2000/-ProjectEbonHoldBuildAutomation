@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.23 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.24 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -149,7 +149,18 @@ Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW
 ### Sync is flooding my chat with "[EbonBuilds Sync] Build ... stored in remote" spam. Fixed?
 Yes (2.23). Several internal sync diagnostics (one line per build received, one line per REQ broadcast, channel-index bookkeeping) were printing to general chat unconditionally instead of only when `/ebbsync verbose` is on -- always been there, but the 2.15 staggered all-classes sync made it much worse, since a single "All Classes" Reload can now pull in dozens of builds and fires the REQ-sent line up to 10x (once per class) instead of once. All of that moved behind the existing verbose toggle; real problems (a build failing to assemble) now go to `/ebb errors` instead of the chat window. Command output (`/ebbsync status`, `/ebbsync reset`, etc.) and cooldown/actionable messages are unaffected -- you'll still see those.
 
+### The game froze / hung after syncing with Tome Atlas open. Fixed?
+Yes (2.24), most likely cause found and fixed. Tome Atlas (and Public Builds) re-rendered its entire list synchronously on every single incoming synced entry -- normally one build/tome is no big deal, but a real sync can stream in dozens to 100+ in a burst over a few seconds, especially since 2.15's staggered all-classes sync. Each render re-scans your spellbook and rebuilds/sorts the whole list (worse in "Group: Zone"/"Group: Mob" mode), so doing that dozens of times in rapid succession is exactly the kind of thing that makes a client stutter hard or lock up. Both views now coalesce bursty refresh requests into at most one actual render every 0.3s, however many sync messages arrive in between.
+
+### How do I know a Settings toggle actually saved?
+As of 2.24, clicking Save in the gear-icon Settings dialog shows a toast confirming what was saved (e.g. "Settings saved (Auto-sell ON, Bag dots OFF)") -- previously it just closed the popup with no feedback at all.
+
 ## Changelog
+
+### 2.24 (2026-07-16) -- fix Tome Atlas/Public Builds freeze during sync, Settings save feedback
+
+- **Fixed (likely root cause of reported freeze/hang): Tome Atlas and Public Builds re-rendered synchronously on every single incoming sync message.** `RefreshIfMounted()` called the full render path (list rebuild + sort, spellbook rescan for owned status) directly, once per received build/tome entry. A real sync can deliver dozens to 100+ entries in a burst (worse since 2.15's staggered all-classes sync), so with either view open this could fire that expensive path dozens of times per second -- Group: Zone/Mob mode (2.20) made each one more expensive still. Both views now debounce: incoming refreshes just set a pending flag, and an OnUpdate ticker performs at most one actual render every 0.3s.
+- **New: Settings dialog Save now shows a confirmation toast** (e.g. "Settings saved (Auto-sell ON, Bag dots OFF)") instead of closing silently with no feedback.
 
 ### 2.23 (2026-07-16) -- sync chat spam fixed
 

@@ -608,6 +608,30 @@ end
 -- View interface
 ------------------------------------------------------------------------
 
+local pendingRefresh = false
+local refreshThrottleFrame
+local REFRESH_THROTTLE = 0.3 -- seconds; coalesces bursty sync-driven refreshes
+
+local function ScheduleRefresh()
+    pendingRefresh = true
+    if not refreshThrottleFrame then
+        refreshThrottleFrame = CreateFrame("Frame")
+        refreshThrottleFrame:SetScript("OnUpdate", function(self, dt)
+            self._elapsed = (self._elapsed or 0) + dt
+            if self._elapsed < REFRESH_THROTTLE then return end
+            self._elapsed = 0
+            if pendingRefresh and viewFrame and viewFrame:IsShown() then
+                pendingRefresh = false
+                Render()
+            end
+            if not pendingRefresh then
+                self:Hide() -- nothing left to do; stop ticking until scheduled again
+            end
+        end)
+    end
+    refreshThrottleFrame:Show()
+end
+
 function EbonBuilds.TomeAtlasView.Show(parent)
     if not viewFrame then
         viewFrame = BuildViewFrame(parent)
@@ -622,8 +646,11 @@ function EbonBuilds.TomeAtlasView.Hide()
     if viewFrame then viewFrame:Hide() end
 end
 
+-- Called once per incoming sync message (potentially dozens to 100+ in a
+-- burst during a heavy sync) -- must NOT render synchronously here, see
+-- ScheduleRefresh above.
 function EbonBuilds.TomeAtlasView.RefreshIfMounted()
     if viewFrame and viewFrame:IsShown() then
-        Render()
+        ScheduleRefresh()
     end
 end

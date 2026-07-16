@@ -15,8 +15,17 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.23",
+    title = "What's New in 2.24",
     lines = {
+        GOLD .. "2.24: fixed freeze/hang after syncing" .. R,
+        "- Likely cause found: Tome Atlas + Public Builds re-rendered",
+        "  the ENTIRE list on every single incoming sync message --",
+        "  a real sync can send 100+, all in a matter of seconds",
+        "- Now coalesced: at most one render every 0.3s no matter",
+        "  how many sync messages arrive in between",
+        "- Settings dialog Save now shows a confirmation toast",
+        "  instead of closing with zero feedback",
+        "",
         GOLD .. "2.23: sync chat spam fixed" .. R,
         "- Fixed: 'Build X stored in remote' + 'REQ sent on channel'",
         "  printed to chat for every build/request, unconditionally",

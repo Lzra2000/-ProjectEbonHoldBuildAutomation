@@ -686,21 +686,45 @@ function EbonBuilds.PublicBuildsView.Unmount()
     if viewFrame then viewFrame:Hide() end
 end
 
-function EbonBuilds.PublicBuildsView.RefreshIfMounted()
-    if viewFrame and viewFrame:IsVisible() then
-        state.builds     = GetFilteredBuilds()
-        state.totalPages = math.max(1, math.ceil(#state.builds / PAGE_SIZE))
-        -- Preserve whatever page the player is currently browsing. This
-        -- used to hard-reset to page 1 on every single incoming build --
-        -- fine for one build, but a sync (especially the staggered
-        -- all-classes sync, 2.15) can stream in dozens over several
-        -- seconds, snapping the view back to page 1 over and over and
-        -- making it impossible to actually browse while syncing.
-        if state.page > state.totalPages then
-            state.page = state.totalPages
-        end
-        Render()
+local pendingRefresh = false
+local refreshThrottleFrame
+local REFRESH_THROTTLE = 0.3 -- seconds; coalesces bursty sync-driven refreshes
+
+local function DoRefreshIfMounted()
+    if not (viewFrame and viewFrame:IsVisible()) then return end
+    state.builds     = GetFilteredBuilds()
+    state.totalPages = math.max(1, math.ceil(#state.builds / PAGE_SIZE))
+    -- Preserve whatever page the player is currently browsing. This
+    -- used to hard-reset to page 1 on every single incoming build --
+    -- fine for one build, but a sync (especially the staggered
+    -- all-classes sync, 2.15) can stream in dozens over several
+    -- seconds, snapping the view back to page 1 over and over and
+    -- making it impossible to actually browse while syncing.
+    if state.page > state.totalPages then
+        state.page = state.totalPages
     end
+    Render()
+end
+
+function EbonBuilds.PublicBuildsView.RefreshIfMounted()
+    if not (viewFrame and viewFrame:IsVisible()) then return end
+    pendingRefresh = true
+    if not refreshThrottleFrame then
+        refreshThrottleFrame = CreateFrame("Frame")
+        refreshThrottleFrame:SetScript("OnUpdate", function(self, dt)
+            self._elapsed = (self._elapsed or 0) + dt
+            if self._elapsed < REFRESH_THROTTLE then return end
+            self._elapsed = 0
+            if pendingRefresh then
+                pendingRefresh = false
+                DoRefreshIfMounted()
+            end
+            if not pendingRefresh then
+                self:Hide()
+            end
+        end)
+    end
+    refreshThrottleFrame:Show()
 end
 
 function EbonBuilds.PublicBuildsView.Init()
