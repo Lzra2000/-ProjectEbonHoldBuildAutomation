@@ -158,7 +158,7 @@ end
 
 -- Target: catch roughly the top 10% of what's offered.
 function EbonBuilds.Calibration.SuggestFreeze(settings)
-    local r = BuildSuggestion(settings.autoFreezePct or 0, 90, "above")
+    local r = BuildSuggestion(settings.autoFreezePct or 0, 10, "above")
     r.currentFieldPct = settings.autoFreezePct or 0
     r.suggestedFieldPct = r.suggestedPctOfPeak
     return r
@@ -194,7 +194,7 @@ function EbonBuilds.Calibration.SuggestSmartFreeze(settings)
     local stats = EbonBuilds.Automation.GetOutcomeStats()
     local peak  = EbonBuilds.Automation.GetPeak()
     local ratio = (peak and peak > 0 and stats.evBest3) and (stats.evBest3 / peak) or nil
-    return SuggestSmart(settings.freezeEVPct or 110, ratio, 90, "above")
+    return SuggestSmart(settings.freezeEVPct or 110, ratio, 10, "above")
 end
 
 ------------------------------------------------------------------------

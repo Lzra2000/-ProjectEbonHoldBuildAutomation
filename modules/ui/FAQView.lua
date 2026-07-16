@@ -15,8 +15,18 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.41",
+    title = "What's New in 2.42",
     lines = {
+        GOLD .. "2.42: fixed -- Freeze target was backwards" .. R,
+        "- Found from a real Export (AI) dump: Freeze suggestions",
+        "  targeted catching 90% of ALL offers instead of the top 10%",
+        "- Affected Classic + Smart mode, and Continuous Auto-Tune",
+        "  would have quietly LOWERED Freeze over time (wrong way)",
+        "- Fixed -- suggestions now correctly point toward a strict,",
+        "  rarely-triggering threshold",
+        "- Also: Export (AI)'s banned-echo list no longer repeats a",
+        "  name once per banned quality tier -- shows count instead",
+        "",
         GOLD .. "2.41: fixed -- Settings text was cut off mid-sentence" .. R,
         "- The gear-icon Settings dialog's explanation text (Toast",
         "  duration, Auto-sell, Bag affix dots) ran off past where it",

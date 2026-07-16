@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.41 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.42 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -197,6 +197,12 @@ Next to the regular Export button (build edit screen, any tab) is a new **Export
 This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
 
 ## Changelog
+
+### 2.42 (2026-07-16) -- fix: Tuning Advisor's Freeze target was backwards (found from a real Export (AI) dump)
+
+- **Fixed: the Freeze suggestion's target was inverted, aiming to catch 90% of ALL offers instead of the intended top 10%.** A real Export (AI) output showed the tell: "Freeze: currently 73% -> catches ~8% (target ~90%)" -- a limited-charge resource deliberately targeting 90% catch rate makes no sense (it'd burn through charges on almost everything). The comment describing the intent ("catch roughly the top 10%") was correct, but the actual parameter passed (90) produced the opposite given how the percentile math resolves for the "above" direction. Fixed to pass 10, matching the stated intent -- re-verified with the same test data: suggestion now correctly rises toward a strict ~89% of peak (rarely triggers) instead of dropping to a nonsensical ~7%.
+- This affected both Classic and Smart mode Freeze suggestions, and by extension anyone using Continuous Auto-Tune (2.35) with Freeze -- it would have been quietly LOWERING the Freeze threshold over time, the opposite of sensible behavior. Banish and Reroll targets were unaffected (their direction didn't have this inversion).
+- **Also: Export (AI)'s banned-echo list no longer repeats the same name once per banned quality tier** (e.g. "Arcane Bond, Arcane Bond, Arcane Bond..." for 5 separately-banned quality tiers) -- now shows each name once with a "(x5)" count.
 
 ### 2.41 (2026-07-16) -- fix: Settings dialog description text cut off mid-sentence
 

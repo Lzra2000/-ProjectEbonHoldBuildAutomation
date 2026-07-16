@@ -468,11 +468,18 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
     if not anyLocked then add("(none)") end
     add("")
 
-    -- Banned echoes
+    -- Banned echoes. Multiple quality tiers of the same echo are banned as
+    -- separate spellIds, so dedupe by display name (showing how many
+    -- tiers) instead of listing "Arcane Bond" five times in a row.
     local banList = s.echoBanList or {}
-    local bannedNames = {}
+    local bannedCounts = {}
     for spellId in pairs(banList) do
-        bannedNames[#bannedNames + 1] = GetSpellInfo(spellId) or ("spellId " .. spellId)
+        local name = GetSpellInfo(spellId) or ("spellId " .. spellId)
+        bannedCounts[name] = (bannedCounts[name] or 0) + 1
+    end
+    local bannedNames = {}
+    for name, count in pairs(bannedCounts) do
+        bannedNames[#bannedNames + 1] = count > 1 and string.format("%s (x%d)", name, count) or name
     end
     if #bannedNames > 0 then
         table.sort(bannedNames)
