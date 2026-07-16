@@ -10,6 +10,7 @@ local VISIBLE_ROWS = 10
 
 local viewFrame, scrollFrame, scrollChild, scrollBar
 local searchBox, filterBtn, syncBtn, countLabel, emptyText, zoneSummary
+local zonePicker
 local rows = {}
 local state = { text = "", missingOnly = false, groupBy = "tome", zoneFilter = nil }
 
@@ -537,35 +538,131 @@ local function BuildViewFrame(parent)
         Render()
     end)
 
-    local zoneDropdown = CreateFrame("Frame", "EbonBuildsTomeAtlasZoneDropdown", filtersRow, "UIDropDownMenuTemplate")
-    zoneDropdown:SetPoint("LEFT", groupByBtn, "RIGHT", 0, -2)
-    UIDropDownMenu_SetWidth(zoneDropdown, 150)
-    UIDropDownMenu_SetText(zoneDropdown, "All Zones")
-    UIDropDownMenu_Initialize(zoneDropdown, function()
-        local info = UIDropDownMenu_CreateInfo()
-        info.text = "All Zones"
-        info.value = nil
-        info.func = function()
-            state.zoneFilter = nil
-            UIDropDownMenu_SetText(zoneDropdown, "All Zones")
-            CloseDropDownMenus()
-            offset = 0
-            Render()
-        end
-        info.checked = (state.zoneFilter == nil)
-        UIDropDownMenu_AddButton(info)
-        for _, zoneName in ipairs(EbonBuilds.TomeAtlas.ListZones()) do
-            info.text = zoneName
-            info.value = zoneName
-            info.func = function()
-                state.zoneFilter = zoneName
-                UIDropDownMenu_SetText(zoneDropdown, zoneName)
-                CloseDropDownMenus()
-                offset = 0
-                Render()
+    -- Custom zone picker (replaces the native UIDropDownMenuTemplate,
+    -- which is unstyled against this addon's dark theme and, with ~50+
+    -- known zones, just runs an unbounded flat list off the top/bottom of
+    -- the screen with no scrolling or search).
+    local zoneBtn = EbonBuilds.Theme.CreateButton(f)
+    zoneBtn:SetSize(150, 20)
+    zoneBtn:SetPoint("LEFT", groupByBtn, "RIGHT", 8, 0)
+    zoneBtn:SetText("All Zones \226\150\188") -- trailing dropdown-arrow glyph
+
+    local picker = CreateFrame("Frame", "EbonBuildsTomeAtlasZonePicker", f)
+    zonePicker = picker
+    picker:SetFrameStrata("TOOLTIP") -- always above the main window and other UI
+    picker:SetWidth(180)
+    picker:SetHeight(280)
+    picker:SetPoint("TOPLEFT", zoneBtn, "BOTTOMLEFT", 0, -2)
+    EbonBuilds.Theme.ApplyPanel(picker)
+    picker:EnableMouse(true)
+    picker:Hide()
+
+    local pickerSearch = CreateFrame("EditBox", nil, picker, "InputBoxTemplate")
+    pickerSearch:SetHeight(20)
+    pickerSearch:SetPoint("TOPLEFT", picker, "TOPLEFT", 14, -10)
+    pickerSearch:SetPoint("RIGHT", picker, "RIGHT", -12, 0)
+    pickerSearch:SetAutoFocus(false)
+    pickerSearch:SetText("")
+
+    local pickerScroll = CreateFrame("ScrollFrame", nil, picker)
+    pickerScroll:SetPoint("TOPLEFT", pickerSearch, "BOTTOMLEFT", -4, -6)
+    pickerScroll:SetPoint("BOTTOMRIGHT", picker, "BOTTOMRIGHT", -20, 10)
+
+    local pickerChild = CreateFrame("Frame", nil, pickerScroll)
+    pickerChild:SetWidth(148)
+    pickerChild:SetHeight(1)
+    pickerScroll:SetScrollChild(pickerChild)
+
+    local pickerBar = CreateFrame("Slider", nil, pickerScroll, "UIPanelScrollBarTemplate")
+    pickerBar:SetPoint("TOPLEFT",    pickerScroll, "TOPRIGHT",    -2, -4)
+    pickerBar:SetPoint("BOTTOMLEFT", pickerScroll, "BOTTOMRIGHT", -2,  4)
+    pickerBar:SetValueStep(20)
+    pickerBar:SetScript("OnValueChanged", function(self, value)
+        pickerChild:SetPoint("TOPLEFT", pickerScroll, "TOPLEFT", 0, value)
+    end)
+    pickerScroll:EnableMouseWheel(true)
+    pickerScroll:SetScript("OnMouseWheel", function(self, delta)
+        local v = pickerBar:GetValue()
+        local mn, mx = pickerBar:GetMinMaxValues()
+        pickerBar:SetValue(math.max(mn, math.min(mx, v - delta * 20)))
+    end)
+
+    local PICKER_ROW_H = 20
+    local pickerRows = {}
+
+    local function ClosePicker()
+        picker:Hide()
+    end
+
+    local function SelectZone(zoneNameOrNil, label)
+        state.zoneFilter = zoneNameOrNil
+        zoneBtn:SetText(label .. " \226\150\188")
+        ClosePicker()
+        offset = 0
+        Render()
+    end
+
+    local function RefreshPickerList()
+        local filterText = strlower(pickerSearch:GetText() or "")
+        local names = { "All Zones" }
+        for _, z in ipairs(EbonBuilds.TomeAtlas.ListZones()) do names[#names + 1] = z end
+        local shown = {}
+        for _, z in ipairs(names) do
+            if filterText == "" or strlower(z):find(filterText, 1, true) then
+                shown[#shown + 1] = z
             end
-            info.checked = (state.zoneFilter == zoneName)
-            UIDropDownMenu_AddButton(info)
+        end
+
+        for i, zoneName in ipairs(shown) do
+            local row = pickerRows[i]
+            if not row then
+                row = CreateFrame("Button", nil, pickerChild)
+                row:SetHeight(PICKER_ROW_H)
+                row:SetPoint("LEFT", pickerChild, "LEFT", 0, 0)
+                row:SetPoint("RIGHT", pickerChild, "RIGHT", 0, 0)
+                local hl = row:CreateTexture(nil, "BACKGROUND")
+                hl:SetTexture("Interface\\Buttons\\WHITE8X8")
+                hl:SetVertexColor(1, 1, 1, 0.08)
+                hl:SetAllPoints(row)
+                hl:Hide()
+                row._hl = hl
+                row:SetScript("OnEnter", function(self) self._hl:Show() end)
+                row:SetScript("OnLeave", function(self) self._hl:Hide() end)
+                local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                label:SetPoint("LEFT", row, "LEFT", 4, 0)
+                label:SetJustifyH("LEFT")
+                label:SetWordWrap(false)
+                row._label = label
+                pickerRows[i] = row
+            end
+            row._label:SetText(zoneName)
+            row:SetPoint("TOPLEFT", pickerChild, "TOPLEFT", 0, -(i - 1) * PICKER_ROW_H)
+            row:SetScript("OnClick", function()
+                if zoneName == "All Zones" then
+                    SelectZone(nil, "All Zones")
+                else
+                    SelectZone(zoneName, zoneName)
+                end
+            end)
+            row:Show()
+        end
+        for i = #shown + 1, #pickerRows do pickerRows[i]:Hide() end
+
+        local totalH = math.max(1, #shown * PICKER_ROW_H)
+        pickerChild:SetHeight(totalH)
+        local maxScroll = math.max(0, totalH - pickerScroll:GetHeight())
+        pickerBar:SetMinMaxValues(0, maxScroll)
+        if pickerBar:GetValue() > maxScroll then pickerBar:SetValue(maxScroll) end
+    end
+    pickerSearch:SetScript("OnTextChanged", RefreshPickerList)
+
+    zoneBtn:SetScript("OnClick", function()
+        if picker:IsShown() then
+            ClosePicker()
+        else
+            pickerSearch:SetText("")
+            RefreshPickerList()
+            picker:Show()
         end
     end)
 
@@ -658,6 +755,7 @@ end
 
 function EbonBuilds.TomeAtlasView.Hide()
     if viewFrame then viewFrame:Hide() end
+    if zonePicker then zonePicker:Hide() end
 end
 
 -- Called once per incoming sync message (potentially dozens to 100+ in a

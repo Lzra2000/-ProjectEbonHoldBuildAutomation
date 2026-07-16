@@ -15,8 +15,16 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.30",
+    title = "What's New in 2.31",
     lines = {
+        GOLD .. "2.31: themed zone picker" .. R,
+        "- The Zone filter is a custom, scrollable popup now, not the",
+        "  plain Blizzard dropdown that used to run unstyled and",
+        "  unbounded off the screen with 50+ zones",
+        "- Has its own quick-filter search box",
+        "- Matches the addon's dark theme, closes automatically when",
+        "  the view is hidden",
+        "",
         GOLD .. "2.30: fixed row overlap on long names" .. R,
         "- Fixed: a long tome name wrapped to 2 lines and collided",
         "  with the source text below it -- looked like a garbled",

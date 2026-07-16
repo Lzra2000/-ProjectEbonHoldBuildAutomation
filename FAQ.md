@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.30 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.31 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -170,6 +170,10 @@ The Missing tab and Tome Atlas both used to determine what you've learned by sca
 It used to be deliberately hidden there (you already have it in your left sidebar, so browsing it again seemed redundant) -- but that also meant there was no easy way to confirm a build actually published successfully. As of 2.29, your own public builds show up in Public Builds too, tagged **(You)** next to your name, with the Import button replaced by a disabled "Yours" label. If it's not there after making a build public, that's a real sign something's wrong (check the title-collision popup from 2.18 -- your build gets auto-unpublished if the exact title is already public under someone else).
 
 ## Changelog
+
+### 2.31 (2026-07-16) -- Tome Atlas: custom zone picker replaces the native dropdown
+
+- **Changed: the Zone filter is a themed, scrollable, searchable popup now instead of the native Blizzard dropdown.** With 50+ known zones, the old `UIDropDownMenuTemplate` list ran unstyled and unbounded straight off the top/bottom of the screen with no way to scroll or search -- and it visually clashed with the rest of the dark theme. The new picker is height-capped (scrolls instead of overflowing), has a quick-filter search box, and matches the addon's own panel styling. Auto-closes when the view is hidden (tab switch or closing the window) so it can't get left floating on screen.
 
 ### 2.30 (2026-07-16) -- fix: long tome names visually overlapping the row below
 
