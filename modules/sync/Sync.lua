@@ -392,7 +392,7 @@ end
 -- Core request handler (responder side)
 ------------------------------------------------------------------------
 
-local function HandleRequest(requester)
+local function HandleRequest(requester, classFilter)
     -- Flood guard: answering a REQ costs real work (list building, batching,
     -- tome sharing). One answer per requester per REQ_MIN_GAP is plenty.
     if requester and reqCooldown[requester] and Now() < reqCooldown[requester] then
@@ -400,7 +400,8 @@ local function HandleRequest(requester)
         return
     end
     if requester then reqCooldown[requester] = Now() + REQ_MIN_GAP end
-    SyncTrace("REQ from " .. tostring(requester))
+    if classFilter == "" then classFilter = nil end
+    SyncTrace("REQ from " .. tostring(requester) .. (classFilter and (" (class filter: " .. classFilter .. ")") or ""))
     if not requester or requester == "" or NormalizeName(requester) == NormalizeName(UnitName("player")) then return end
 
     EbonBuildsDB.syncPeers = EbonBuildsDB.syncPeers or {}
@@ -431,7 +432,10 @@ local function HandleRequest(requester)
 
     local eligible = {}
     for _, build in ipairs(allPublic) do
-        if NormalizeName(build.author) ~= NormalizeName(requester) then
+        if classFilter and build.class ~= classFilter then
+            -- Skipped silently: not a VerboseLog case per-build, would be
+            -- noisy on a full server sync; the total counts below cover it.
+        elseif NormalizeName(build.author) ~= NormalizeName(requester) then
             if VALIDATION_REQUIRED and not build.validated then
                 VerboseLog("  build " .. (build.title or "?") .. " skipped: not validated")
             else
@@ -541,7 +545,7 @@ local function HandleChannelMessage(msg, sender, _, channelName, _, _, _, channe
         end
     end
 
-    local ok, err = pcall(HandleRequest, parts[2])
+    local ok, err = pcall(HandleRequest, parts[2], parts[3])
     if not ok then Log("HandleRequest error: " .. tostring(err)) end
 end
 
@@ -552,7 +556,7 @@ end
 local function HandleAddonREQ(payload, sender)
     local parts = {strsplit("|", payload)}
     if parts[1] ~= "REQ" then return end
-    local ok, err = pcall(HandleRequest, parts[2])
+    local ok, err = pcall(HandleRequest, parts[2], parts[3])
     if not ok then Log("HandleAddonREQ error: " .. tostring(err)) end
 end
 
@@ -858,7 +862,7 @@ function EbonBuilds.Sync.GetCooldownRemaining()
     return math.ceil(REQ_COOLDOWN - elapsed)
 end
 
-function EbonBuilds.Sync.RequestSync()
+function EbonBuilds.Sync.RequestSync(classFilter)
     local remaining = EbonBuilds.Sync.GetCooldownRemaining()
     if remaining > 0 then
         Log("Sync on cooldown, wait " .. remaining .. "s before requesting again")
@@ -875,9 +879,16 @@ function EbonBuilds.Sync.RequestSync()
     syncSession.lastActivity = Now()
 
     local me       = UnitName("player")
-    local payload  = string.format("REQ|%s", me)
+    -- Third field is an optional class-token filter (e.g. "DEATHKNIGHT").
+    -- Older clients (pre-2.13) ignore a trailing field they don't parse,
+    -- so this is backward compatible with responders who haven't updated.
+    local payload  = string.format("REQ|%s|%s", me, classFilter or "")
 
-    Log("Requesting sync...")
+    if classFilter then
+        Log("Requesting sync (class filter: " .. classFilter .. ")...")
+    else
+        Log("Requesting sync...")
+    end
 
     -- 1. Broadcast via hidden chat channel (all addon users on the realm)
     RefreshChannel()

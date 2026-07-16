@@ -15,8 +15,14 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.12",
+    title = "What's New in 2.13",
     lines = {
+        GOLD .. "2.13: faster, smaller syncs" .. R,
+        "- Public Builds Reload now only fetches the class you have",
+        "  selected in the dropdown (your class by default)",
+        "- Pick 'All Classes' for the old everything-at-once behavior",
+        "- Peers on older versions still work fine, just ignore the filter",
+        "",
         GOLD .. "2.12: previously-built features now actually work" .. R,
         "- New: /ebb autosell -- auto-sells zero-value junk at vendors",
         "  (protects items with an unlearned affix even if worthless)",

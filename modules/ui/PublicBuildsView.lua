@@ -598,7 +598,7 @@ local function BuildViewFrame(parent)
     refreshBtn:SetPoint("LEFT", specDropdown, "RIGHT", 4, 0)
     refreshBtn:SetText("Reload")
     refreshBtn:SetScript("OnClick", function()
-        EbonBuilds.Sync.RequestSync()
+        EbonBuilds.Sync.RequestSync(filterClass)
     end)
     refreshBtn:SetScript("OnUpdate", function(self, dt)
         -- Throttle: the cooldown label only shows whole seconds, so per-frame

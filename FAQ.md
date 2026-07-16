@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.12 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.13 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -108,7 +108,14 @@ Four small standalone tools:
 - **`/ebb errors`** — opens a small always-on error log (last 20 entries), separate from `/ebb debug`. Useful as a first step when something breaks and you don't have debug tracing already running.
 - **`/ebb clicktrace`** — diagnostic for "I clicked a button and nothing happened." Logs every themed button click and view transition, so a bug report can show whether the click even reached EbonBuilds or was intercepted before that.
 
+### Why did Reload get faster / show fewer builds? (2.13)
+The Public Builds **Reload** button now only requests builds for the class currently selected in the dropdown (your own class by default), instead of every class from every peer on every reload. Switch the dropdown to "All Classes" if you want the old everything-at-once behavior back. This cuts sync traffic and page count dramatically on classes many players share builds for.
+
 ## Changelog
+
+### 2.13 (2026-07-16)
+
+- **New: class-filtered sync requests.** `/ebb` Public Builds Reload now sends the currently-selected class filter along with the sync request, so peers only send back builds for that class instead of their entire public/relayed collection. Old clients (pre-2.13) that receive this extra field simply ignore it and answer as before — fully backward compatible. Tome Atlas sync (which needs all classes) is unaffected.
 
 ### 2.12 (2026-07-16)
 
