@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.35 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.36 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -177,7 +177,26 @@ Works with **both Classic and Smart (EV) mode** now. Smart mode's fields are a %
 ### Continuous auto-tune (2.35) -- do I have to keep clicking Apply?
 Not if you don't want to. `/ebb tuning` has a **Continuous auto-tune** checkbox (off by default). Turn it on and thresholds nudge themselves toward their suggested value automatically -- a small gradual step (25% of the gap) every ~20 newly-recorded offers, never an instant jump. You'll get a toast every time it actually adjusts something, so you're never left wondering why automation's behavior changed. It's deliberately gradual and rate-limited so it can't overreact to a short noisy streak; simulated tests show it converges smoothly to a stable value over a few hundred samples rather than oscillating.
 
+### Whole-run budget pacing (2.36)
+Automation now spends its Banish/Reroll/Freeze charges with the REST OF THE RUN in mind, not just the current offer in isolation. Smart Reroll already did this (get pickier as reroll charges run low); as of 2.36, Banish, Freeze, and Classic Reroll all get the same treatment:
+
+- **Banish**: with plenty of charges left, banishes anything below the usual threshold; with few left, only banishes clearly-bad echoes, so the last few aren't burned early on borderline picks.
+- **Reroll** (Classic mode, previously had no pacing at all): same idea -- pickier as charges run low.
+- **Freeze**: with plenty of charges left, freezes anything above the usual threshold; with few left, only freezes genuinely excellent finds.
+
+All three use the same shared curve (`ChargePacing`), just with per-lever comfort caps and conservativeness. `/ebb debug` now also shows the pacing multiplier actually applied to each threshold in the EVAL header, for troubleshooting.
+
+Known limitation: the Tuning Advisor's "current threshold rejects/catches X%" figure is computed against the *base* (unpaced) threshold value -- it's still a useful approximation, but not perfectly exact now that the real applied threshold shifts with remaining charges throughout a run.
+
 ## Changelog
+
+### 2.36 (2026-07-16) -- whole-run budget pacing for Banish, Freeze, and Classic Reroll
+
+- **New: `ChargePacing()`**, a shared helper generalizing Smart Reroll's existing charge-pacing curve (get pickier as charges run low) to Banish and Freeze in both modes, and to Classic Reroll (which previously had no pacing at all -- a real gap versus Smart mode). Banish/Reroll get stricter (lower threshold) as charges deplete; Freeze gets stricter (higher threshold) the same way, since it triggers in the opposite direction (above, not below).
+- Per-lever tuning: Banish uses a comfort cap of 8 charges scaling down to 70% strictness; Reroll uses the existing 8-charge/60% curve; Freeze uses a 6-charge cap scaling up to 140% strictness.
+- `/ebb debug`'s EVAL header now shows the actual pacing-adjusted threshold and multiplier for all three levers, not the un-paced base value.
+- Verified in isolation: pacing curve produces the expected 0.6-1.0 (below) / 1.0-1.4 (above) range across the charge spectrum, with safe (non-negative-charge) edge-case handling.
+- Known limitation documented: Tuning Advisor's rejection/catch-rate figures are computed against the base threshold, not pacing-weighted -- still directionally useful, not perfectly exact.
 
 ### 2.35 (2026-07-16) -- Tuning Advisor: continuous auto-tune (opt-in)
 

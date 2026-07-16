@@ -100,6 +100,34 @@ function EbonBuilds.Automation.ResetPeakCache()
     cachedStats = nil
 end
 
+-- Shared charge-based pacing: scales a threshold based on how many
+-- charges of a resource (Banish/Reroll/Freeze) remain, so each lever gets
+-- progressively more conservative as ITS OWN budget runs low, instead of
+-- spending it however a static threshold happens to fire early and
+-- having none left when a truly good/bad echo shows up late in the run.
+--
+-- direction "below" (Banish, Reroll -- these trigger when a score is
+-- UNDER the threshold): pacing shrinks from 1.0 (full charges) toward
+-- conservativeScale (<1, at 0 charges) as charges deplete, making the
+-- threshold stricter (harder to trigger) when charges are scarce.
+-- direction "above" (Freeze -- triggers when a score is OVER the
+-- threshold): pacing grows from 1.0 toward conservativeScale (>1, at 0
+-- charges), same effect (harder to trigger) via the opposite curve shape.
+--
+-- cap is an absolute "comfortable" charge count, not a fraction of the
+-- run's starting total -- deliberately: having 8 rerolls left feels the
+-- same whether the run started with 18 or 30, so charges beyond the cap
+-- don't make the addon any more aggressive.
+local function ChargePacing(remaining, cap, conservativeScale, direction)
+    cap = cap or 8
+    local ratio = math.min(math.max(remaining or 0, 0), cap) / cap
+    if direction == "above" then
+        return conservativeScale - (conservativeScale - 1) * ratio
+    else
+        return conservativeScale + (1 - conservativeScale) * ratio
+    end
+end
+
 local function GetRunData()
     if EbonholdPlayerRunData and EbonholdPlayerRunData.remainingBanishes ~= nil then
         return EbonholdPlayerRunData
@@ -334,27 +362,34 @@ function EbonBuilds.Automation.Evaluate()
         AnnotateScored(scored, banList, whitelist, lockedList)
 
         if EbonBuilds.DebugLog.IsEnabled() then
-            local hdrBanish, hdrFreeze, hdrMode
+            local banishRemainingDbg = (runData and runData.remainingBanishes) or 0
+            local rerollRemainingDbg = (runData and ((runData.totalRerolls or 0) - (runData.usedRerolls or 0))) or 0
+            local freezeRemainingDbg = (runData and ((runData.totalFreezes or 0) - (runData.usedFreezes or 0))) or 0
+            local banishPacingDbg = ChargePacing(banishRemainingDbg, 8, 0.7, "below")
+            local rerollPacingDbg = ChargePacing(rerollRemainingDbg, 8, 0.6, "below")
+            local freezePacingDbg = ChargePacing(freezeRemainingDbg, 6, 1.4, "above")
+
+            local hdrBanish, hdrFreeze, hdrReroll, hdrMode
             if (settings.rerollMode or "sum") == "ev" then
                 local st = EbonBuilds.Automation.GetOutcomeStats()
                 hdrMode   = "SMART"
-                hdrBanish = math.floor(st.mean * (settings.banishEVPct or 60) / 100)
-                hdrFreeze = math.floor(st.evBest3 * (settings.freezeEVPct or 110) / 100)
+                hdrBanish = math.floor(st.mean * (settings.banishEVPct or 60) / 100 * banishPacingDbg)
+                hdrFreeze = math.floor(st.evBest3 * (settings.freezeEVPct or 110) / 100 * freezePacingDbg)
+                hdrReroll = math.floor(EbonBuilds.Automation.GetRerollEV() * (settings.rerollEVPct or 95) / 100 * rerollPacingDbg)
             else
                 hdrMode   = "CLASSIC"
-                hdrBanish = math.floor(peakScore * (settings.autoBanishPct or 0) / 100)
-                hdrFreeze = math.floor(peakScore * (settings.autoFreezePct or 0) / 100)
+                hdrBanish = math.floor(peakScore * (settings.autoBanishPct or 0) / 100 * banishPacingDbg)
+                hdrFreeze = math.floor(peakScore * (settings.autoFreezePct or 0) / 100 * freezePacingDbg)
+                hdrReroll = math.floor(peakScore * (settings.autoRerollPct or 0) / 100 * rerollPacingDbg)
             end
-            EbonBuilds.DebugLog.AddF("=== EVAL [%s] peak=%d | banish<%d reroll-sum<%d guard>=%d freeze>%d | charges B:%d R:%d F:%d",
+            EbonBuilds.DebugLog.AddF("=== EVAL [%s] peak=%d | banish<%d (pace %.2f) reroll<%d (pace %.2f) guard>=%d freeze>%d (pace %.2f) | charges B:%d R:%d F:%d",
                 hdrMode,
                 peakScore,
-                hdrBanish,
-                math.floor(peakScore * (settings.autoRerollPct or 0) / 100),
+                hdrBanish, banishPacingDbg,
+                hdrReroll, rerollPacingDbg,
                 math.floor(peakScore * (settings.rerollGuardPct or 90) / 100),
-                hdrFreeze,
-                (runData and runData.remainingBanishes) or 0,
-                (runData and ((runData.totalRerolls or 0) - (runData.usedRerolls or 0))) or 0,
-                (runData and ((runData.totalFreezes or 0) - (runData.usedFreezes or 0))) or 0)
+                hdrFreeze, freezePacingDbg,
+                banishRemainingDbg, rerollRemainingDbg, freezeRemainingDbg)
             for _, s in ipairs(scored) do
                 EbonBuilds.DebugLog.AddF("  [%d] %s q=%d score=%.0f w=%d%s%s%s",
                     s.index, s.name, s.quality or 0, s.score or 0,
@@ -403,11 +438,16 @@ function EbonBuilds.Automation.Evaluate()
             -- Then echoes below the banish threshold. Smart mode: a banished
             -- card is replaced by ONE random card, so banish anything worth
             -- less than banishEVPct of an average card. Classic: % of peak.
+            -- Charge pacing: only clearly-bad echoes get banished once
+            -- charges run low, so the last few aren't wasted on borderline
+            -- picks early and then unavailable when it matters.
+            local banishRemaining = (runData and runData.remainingBanishes) or 0
+            local banishPacing = ChargePacing(banishRemaining, 8, 0.7, "below")
             local threshold
             if (settings.rerollMode or "sum") == "ev" then
-                threshold = EbonBuilds.Automation.GetOutcomeStats().mean * (settings.banishEVPct or 60) / 100
+                threshold = EbonBuilds.Automation.GetOutcomeStats().mean * (settings.banishEVPct or 60) / 100 * banishPacing
             else
-                threshold = math.floor(peakScore * settings.autoBanishPct / 100)
+                threshold = math.floor(peakScore * settings.autoBanishPct / 100 * banishPacing)
             end
             for _, s in ipairs(scored) do
                 if not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] and s.score < threshold then
@@ -454,7 +494,7 @@ function EbonBuilds.Automation.Evaluate()
                 -- last few be picky. Scales the effective threshold from 100%
                 -- (>= 8 charges) down to 60% (1 charge left).
                 local remaining = (runData.totalRerolls or 0) - (runData.usedRerolls or 0)
-                local pacing = 0.6 + 0.4 * math.min(remaining, 8) / 8
+                local pacing = ChargePacing(remaining, 8, 0.6, "below")
                 local threshold = ev * (settings.rerollEVPct or 95) / 100 * pacing
                 EbonBuilds.DebugLog.AddF("reroll check (EV): best=%.0f vs %.0f (EV %.0f x %d%% x pacing %.2f)",
                     best, threshold, ev, settings.rerollEVPct or 95, pacing)
@@ -485,8 +525,14 @@ function EbonBuilds.Automation.Evaluate()
                 if not blockedByGuard then
                     local sum = 0
                     for _, s in ipairs(scored) do sum = sum + s.score end
-                    EbonBuilds.DebugLog.AddF("reroll check: sum=%.0f vs threshold=%.0f", sum, peakScore * settings.autoRerollPct / 100)
-                    if sum < peakScore * settings.autoRerollPct / 100 then
+                    -- Same charge pacing concept as Smart mode: get pickier
+                    -- as reroll charges run low, so it can't burn through
+                    -- everything early on borderline offers.
+                    local remaining = (runData.totalRerolls or 0) - (runData.usedRerolls or 0)
+                    local pacing = ChargePacing(remaining, 8, 0.6, "below")
+                    local rerollThreshold = peakScore * settings.autoRerollPct / 100 * pacing
+                    EbonBuilds.DebugLog.AddF("reroll check: sum=%.0f vs threshold=%.0f (pacing %.2f)", sum, rerollThreshold, pacing)
+                    if sum < rerollThreshold then
                         local ok = ProjectEbonhold.PerkService.RequestReroll()
                         if ok then
                             UpdateStat(build, "rerollsUsed")
@@ -524,11 +570,16 @@ function EbonBuilds.Automation.Evaluate()
             end
 
             local threshold
+            -- Charge pacing: only truly excellent echoes get frozen once
+            -- charges run low, reserving the last few for genuinely
+            -- exceptional finds instead of spending them on "pretty good".
+            local freezeRemaining = (runData.totalFreezes or 0) - (runData.usedFreezes or 0)
+            local freezePacing = ChargePacing(freezeRemaining, 6, 1.4, "above")
             if (settings.rerollMode or "sum") == "ev" then
                 -- Freeze what beats the expected best of a future screen.
-                threshold = EbonBuilds.Automation.GetOutcomeStats().evBest3 * (settings.freezeEVPct or 110) / 100
+                threshold = EbonBuilds.Automation.GetOutcomeStats().evBest3 * (settings.freezeEVPct or 110) / 100 * freezePacing
             else
-                threshold = math.floor(peakScore * settings.autoFreezePct / 100)
+                threshold = math.floor(peakScore * settings.autoFreezePct / 100 * freezePacing)
             end
 
             -- Offered choices above freeze threshold, excluding echoes that

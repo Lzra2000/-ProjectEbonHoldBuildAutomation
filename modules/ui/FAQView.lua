@@ -15,8 +15,19 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.35",
+    title = "What's New in 2.36",
     lines = {
+        GOLD .. "2.36: whole-run budget pacing" .. R,
+        "- Banish, Freeze, and Classic Reroll now get pickier as their",
+        "  own charges run low -- Smart Reroll already worked this way,",
+        "  now all three levers do, in both modes",
+        "- Reserves the last few charges for genuinely good/bad finds",
+        "  instead of burning them early on borderline picks",
+        "- /ebb debug EVAL header shows the actual pacing-adjusted",
+        "  threshold + multiplier now",
+        "- Note: Tuning Advisor's %% figures use the base (unpaced)",
+        "  threshold -- still useful, just not pacing-exact",
+        "",
         GOLD .. "2.35: continuous auto-tune (opt-in)" .. R,
         "- New checkbox in /ebb tuning: thresholds nudge themselves",
         "  toward their suggestion automatically -- no more manual",
