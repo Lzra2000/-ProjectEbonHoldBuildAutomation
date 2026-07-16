@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.39 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.40 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -191,7 +191,19 @@ Known limitation: the Tuning Advisor's "current threshold rejects/catches X%" fi
 ### Export (AI) -- new button (2.38, full class echo list + descriptions in 2.39)
 Next to the regular Export button (build edit screen, any tab) is a new **Export (AI)** button. Regular Export produces a compact Base64 string meant for another EbonBuilds client to Import -- not something a human or a general AI chat can read. Export (AI) instead produces a plain-text dump: quality/family/novelty bonuses, automation thresholds (with mode-appropriate labels), locked echoes, banned echoes, and -- as of 2.39 -- **every echo your class can get, not just the ones you've weighted**, each with its quality, family, current weight, and actual effect description (pulled from the real spell tooltip where cached; otherwise a note to hover it once in-game first). If you've collected any Tuning Advisor data, that's included too. Meant to be copied and pasted into an external AI chat to ask for tuning suggestions on which echoes are actually worth weighting for your spec; it isn't a format EbonBuilds can import back in.
 
+### Track DPS by echo (2.40) -- needs Details!
+`/ebb tuning` has a second checkbox: **Track DPS by echo**, off by default, requires the Details! damage meter addon. When on, every 10 seconds while you're in combat it samples your current DPS (via Details' documented public API) and credits it to every echo you currently have active. Over time this builds a rough real-performance average per echo -- shown in Export (AI) alongside the theoretical scoring once you've collected some data.
+
+This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
+
 ## Changelog
+
+### 2.40 (2026-07-16) -- Echo Performance: real DPS tracking via Details!
+
+- **New: `EbonBuilds.EchoPerformance` module.** Opt-in (off by default, new checkbox in `/ebb tuning`), requires the Details! damage meter addon. Samples current DPS every 10s in combat via Details' documented public API (`Details:GetCurrentCombat()`, `combat:GetActor()`, `actor.total`, `combat:GetCombatTime()`) and credits it to every currently-active echo (`ProjectEbonhold.PerkService.GetGrantedPerks()`), building a running average per echo, persisted per character.
+- Everything touching Details! is pcall-wrapped and feature-detected -- it's a large, independently-updated third-party addon; a missing/changed API on its end degrades to "no sample" rather than an error.
+- Surfaced in Export (AI): each echo line gets an "avg DPS while active (samples)" column when tracking is on and data exists, with an explicit note in the export itself that this is a rough signal, not a controlled measurement.
+- Verified in isolation: DPS math correct (50000 damage / 100s = 500 DPS credited to all active echoes), default-disabled confirmed, missing-Details and no-data cases both degrade safely instead of erroring.
 
 ### 2.39 (2026-07-16) -- Export (AI): full class-eligible echo list with real effect descriptions
 

@@ -332,7 +332,7 @@ end
 
 local function BuildWindow()
     local f = CreateFrame("Frame", "EbonBuildsTuningAdvisorWindow", UIParent)
-    f:SetSize(560, 400)
+    f:SetSize(560, 440)
     f:SetPoint("CENTER", UIParent, "CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetToplevel(true)
@@ -392,6 +392,31 @@ local function BuildWindow()
         EbonBuilds.Calibration.SetAutoTuneEnabled(self:GetChecked() and true or false)
     end)
 
+    local perfCB = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    perfCB:SetWidth(24)
+    perfCB:SetHeight(24)
+    perfCB:SetPoint("TOPLEFT", autoTuneCB, "BOTTOMLEFT", 0, -6)
+    local perfLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    perfLabel:SetPoint("LEFT", perfCB, "RIGHT", 2, 0)
+    perfLabel:SetText("Track DPS by echo (needs Details!)")
+    perfCB:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Track DPS by echo", 1, 1, 1)
+        GameTooltip:AddLine("Off by default. Requires the Details! damage meter addon. Every 10s in combat, samples your current DPS and credits it to every echo you currently have active, building a rough real-performance average per echo over time.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(" ", 1, 1, 1)
+        GameTooltip:AddLine("Approximate on purpose: echoes stack together and fights vary a lot, so this can't isolate any single echo's true effect. It's a rough signal to combine with the scoring model, not a precise measurement. Shown in Export (AI) once you've collected some data.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    perfCB:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    perfCB:SetScript("OnClick", function(self)
+        if self:GetChecked() and not EbonBuilds.EchoPerformance.IsDetailsAvailable() then
+            EbonBuilds.Toast.Show("Details! not found -- install it to use DPS tracking")
+            self:SetChecked(false)
+            return
+        end
+        EbonBuilds.EchoPerformance.SetEnabled(self:GetChecked() and true or false)
+    end)
+
     local clearBtn = EbonBuilds.Theme.CreateButton(f, "danger")
     clearBtn:SetSize(140, 20)
     clearBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 12)
@@ -411,6 +436,7 @@ local function BuildWindow()
     countLabel:SetPoint("BOTTOM", f, "BOTTOM", 0, 18)
 
     f._autoTuneCB = autoTuneCB
+    f._perfCB = perfCB
     tinsert(UISpecialFrames, "EbonBuildsTuningAdvisorWindow")
     f:Hide()
     return f
@@ -420,6 +446,9 @@ function EbonBuilds.Calibration.RefreshWindow()
     if not frame then return end
     if frame._autoTuneCB then
         frame._autoTuneCB:SetChecked(EbonBuilds.Calibration.IsAutoTuneEnabled())
+    end
+    if frame._perfCB then
+        frame._perfCB:SetChecked(EbonBuilds.EchoPerformance.IsEnabled())
     end
     local build = EbonBuilds.Build.GetActive()
     if not build then

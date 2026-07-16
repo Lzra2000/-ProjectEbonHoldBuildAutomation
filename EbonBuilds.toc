@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: EbonBuilds
-## Version: 2.39
+## Version: 2.40
 ## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced
 ## SavedVariables: EbonBuildsDB
 ## SavedVariablesPerCharacter: EbonBuildsCharDB
@@ -51,4 +51,5 @@ modules/automation/DebugLog.lua
 core/ErrorLog.lua
 modules/vendor/AutoSell.lua
 modules/automation/Calibration.lua
+modules/automation/EchoPerformance.lua
 modules/automation/Automation.lua

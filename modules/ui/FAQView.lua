@@ -15,8 +15,18 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.39",
+    title = "What's New in 2.40",
     lines = {
+        GOLD .. "2.40: real DPS tracking via Details! (opt-in)" .. R,
+        "- New checkbox in /ebb tuning: 'Track DPS by echo'",
+        "- Needs the Details! damage meter addon -- samples your DPS",
+        "  every 10s in combat, credits it to active echoes",
+        "- Builds a rough real-performance average per echo over time",
+        "- Shown in Export (AI) alongside the theoretical scoring",
+        "- Approximate on purpose: echoes stack, fights vary -- a",
+        "  supplementary signal, not a precise measurement",
+        "- Off by default; safe no-op if Details! isn't installed",
+        "",
         GOLD .. "2.39: Export (AI) now includes ALL class echoes" .. R,
         "- Export (AI) lists every echo your class can get, not just",
         "  the ones you've weighted -- with quality, family, current",

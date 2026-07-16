@@ -534,9 +534,23 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
 
     add("--- Class-eligible echoes (%d for %s, weight 0 = currently unweighted) ---",
         #entries, build.class or "?")
-    add("Format: Name | weight | quality | family/families | effect")
+    local perfAvailable = EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled()
+        and EbonBuilds.EchoPerformance.IsDetailsAvailable()
+    if perfAvailable then
+        add("Format: Name | weight | quality | family/families | avg DPS while active (samples) | effect")
+        add("(DPS tracking is a rough signal, not a controlled measurement -- echoes stack together")
+        add("and fights vary a lot, so this can't isolate any single echo's true effect on its own.)")
+    else
+        add("Format: Name | weight | quality | family/families | effect")
+    end
     for _, e in ipairs(entries) do
-        add("%s | %d | %s | %s | %s", e.name, e.weight, e.quality, e.families, GetDescription(e.spellId))
+        if perfAvailable then
+            local perf = EbonBuilds.EchoPerformance.GetStats(e.name)
+            local perfText = perf and string.format("%.0f DPS (%d)", perf.avgDPS, perf.sampleCount) or "no data"
+            add("%s | %d | %s | %s | %s | %s", e.name, e.weight, e.quality, e.families, perfText, GetDescription(e.spellId))
+        else
+            add("%s | %d | %s | %s | %s", e.name, e.weight, e.quality, e.families, GetDescription(e.spellId))
+        end
     end
 
     return table.concat(lines, "\n")
