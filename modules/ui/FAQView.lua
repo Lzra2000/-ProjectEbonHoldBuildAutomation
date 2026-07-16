@@ -15,8 +15,19 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.36",
+    title = "What's New in 2.37",
     lines = {
+        GOLD .. "2.37: Reroll Guard now paced too" .. R,
+        "- Found from a real debug log: a 140/205 weighted echo got",
+        "  rerolled away twice because the guard threshold (blocks",
+        "  reroll if any single echo is very good) never adjusted for",
+        "  low reroll charges -- all 3 rerolls gone in ~10 seconds",
+        "- Guard now shrinks as charges run low, same as the rest of",
+        "  2.36's pacing -- a merely-good echo protects itself once",
+        "  rerolls are scarce, not just a near-perfect one",
+        "- Verified against the exact log: both real rerolls would",
+        "  now have been blocked",
+        "",
         GOLD .. "2.36: whole-run budget pacing" .. R,
         "- Banish, Freeze, and Classic Reroll now get pickier as their",
         "  own charges run low -- Smart Reroll already worked this way,",

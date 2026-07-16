@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.36 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.37 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -189,6 +189,12 @@ All three use the same shared curve (`ChargePacing`), just with per-lever comfor
 Known limitation: the Tuning Advisor's "current threshold rejects/catches X%" figure is computed against the *base* (unpaced) threshold value -- it's still a useful approximation, but not perfectly exact now that the real applied threshold shifts with remaining charges throughout a run.
 
 ## Changelog
+
+### 2.37 (2026-07-16) -- Reroll Guard now paced too (found via a real debug log)
+
+- **Fixed: the Reroll Guard threshold was static, unlike everything else 2.36 paced.** A real `/ebb debug` log showed the exact cost: at R:2 remaining, a 140/205 "Grim Resolve" (weighted, w=100) got rerolled away because the offer's *sum* was low, even though 140 alone easily beats "pretty good" -- the guard (blocks reroll if any single echo is >= 90% of peak) didn't fire because 140 < 184.5 (the static 90% mark). Same thing happened again two picks later with a 140-score "Tunnel Vision." All 3 rerolls were gone within ~10 seconds, leaving nothing for the rest of the run.
+- The guard threshold now uses the same charge-pacing curve as the rest of Classic Reroll: with plenty of charges, only a near-perfect echo blocks a reroll; with few left, a merely-good one does too. Verified against the exact log scenario: at R:2, the new guard threshold is ~129 (140 blocks); at R:1, it's ~120 (140 still blocks). Both real rerolls from the log would have been prevented.
+- `/ebb debug`'s EVAL header now shows the guard's actual pacing-adjusted value too.
 
 ### 2.36 (2026-07-16) -- whole-run budget pacing for Banish, Freeze, and Classic Reroll
 

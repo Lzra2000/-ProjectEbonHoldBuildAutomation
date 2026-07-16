@@ -382,12 +382,13 @@ function EbonBuilds.Automation.Evaluate()
                 hdrFreeze = math.floor(peakScore * (settings.autoFreezePct or 0) / 100 * freezePacingDbg)
                 hdrReroll = math.floor(peakScore * (settings.autoRerollPct or 0) / 100 * rerollPacingDbg)
             end
-            EbonBuilds.DebugLog.AddF("=== EVAL [%s] peak=%d | banish<%d (pace %.2f) reroll<%d (pace %.2f) guard>=%d freeze>%d (pace %.2f) | charges B:%d R:%d F:%d",
+            local hdrGuard = math.floor(peakScore * (settings.rerollGuardPct or 90) / 100 * rerollPacingDbg)
+            EbonBuilds.DebugLog.AddF("=== EVAL [%s] peak=%d | banish<%d (pace %.2f) reroll<%d (pace %.2f) guard>=%d (pace %.2f) freeze>%d (pace %.2f) | charges B:%d R:%d F:%d",
                 hdrMode,
                 peakScore,
                 hdrBanish, banishPacingDbg,
                 hdrReroll, rerollPacingDbg,
-                math.floor(peakScore * (settings.rerollGuardPct or 90) / 100),
+                hdrGuard, rerollPacingDbg,
                 hdrFreeze, freezePacingDbg,
                 banishRemainingDbg, rerollRemainingDbg, freezeRemainingDbg)
             for _, s in ipairs(scored) do
@@ -512,13 +513,21 @@ function EbonBuilds.Automation.Evaluate()
                 -- Reroll guard: skip if any single echo is above the guard threshold,
                 -- regardless of the sum. Prevents rerolling when one good echo is
                 -- offered alongside weak ones.
+                -- Charge pacing: with plenty of rerolls left, only a near-perfect
+                -- echo blocks a reroll (guard stays close to its base value);
+                -- with few left, a merely-good echo blocks it too (guard
+                -- threshold shrinks), since burning the last rerolls chasing a
+                -- marginally better screen is the costlier mistake once there's
+                -- nothing left over for whatever comes next.
+                local remaining = (runData.totalRerolls or 0) - (runData.usedRerolls or 0)
+                local guardPacing = ChargePacing(remaining, 8, 0.6, "below")
                 local guardPct = settings.rerollGuardPct or 90
-                local guardThreshold = math.floor(peakScore * guardPct / 100)
+                local guardThreshold = math.floor(peakScore * guardPct / 100 * guardPacing)
                 local blockedByGuard = false
                 for _, s in ipairs(scored) do
                     if s.score >= guardThreshold then
                         blockedByGuard = true
-                        EbonBuilds.DebugLog.AddF("reroll blocked by guard: [%d] %s %.0f >= %d", s.index, s.name, s.score or 0, guardThreshold)
+                        EbonBuilds.DebugLog.AddF("reroll blocked by guard: [%d] %s %.0f >= %d (pacing %.2f)", s.index, s.name, s.score or 0, guardThreshold, guardPacing)
                         break
                     end
                 end
