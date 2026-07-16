@@ -147,66 +147,87 @@ end
 -- Exported for unit testing
 EbonBuilds.BuildOverview._NormalizeEchoName = NormalizeEchoName
 
+-- Owned-echo detection, shared by this file's Missing tab and
+-- TomeAtlasView's tome-collection status.
+--
+-- Preferred source: ProjectEbonhold.PerkService.GetDiscoveredEchoes() --
+-- an authoritative, spellId-keyed table of every echo the character has
+-- ever unlocked, backed by a SavedVariables cache so it's available
+-- immediately (even before the server confirms), unlike the spellbook.
+-- Falls back to scanning the spellbook's "Echoes" tab directly (the old
+-- approach) only if that API doesn't exist (older server build).
+--
+-- Returns (ownedLower, ownedGroups) where ownedLower[normalizedName] and
+-- ownedGroups[groupId] are presence sets, or (nil, nil) if the fallback
+-- path had to be used and the spellbook isn't populated yet (caller
+-- should retry). The preferred path never returns nil/nil.
+function EbonBuilds.BuildOverview.GetOwnedEchoSets(assumeNoneOwned)
+    local svc = ProjectEbonhold and ProjectEbonhold.PerkService
+    local ownedLower, ownedGroups = {}, {}
+
+    if svc and svc.GetDiscoveredEchoes then
+        local discovered = svc.GetDiscoveredEchoes() or {}
+        for spellId in pairs(discovered) do
+            local data = ProjectEbonhold.PerkDatabase[spellId]
+            if data then
+                local norm = NormalizeEchoName(GetSpellInfo(spellId))
+                if norm then ownedLower[norm] = true end
+                if data.groupId then ownedGroups[data.groupId] = true end
+            end
+        end
+    else
+        -- Legacy fallback: resolve spellbook "Echoes" tab entries to
+        -- PerkDatabase via requiredSpell (or spellId+100000 as backup),
+        -- same as EbonBuilds used before GetDiscoveredEchoes existed.
+        local spellbookIds = {}
+        local echoesTabFound = false
+        local numTabs = GetNumSpellTabs and GetNumSpellTabs() or 0
+        for tabIdx = 1, numTabs do
+            local tabName, _, offset, numSpells = GetSpellTabInfo(tabIdx)
+            if tabName == "Echoes" then
+                echoesTabFound = true
+                for slot = offset + 1, offset + numSpells do
+                    local link = GetSpellLink(slot, "spell")
+                    local tomeSpellId = link and tonumber(link:match("spell:(%d+)"))
+                    if tomeSpellId then spellbookIds[tomeSpellId] = true end
+                end
+                break
+            end
+        end
+        -- Spellbook not populated yet (early login / zoning): report "not
+        -- ready" instead of wrongly claiming every echo is missing --
+        -- UNLESS the caller has given up retrying (assumeNoneOwned).
+        if not echoesTabFound and not assumeNoneOwned then
+            return nil, nil
+        end
+        for spellId, data in pairs(ProjectEbonhold.PerkDatabase) do
+            if spellbookIds[data.requiredSpell] or spellbookIds[spellId + 100000] then
+                local norm = NormalizeEchoName(GetSpellInfo(spellId))
+                if norm then ownedLower[norm] = true end
+                if data.groupId then ownedGroups[data.groupId] = true end
+            end
+        end
+    end
+
+    -- Echoes granted without ever needing a tome (not in the discovery
+    -- list either way) still need this pass, on both paths above.
+    if svc and svc.GetGrantedPerks then
+        for name in pairs(svc.GetGrantedPerks() or {}) do
+            local norm = NormalizeEchoName(name)
+            if norm then ownedLower[norm] = true end
+        end
+    end
+
+    return ownedLower, ownedGroups
+end
+
 local function ComputeMissingEchoes(build, assumeNoneOwned, includeOwned)
     if not build or not build.class then return nil end
 
     local classMask = CLASS_MASK[build.class] or 0
 
-    -- Read the spellbook's "Echoes" tab to find locked echo spells.
-    -- Spellbook spellIds are in the 300xxx range (Tome spells). The actual echo
-    -- data lives in PerkDatabase under 200xxx spellIds. We resolve via
-    -- PerkDatabase[spellId].requiredSpell matching the spellbook spellId,
-    -- or by subtracting 100000 as fallback.
-    local ownedLower = {}
-    local ownedGroups = {}
-    local spellbookIds = {}
-    local echoesTabFound = false
-    local numTabs = GetNumSpellTabs and GetNumSpellTabs() or 0
-    for tabIdx = 1, numTabs do
-        local tabName, _, offset, numSpells = GetSpellTabInfo(tabIdx)
-        if tabName == "Echoes" then
-            echoesTabFound = true
-            for slot = offset + 1, offset + numSpells do
-                local link = GetSpellLink(slot, "spell")
-                local tomeSpellId = link and tonumber(link:match("spell:(%d+)"))
-                if tomeSpellId then
-                    spellbookIds[tomeSpellId] = true
-                end
-            end
-            break
-        end
-    end
-
-    -- Spellbook not populated yet (early login / zoning): report "loading"
-    -- instead of wrongly claiming every echo is missing -- UNLESS the
-    -- caller has given up retrying (assumeNoneOwned), which also covers
-    -- the legitimate case of a character with zero echoes learned: the
-    -- server never creates an "Echoes" spellbook tab for an empty
-    -- category, so that tab would otherwise never appear and this would
-    -- report "loading" forever.
-    if not echoesTabFound and not assumeNoneOwned then return nil end
-
-    -- Resolve each spellbook spell to its PerkDatabase echo entry,
-    -- then build owned sets from the echo's name + groupId.
-    for spellId, data in pairs(ProjectEbonhold.PerkDatabase) do
-        local isOwned = spellbookIds[data.requiredSpell] or spellbookIds[spellId + 100000]
-        if isOwned then
-            local name = GetSpellInfo(spellId)
-            local norm = NormalizeEchoName(name)
-            if norm then ownedLower[norm] = true end
-            if data.groupId then ownedGroups[data.groupId] = true end
-        end
-    end
-
-    -- Also mark echoes owned via granted perks (catches echoes without a
-    -- required tome, which aren't visible in the spellbook).
-    if ProjectEbonhold.PerkService.GetGrantedPerks then
-        local granted = ProjectEbonhold.PerkService.GetGrantedPerks()
-        for name in pairs(granted or {}) do
-            local norm = NormalizeEchoName(name)
-            if norm then ownedLower[norm] = true end
-        end
-    end
+    local ownedLower, ownedGroups = EbonBuilds.BuildOverview.GetOwnedEchoSets(assumeNoneOwned)
+    if not ownedLower then return nil end
 
     -- Build locked echo name set for priority sorting
     local lockedLower = {}
@@ -473,9 +494,55 @@ local function BuildOverviewTab(parent)
         EbonBuilds.ViewRouter.Show("buildOverview", { build = copy })
     end)
 
+    -- Apply this build's locked echoes to the server's native Active Echo
+    -- Loadout (ProjectEbonhold.PerkService.SetActiveEchoLoadout) -- the
+    -- server highlights matching picks in its own echo-selection screen
+    -- while a loadout is active. Second row: the first row (auto/edit/
+    -- link/duplicate) is already close to the panel width.
+    local applyBtn = EbonBuilds.Theme.CreateButton(outer)
+    applyBtn:SetWidth(150)
+    applyBtn:SetHeight(20)
+    applyBtn:SetPoint("TOPLEFT", autoToggle, "BOTTOMLEFT", 0, -8)
+    applyBtn:SetText("Apply to Character")
+    applyBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Apply to Character", 1, 1, 1)
+        GameTooltip:AddLine("Sets this build's locked echoes as your server-tracked active loadout. The game's own echo-pick screen highlights matching choices while it's active.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    applyBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    applyBtn:SetScript("OnClick", function()
+        local build = state.build
+        if not build then return end
+        local svc = ProjectEbonhold and ProjectEbonhold.PerkService
+        if not (svc and svc.SetActiveEchoLoadout) then
+            EbonBuilds.Toast.Show("Server doesn't support Active Echo Loadout")
+            return
+        end
+        local echoes = {}
+        for i = 1, EbonBuilds.Build.LOCKED_SLOTS do
+            local spellId = build.lockedEchoes and build.lockedEchoes[i]
+            if spellId then
+                local data = ProjectEbonhold.PerkDatabase[spellId]
+                echoes[#echoes + 1] = { spellId = spellId, quality = data and data.quality or 0, stacks = 1 }
+            end
+        end
+        if #echoes == 0 then
+            EbonBuilds.Toast.Show("No locked echoes to apply")
+            return
+        end
+        local ok = svc.SetActiveEchoLoadout({ name = build.title, class = build.class, echoes = echoes })
+        if ok then
+            EbonBuilds.Toast.Show("Applied \"" .. (build.title or "?") .. "\" to character")
+        else
+            EbonBuilds.Toast.Show("Failed to apply build")
+        end
+    end)
+    outer._applyBtn = applyBtn
+
     -- Description header
     local descHeader = outer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    descHeader:SetPoint("TOPLEFT", autoToggle, "BOTTOMLEFT", 0, -14)
+    descHeader:SetPoint("TOPLEFT", applyBtn, "BOTTOMLEFT", 0, -14)
     descHeader:SetText("Description:")
     outer._descHeader = descHeader
 

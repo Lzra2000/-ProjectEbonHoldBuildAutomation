@@ -15,8 +15,18 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.25",
+    title = "What's New in 2.26",
     lines = {
+        GOLD .. "2.26: ProjectEbonhold API audit" .. R,
+        "- New: 'Apply to Character' button (Build Overview) -- pushes",
+        "  this build's locked echoes to the server's Active Echo",
+        "  Loadout, so the game's own pick screen highlights matches",
+        "- 'Learned' detection now prefers the server's own",
+        "  GetDiscoveredEchoes() API: instant, no more waiting on the",
+        "  spellbook tab to populate (old scan kept as a fallback)",
+        "- Removed a duplicate spellbook-scan implementation between",
+        "  the Missing tab and Tome Atlas (now share one helper)",
+        "",
         GOLD .. "2.25: Missing tab Refresh button" .. R,
         "- New: Refresh button forces an immediate spellbook re-scan",
         "- No more waiting on the automatic retry or leaving and",
@@ -474,6 +484,26 @@ local PAGES = {
         "",
         GREY .. "This dialog scrolls if it grows further, so it can't" .. R,
         GREY .. "spill past the window no matter how much gets added." .. R,
+    },
+},
+{
+    title = "Apply to Character (2.26)",
+    lines = {
+        "Build Overview > Apply to Character.",
+        "",
+        "Pushes this build's locked echoes to the server as your",
+        "Active Echo Loadout -- a feature built into ProjectEbonhold",
+        "itself (both the base and Enhanced versions). Once applied,",
+        "the game's OWN echo-pick screen highlights choices that",
+        "match this build, in-game, without needing EbonBuilds open.",
+        "",
+        GOLD .. "Requirements" .. R,
+        "The build needs at least one locked echo. If your server",
+        "doesn't support this yet, you'll get a clear message instead",
+        "of the button silently doing nothing.",
+        "",
+        GREY .. "This does not pick echoes for you -- it only highlights" .. R,
+        GREY .. "matches on the server's normal selection screen." .. R,
     },
 },
 }

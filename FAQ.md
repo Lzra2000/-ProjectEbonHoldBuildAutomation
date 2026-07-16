@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.25 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.26 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -160,7 +160,20 @@ Fixed (2.25): a **Refresh** button next to Show: All/Missing only. Unlike Affixe
 
 If the tab says "0 learned" and that looks wrong: the count only reflects what your current character's spellbook "Echoes" category actually contains right now. A fresh character (or one who just reset) legitimately shows 0 until the server grants that category. Try Refresh first; if it's still 0 after you know you've picked up an echo, that's worth a bug report (`/ebb errors`).
 
+### New: Apply to Character (2.26)
+Build Overview has a new **Apply to Character** button. It sends this build's locked echoes to the server's native Active Echo Loadout (`ProjectEbonhold.PerkService.SetActiveEchoLoadout`) -- the game's own echo-pick screen then highlights choices that match, directly in-game, without needing to alt-tab to EbonBuilds while picking. Needs at least one locked echo in the build; works on both ProjectEbonhold and ProjectEbonhold Enhanced.
+
+### Why is "learned" detection more reliable now? (2.26)
+The Missing tab and Tome Atlas both used to determine what you've learned by scanning your spellbook's "Echoes" tab -- it works, but needs the tab to actually be populated (hence the old retry-and-wait behavior) and matches by spell name. As of 2.26 both now prefer `ProjectEbonhold.PerkService.GetDiscoveredEchoes()`, an authoritative, spellId-keyed list backed by a SavedVariables cache -- available instantly, no waiting. The spellbook scan is kept as an automatic fallback for servers without that API.
+
 ## Changelog
+
+### 2.26 (2026-07-16) -- ProjectEbonhold API audit: reliable echo detection + Apply to Character
+
+Reviewed the full ProjectEbonhold and ProjectEbonhold Enhanced addon source (both current builds) for API EbonBuilds wasn't using yet.
+
+- **New: `ProjectEbonhold.PerkService.GetDiscoveredEchoes()` is now the preferred source for "what have I learned."** Both the Missing tab (`ComputeMissingEchoes`) and Tome Atlas (`TomeAtlasView.BuildOwnedSet`) had their own independent, near-duplicate spellbook-tab-scanning implementations, matching by normalized spell name and requiring the "Echoes" spellbook tab to exist (hence the retry-with-timeout dance). Consolidated into one shared helper, `EbonBuilds.BuildOverview.GetOwnedEchoSets()`, that prefers the authoritative, spellId-keyed, SavedVariables-cached `GetDiscoveredEchoes()` API -- available immediately, no waiting, no name-matching guesswork -- and falls back to the old spellbook scan automatically if that API isn't present (older server builds). Fixes both the duplicate code and the "0 learned" reliability concerns raised earlier.
+- **New: "Apply to Character" button (Build Overview).** Uses `ProjectEbonhold.PerkService.SetActiveEchoLoadout()` -- also present in both server variants -- to push this build's locked echoes to the server as your active loadout, so the game's own echo-selection screen highlights matching picks directly. Gracefully tells you if the server doesn't support it instead of failing silently.
 
 ### 2.25 (2026-07-16) -- Missing tab: manual Refresh button
 

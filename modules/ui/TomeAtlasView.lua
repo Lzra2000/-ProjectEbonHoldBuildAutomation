@@ -23,24 +23,9 @@ end
 ------------------------------------------------------------------------
 
 local function BuildOwnedSet()
-    local owned = {}
-    local norm = EbonBuilds.BuildOverview and EbonBuilds.BuildOverview._NormalizeEchoName
-    if not norm then return owned, false end
-    local numTabs = GetNumSpellTabs and GetNumSpellTabs() or 0
-    local found = false
-    for tabIdx = 1, numTabs do
-        local tabName, _, offset, numSpells = GetSpellTabInfo(tabIdx)
-        if tabName == "Echoes" then
-            found = true
-            for slot = offset + 1, offset + numSpells do
-                local link = GetSpellLink(slot, "spell")
-                local name = link and link:match("%[(.-)%]")
-                if name then owned[norm(name)] = true end
-            end
-            break
-        end
-    end
-    return owned, found
+    local ownedLower = EbonBuilds.BuildOverview and EbonBuilds.BuildOverview.GetOwnedEchoSets
+        and EbonBuilds.BuildOverview.GetOwnedEchoSets(true) -- assumeNoneOwned=true: never block this view on the legacy fallback's retry
+    return ownedLower or {}, ownedLower ~= nil
 end
 
 local function IsOwned(tomeName, ownedSet)
