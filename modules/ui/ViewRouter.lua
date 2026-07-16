@@ -26,6 +26,9 @@ function EbonBuilds.ViewRouter.Show(name, context)
         if prev and prev.Hide then prev.Hide() end
     end
     currentName = name
+    if EbonBuilds.ClickTrace then
+        EbonBuilds.ClickTrace.Log("show", name)
+    end
     view.Show(container, context)
 end
 

@@ -327,6 +327,21 @@ SlashCmdList["EbonBuilds"] = function(msg)
     elseif msg == "affix" or msg == "affixes" then
         EbonBuilds.MainWindow.Toggle()
         EbonBuilds.ViewRouter.Show("affixes")
+    elseif msg == "clicktrace" then
+        EbonBuilds.ClickTrace.SetEnabled(not EbonBuilds.ClickTrace.IsEnabled())
+        EbonBuilds.ClickTrace.ShowWindow()
+    elseif msg == "errors" or msg == "errorlog" then
+        EbonBuilds.ErrorLog.ShowWindow()
+    elseif msg == "autosell" then
+        local on = not EbonBuilds.AutoSell.IsEnabled()
+        EbonBuilds.AutoSell.SetEnabled(on)
+        DEFAULT_CHAT_FRAME:AddMessage("|cff44ff44EbonBuilds:|r Auto-sell junk at vendors is now " ..
+            (on and "|cff44ff44ON|r" or "|cffff4444OFF|r") .. ".")
+    elseif msg == "bagdots" then
+        local on = not EbonBuilds.BagAffixDots.IsEnabled()
+        EbonBuilds.BagAffixDots.SetEnabled(on)
+        DEFAULT_CHAT_FRAME:AddMessage("|cff44ff44EbonBuilds:|r Bag affix dots are now " ..
+            (on and "|cff44ff44ON|r" or "|cffff4444OFF|r") .. ".")
     else
         EbonBuilds.MainWindow.Toggle()
     end

@@ -1,19 +1,23 @@
 ## Interface: 30300
 ## Title: EbonBuilds
-## Version: 2.11
+## Version: 2.12
 ## Dependencies: ProjectEbonhold
 ## SavedVariables: EbonBuildsDB
 ## SavedVariablesPerCharacter: EbonBuildsCharDB
 
 core/Init.lua
 modules/build/Build.lua
+modules/talents/Talents.lua
 modules/data/Quality.lua
 core/TomeAtlas.lua
 core/AffixServer.lua
 modules/affix/Affix.lua
+modules/affix/AffixItemScan.lua
+modules/gear/GearScore.lua
 modules/data/SpecData.lua
 modules/weights/Weights.lua
 modules/ui/Theme.lua
+core/ClickTrace.lua
 modules/ui/FAQView.lua
 modules/ui/MinimapButton.lua
 modules/ui/MainWindow.lua
@@ -40,6 +44,10 @@ modules/ui/SettingsView.lua
 modules/ui/BuildTabs.lua
 modules/ui/BuildOverview.lua
 modules/ui/Toast.lua
+modules/talents/TalentAutoLearn.lua
+modules/ui/BagAffixDots.lua
 modules/ui/SessionHistory.lua
 modules/automation/DebugLog.lua
+core/ErrorLog.lua
+modules/vendor/AutoSell.lua
 modules/automation/Automation.lua

@@ -143,6 +143,14 @@ function T.CreateButton(parent, accent)
     local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     T.SkinButton(btn)
     if accent then T.SetButtonAccent(btn, accent) end
+    -- Single choke point for every themed button in the addon, so
+    -- ClickTrace (core/ClickTrace.lua) can log "click IS arriving here"
+    -- without every module needing its own hook.
+    btn:HookScript("OnClick", function(self)
+        if EbonBuilds.ClickTrace then
+            EbonBuilds.ClickTrace.Log("click", self:GetText() or self:GetName() or "?")
+        end
+    end)
     return btn
 end
 
