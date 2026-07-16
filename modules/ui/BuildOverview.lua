@@ -226,7 +226,13 @@ local function ComputeMissingEchoes(build, assumeNoneOwned, includeOwned)
 
     local classMask = CLASS_MASK[build.class] or 0
 
-    local ownedLower, ownedGroups = EbonBuilds.BuildOverview.GetOwnedEchoSets(assumeNoneOwned)
+    local ok, ownedLower, ownedGroups = pcall(EbonBuilds.BuildOverview.GetOwnedEchoSets, assumeNoneOwned)
+    if not ok then
+        if EbonBuilds.ErrorLog then
+            EbonBuilds.ErrorLog.Record("BuildOverview.ComputeMissingEchoes", tostring(ownedLower))
+        end
+        return nil -- surfaces as "still loading" -- RefreshMissing already retries this
+    end
     if not ownedLower then return nil end
 
     -- Build locked echo name set for priority sorting

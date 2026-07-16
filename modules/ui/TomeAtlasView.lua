@@ -23,9 +23,21 @@ end
 ------------------------------------------------------------------------
 
 local function BuildOwnedSet()
-    local ownedLower = EbonBuilds.BuildOverview and EbonBuilds.BuildOverview.GetOwnedEchoSets
-        and EbonBuilds.BuildOverview.GetOwnedEchoSets(true) -- assumeNoneOwned=true: never block this view on the legacy fallback's retry
-    return ownedLower or {}, ownedLower ~= nil
+    if not (EbonBuilds.BuildOverview and EbonBuilds.BuildOverview.GetOwnedEchoSets) then
+        return {}, false
+    end
+    -- assumeNoneOwned=true: never block this view on the legacy fallback's
+    -- retry. pcall-wrapped so any error in owned-detection (whichever
+    -- ProjectEbonhold API surface a given server actually exposes) can
+    -- never abort the whole Tome Atlas render and leave the window blank.
+    local ok, ownedLower = pcall(EbonBuilds.BuildOverview.GetOwnedEchoSets, true)
+    if not ok or not ownedLower then
+        if EbonBuilds.ErrorLog then
+            EbonBuilds.ErrorLog.Record("TomeAtlasView.BuildOwnedSet", tostring(ownedLower))
+        end
+        return {}, false
+    end
+    return ownedLower, true
 end
 
 local function IsOwned(tomeName, ownedSet)
@@ -607,7 +619,10 @@ local function ScheduleRefresh()
             self._elapsed = 0
             if pendingRefresh and viewFrame and viewFrame:IsShown() then
                 pendingRefresh = false
-                Render()
+                local ok, err = pcall(Render)
+                if not ok and EbonBuilds.ErrorLog then
+                    EbonBuilds.ErrorLog.Record("TomeAtlasView.ScheduleRefresh/Render", tostring(err))
+                end
             end
             if not pendingRefresh then
                 self:Hide() -- nothing left to do; stop ticking until scheduled again
@@ -622,7 +637,14 @@ function EbonBuilds.TomeAtlasView.Show(parent)
         viewFrame = BuildViewFrame(parent)
     end
     offset = 0
-    Render()
+    -- The window must become visible regardless of whether the render
+    -- succeeds -- a Render() error used to leave viewFrame:Show() below
+    -- unreached, so the whole panel stayed permanently blank with no
+    -- visible error (most players have script errors disabled).
+    local ok, err = pcall(Render)
+    if not ok and EbonBuilds.ErrorLog then
+        EbonBuilds.ErrorLog.Record("TomeAtlasView.Show/Render", tostring(err))
+    end
     viewFrame:Show()
     return viewFrame
 end

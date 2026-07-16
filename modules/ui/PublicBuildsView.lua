@@ -678,7 +678,10 @@ function EbonBuilds.PublicBuildsView.Mount(container)
     state.page       = 1
     state.totalPages = math.max(1, math.ceil(#state.builds / PAGE_SIZE))
     scrollBar:SetValue(0)
-    Render()
+    local ok, err = pcall(Render)
+    if not ok and EbonBuilds.ErrorLog then
+        EbonBuilds.ErrorLog.Record("PublicBuildsView.Mount/Render", tostring(err))
+    end
     viewFrame:Show()
 end
 

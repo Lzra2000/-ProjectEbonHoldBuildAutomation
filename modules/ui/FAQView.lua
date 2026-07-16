@@ -15,8 +15,17 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.26",
+    title = "What's New in 2.27",
     lines = {
+        GOLD .. "2.27: hotfix -- Tome Atlas could stay blank" .. R,
+        "- Fixed: an error in 2.26's owned-echo detection could leave",
+        "  Tome Atlas or Public Builds permanently blank, no error",
+        "  shown (most players have script errors off by default)",
+        "- Render() is now error-safe in both views -- the window",
+        "  always opens now; real errors go to /ebb errors instead",
+        "- Still blank for you? Check /ebb errors and share what it",
+        "  says -- that'll point at the actual cause",
+        "",
         GOLD .. "2.26: ProjectEbonhold API audit" .. R,
         "- New: 'Apply to Character' button (Build Overview) -- pushes",
         "  this build's locked echoes to the server's Active Echo",

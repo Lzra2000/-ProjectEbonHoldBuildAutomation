@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.26 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.27 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -167,6 +167,11 @@ Build Overview has a new **Apply to Character** button. It sends this build's lo
 The Missing tab and Tome Atlas both used to determine what you've learned by scanning your spellbook's "Echoes" tab -- it works, but needs the tab to actually be populated (hence the old retry-and-wait behavior) and matches by spell name. As of 2.26 both now prefer `ProjectEbonhold.PerkService.GetDiscoveredEchoes()`, an authoritative, spellId-keyed list backed by a SavedVariables cache -- available instantly, no waiting. The spellbook scan is kept as an automatic fallback for servers without that API.
 
 ## Changelog
+
+### 2.27 (2026-07-16) -- hotfix: Tome Atlas / Public Builds could stay permanently blank
+
+- **Fixed: an error anywhere in the 2.26 owned-echo detection could leave Tome Atlas or Public Builds permanently blank with no visible error.** Both views called `viewFrame:Show()` *after* `Render()` -- if Render() (which now calls the new `GetOwnedEchoSets` path) threw for any reason, that line was never reached, so the window frame itself never became visible. Most players have Lua script errors disabled by default, so this showed as "window stays empty" with nothing to go on. Render() is now pcall-wrapped everywhere it's called from these two views -- the window always becomes visible now, and if something did go wrong, it's recorded to `/ebb errors` instead of failing silently.
+- If Tome Atlas was blank for you before this update: please try again, and if it's still blank, check `/ebb errors` and share what it says -- that'll point straight at the real cause.
 
 ### 2.26 (2026-07-16) -- ProjectEbonhold API audit: reliable echo detection + Apply to Character
 
