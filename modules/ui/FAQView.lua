@@ -15,8 +15,15 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.14",
+    title = "What's New in 2.15",
     lines = {
+        GOLD .. "2.15: 'All Classes' sync no longer floods responders" .. R,
+        "- Reload with 'All Classes' selected now asks each class",
+        "  separately, 1.5s apart, instead of one giant unfiltered blast",
+        "- Same coverage as before, just no more flooding every peer",
+        "  with their entire collection at once",
+        "- Still just one Reload click, same 30s cooldown",
+        "",
         GOLD .. "2.14: FAQ window fixed" .. R,
         "- Fixed: this window's text could spill out past its own frame",
         "  and draw straight over your action bars / the game world",

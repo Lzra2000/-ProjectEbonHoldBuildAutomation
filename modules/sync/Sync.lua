@@ -54,6 +54,16 @@ local channelRetries = { remaining = 0, payload = nil, nextTime = 0 }
 local failedTargets = {}  -- [playerName] = blockUntil (Now() + OFFLINE_COOLDOWN)
 local sendTally = {}      -- [playerName] = consecutive sends without response
 
+-- "Sync all classes": instead of one unfiltered REQ (every responder's
+-- entire public/relayed collection, the exact flood that motivated the
+-- per-class filter), each class is requested one at a time with a short
+-- gap between them -- same total classes covered, but every individual
+-- request is as cheap for responders as a normal single-class sync.
+local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+local CLASS_SYNC_STAGGER = 1.5  -- seconds between each class's REQ broadcast
+local classSyncQueue = {}
+local classSyncNextTime = 0
+
 -- Reliability & anti-flood state (sync v2 improvements):
 local wantedFrom = {}       -- [sender] = { uuids = {uuid=true}, retries = {uuid=n}, lastActivity = t }
 local requestedThisSync = {}-- [uuid] = true  (dedup across responders, reset per RequestSync)
@@ -852,6 +862,7 @@ EbonBuilds.Sync._ResetForTests = function()
     requestedThisSync = {}
     reqCooldown = {}
     for i = #sendQueue, 1, -1 do table.remove(sendQueue, i) end
+    for i = #classSyncQueue, 1, -1 do table.remove(classSyncQueue, i) end
     syncSession.active = false
     syncSession.received = 0
 end
@@ -860,6 +871,31 @@ function EbonBuilds.Sync.GetCooldownRemaining()
     local elapsed = Now() - lastRequestTime
     if elapsed >= REQ_COOLDOWN then return 0 end
     return math.ceil(REQ_COOLDOWN - elapsed)
+end
+
+-- Fires one REQ broadcast (channel + guild). Does NOT touch the cooldown --
+-- callers (RequestSync / the all-classes queue drain) own that.
+local function DoBroadcastREQ(classFilter)
+    local me      = UnitName("player")
+    -- Third field is an optional class-token filter (e.g. "DEATHKNIGHT").
+    -- Older clients (pre-2.13) ignore a trailing field they don't parse,
+    -- so this is backward compatible with responders who haven't updated.
+    local payload = string.format("REQ|%s|%s", me, classFilter or "")
+
+    -- 1. Broadcast via hidden chat channel (all addon users on the realm)
+    RefreshChannel()
+    local escapedPayload = payload:gsub("|", "||")
+    channelRetries.remaining = MAX_CHANNEL_RETRIES
+    channelRetries.payload = escapedPayload
+    channelRetries.nextTime = 0  -- fire immediately on next OnUpdate
+
+    -- 2. Guild broadcast via SendAddonMessage (reliable, but guild-only)
+    local guildName = GetGuildInfo("player")
+    if guildName then
+        SendAddonMessage(PREFIX, payload, "GUILD")
+        VerboseLog("REQ also broadcast via GUILD" ..
+            (classFilter and (" (class filter: " .. classFilter .. ")") or ""))
+    end
 end
 
 function EbonBuilds.Sync.RequestSync(classFilter)
@@ -878,32 +914,41 @@ function EbonBuilds.Sync.RequestSync(classFilter)
     syncSession.received = 0
     syncSession.lastActivity = Now()
 
-    local me       = UnitName("player")
-    -- Third field is an optional class-token filter (e.g. "DEATHKNIGHT").
-    -- Older clients (pre-2.13) ignore a trailing field they don't parse,
-    -- so this is backward compatible with responders who haven't updated.
-    local payload  = string.format("REQ|%s|%s", me, classFilter or "")
+    wipe(classSyncQueue) -- a single-class request cancels any pending "sync all" run
 
     if classFilter then
         Log("Requesting sync (class filter: " .. classFilter .. ")...")
     else
         Log("Requesting sync...")
     end
+    DoBroadcastREQ(classFilter)
+end
 
-    -- 1. Broadcast via hidden chat channel (all addon users on the realm)
-    RefreshChannel()
-    local escapedPayload = payload:gsub("|", "||")
-    channelRetries.remaining = MAX_CHANNEL_RETRIES
-    channelRetries.payload = escapedPayload
-    channelRetries.nextTime = 0  -- fire immediately on next OnUpdate
-
-    -- 2. Guild broadcast via SendAddonMessage (reliable, but guild-only)
-    local guildName = GetGuildInfo("player")
-    if guildName then
-        SendAddonMessage(PREFIX, payload, "GUILD")
-        VerboseLog("REQ also broadcast via GUILD")
+-- Requests every class one at a time (staggered) instead of one unfiltered
+-- REQ. Same total coverage as the old "All Classes" behavior, but each
+-- responder only ever has to answer a normal, cheap single-class request --
+-- avoiding the exact flood of near-duplicate builds this filter exists to
+-- prevent.
+function EbonBuilds.Sync.RequestSyncAllClasses()
+    local remaining = EbonBuilds.Sync.GetCooldownRemaining()
+    if remaining > 0 then
+        Log("Sync on cooldown, wait " .. remaining .. "s before requesting again")
+        return
     end
+    lastRequestTime = Now()
 
+    requestedThisSync = {}
+    wantedFrom = {}
+    syncSession.active = true
+    syncSession.received = 0
+    syncSession.lastActivity = Now()
+
+    wipe(classSyncQueue)
+    for _, token in ipairs(CLASS_TOKENS) do
+        classSyncQueue[#classSyncQueue + 1] = token
+    end
+    classSyncNextTime = 0 -- fire the first class immediately on next OnUpdate
+    Log(("Requesting sync for all %d classes (staggered)..."):format(#classSyncQueue))
 end
 
 function EbonBuilds.Sync.Init()
@@ -971,6 +1016,16 @@ function EbonBuilds.Sync.Init()
                 end
             end
             SyncTrace(("session settled: %d received"):format(syncSession.received))
+        end
+
+        -- "Sync all classes" queue: fire the next class's REQ once the
+        -- current one's channel-retry cycle is idle and the stagger gap
+        -- has elapsed. Keeps every individual REQ as cheap as a normal
+        -- single-class sync instead of one unfiltered blast.
+        if #classSyncQueue > 0 and channelRetries.remaining == 0 and now >= classSyncNextTime then
+            local nextClass = table.remove(classSyncQueue, 1)
+            DoBroadcastREQ(nextClass)
+            classSyncNextTime = now + CLASS_SYNC_STAGGER
         end
 
         -- Channel retry loop

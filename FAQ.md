@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.14 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.15 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -112,6 +112,10 @@ Four small standalone tools:
 The Public Builds **Reload** button now only requests builds for the class currently selected in the dropdown (your own class by default), instead of every class from every peer on every reload. Switch the dropdown to "All Classes" if you want the old everything-at-once behavior back. This cuts sync traffic and page count dramatically on classes many players share builds for.
 
 ## Changelog
+
+### 2.15 (2026-07-16) -- staggered all-classes sync
+
+- **New: "All Classes" Reload no longer sends one unfiltered request.** Previously, picking "All Classes" in Public Builds and hitting Reload sent a REQ with no class filter -- responders answered with their *entire* public/relayed collection, the exact flood of near-duplicate builds the 2.13 class filter was built to avoid. It now requests each of the 10 classes one at a time, 1.5s apart, so every individual request stays as cheap as a normal single-class sync while still covering everything. Counts as one use of the 30s Reload cooldown, same as before.
 
 ### 2.14 (2026-07-16) -- FAQ window overflow fix
 
