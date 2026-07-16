@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.19 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.20 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -134,7 +134,18 @@ This is a best-effort, client-side check -- there's no central registry, so it's
 ### The Missing tab only showed what I don't have. Now what? (2.19)
 The Missing tab now works like the Affixes tab: a green or red dot on each icon shows learned vs. not-learned status, and a **Show: All / Show: Missing only** toggle switches between "everything for my class" and the classic missing-only view. Owned echoes show "Learned" in green where the drop source used to be; missing ones are unchanged (drop source, score). A count label at the top reads "X learned, Y missing" (or just "Y missing" when the filter is on).
 
+### Tome Atlas: category system and non-tome items (new in 2.20)
+Two changes:
+
+1. **Non-tome items could show up in the Atlas.** Local loot was always filtered to actual tomes before recording, but data arriving from *other players* via sync went straight in unvalidated -- a bug on a peer's end could inject any item into everyone's Atlas. Both the write path (`Merge`, the network-received one) and the read path (`List`, so anything already-stored gets cleaned up immediately too) now check the item name is actually a tome.
+2. **New: Group by Tome / Zone / Mob**, plus a Zone filter dropdown. "By Tome" is the classic view (one row per tome, its sources). "By Zone" shows one row per zone with every tome known to drop there. "By Mob" shows one row per mob with everything it drops. The zone dropdown narrows any of the three views to a single zone. Search still matches tome, mob, or zone text in every mode.
+
 ## Changelog
+
+### 2.20 (2026-07-16) -- Tome Atlas: categories + non-tome item fix
+
+- **Fixed: items received via sync were never validated as actual tomes before being stored.** `TomeAtlas.Merge()` (the network-received path) had no `IsTomeName` check, unlike the local-loot path (`OnSelfLoot` already checked before calling `RecordDrop`) -- a bug on a peer's end could inject arbitrary items into everyone's Atlas. Added the check to `Merge()`, to `RecordDrop()` itself (defense in depth), and to `List()` as a backstop that filters out anything already stored from before this fix.
+- **New: category system.** `TomeAtlas.ListByZone()` and `TomeAtlas.ListByMob()` group all known drops by zone or mob; `TomeAtlas.ListZones()` feeds a new Zone filter dropdown. The view gained a "Group: Tome/Zone/Mob" cycle button and the zone dropdown, narrowing or reorganizing the list along with the existing search and Show: All/Missing toggle.
 
 ### 2.19 (2026-07-16) -- Missing tab: owned/missing status dots
 

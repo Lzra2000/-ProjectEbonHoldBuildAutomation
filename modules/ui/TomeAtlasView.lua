@@ -6,12 +6,16 @@
 EbonBuilds.TomeAtlasView = {}
 
 local ROW_HEIGHT   = 34
-local VISIBLE_ROWS = 11
+local VISIBLE_ROWS = 10
 
 local viewFrame, scrollFrame, scrollChild, scrollBar
 local searchBox, filterBtn, syncBtn, countLabel, emptyText, zoneSummary
 local rows = {}
-local state = { text = "", missingOnly = false }
+local state = { text = "", missingOnly = false, groupBy = "tome", zoneFilter = nil }
+
+local function MatchesText(haystack)
+    return state.text == "" or strlower(tostring(haystack or "")):find(state.text, 1, true) ~= nil
+end
 
 ------------------------------------------------------------------------
 -- Owned detection: a tome is "owned" when its taught echo is in the
@@ -51,29 +55,139 @@ end
 -- Data
 ------------------------------------------------------------------------
 
-local function BuildFilteredList()
+local function BuildTomeItems()
     local all = EbonBuilds.TomeAtlas.List()
     local ownedSet, spellbookReady = BuildOwnedSet()
     local out = {}
     for _, entry in ipairs(all) do
         local owned = spellbookReady and IsOwned(entry.name, ownedSet)
-        local matchesText = state.text == ""
-            or strlower(entry.name or ""):find(state.text, 1, true)
-        if not matchesText then
-            -- also match mob or zone names
+        local zoneOk = true
+        if state.zoneFilter then
+            zoneOk = false
             for _, s in ipairs(entry.sources) do
-                if strlower(s.mob or ""):find(state.text, 1, true)
-                or strlower(s.zone or ""):find(state.text, 1, true) then
-                    matchesText = true
-                    break
-                end
+                if s.zone == state.zoneFilter then zoneOk = true; break end
             end
         end
-        if matchesText and (not state.missingOnly or not owned) then
-            out[#out + 1] = { entry = entry, owned = owned }
+        local textOk = MatchesText(entry.name)
+        if not textOk then
+            for _, s in ipairs(entry.sources) do
+                if MatchesText(s.mob) or MatchesText(s.zone) then textOk = true; break end
+            end
+        end
+        if zoneOk and textOk and (not state.missingOnly or not owned) then
+            local tRows = {}
+            for _, s in ipairs(entry.sources) do
+                tRows[#tRows + 1] = { left = s.mob or "?", right = (s.zone or "?") .. "  x" .. (s.count or 1) }
+            end
+            out[#out + 1] = {
+                kind = "tome",
+                itemId = entry.itemId,
+                title = entry.name,
+                owned = owned,
+                lineText = SourceText(entry.sources),
+                tooltipStatus = owned and "|cff1eff00Already collected|r" or "|cffff4444Missing|r",
+                tooltipHeader = "|cffffd100Known sources:|r",
+                tooltipRows = tRows,
+                tooltipEmpty = "No drop data yet -- be the first to loot one!",
+            }
         end
     end
+    table.sort(out, function(a, b) return a.title < b.title end)
     return out
+end
+
+-- Shared by BuildZoneItems/BuildMobItems: top-3 "Name (xCount)" summary
+-- with a "(+N more)" tail, same visual language as SourceText().
+local function TopTomesText(sortedRows)
+    if #sortedRows == 0 then return "|cff888888No tomes match filter|r" end
+    local parts = {}
+    for i = 1, math.min(3, #sortedRows) do
+        local r = sortedRows[i]
+        parts[#parts + 1] = string.format("%s |cffffd100(%s)|r", r.left, r.right)
+    end
+    local txt = table.concat(parts, "|cff888888  |  |r")
+    if #sortedRows > 3 then
+        txt = txt .. string.format(" |cff888888(+%d more)|r", #sortedRows - 3)
+    end
+    return txt
+end
+
+local function BuildZoneItems()
+    local all = EbonBuilds.TomeAtlas.ListByZone()
+    local ownedSet, spellbookReady = BuildOwnedSet()
+    local out = {}
+    for _, z in ipairs(all) do
+        if not state.zoneFilter or z.zone == state.zoneFilter then
+            local tRows = {}
+            for _, t in ipairs(z.tomes) do
+                local owned = spellbookReady and IsOwned(t.name, ownedSet)
+                if not state.missingOnly or not owned then
+                    tRows[#tRows + 1] = { left = t.name, right = "x" .. t.total, owned = owned, sortKey = t.total }
+                end
+            end
+            local textOk = MatchesText(z.zone)
+            if not textOk then
+                for _, r in ipairs(tRows) do
+                    if MatchesText(r.left) then textOk = true; break end
+                end
+            end
+            if textOk and #tRows > 0 then
+                table.sort(tRows, function(a, b) return a.sortKey > b.sortKey end)
+                out[#out + 1] = {
+                    kind = "zone",
+                    title = z.zone,
+                    lineText = TopTomesText(tRows),
+                    tooltipStatus = string.format("%d tome(s) known here", #tRows),
+                    tooltipHeader = "|cffffd100Tomes findable here:|r",
+                    tooltipRows = tRows,
+                }
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.title < b.title end)
+    return out
+end
+
+local function BuildMobItems()
+    local all = EbonBuilds.TomeAtlas.ListByMob()
+    local ownedSet, spellbookReady = BuildOwnedSet()
+    local out = {}
+    for _, m in ipairs(all) do
+        if not state.zoneFilter or m.zone == state.zoneFilter then
+            local tRows = {}
+            for _, t in ipairs(m.tomes) do
+                local owned = spellbookReady and IsOwned(t.name, ownedSet)
+                if not state.missingOnly or not owned then
+                    tRows[#tRows + 1] = { left = t.name, right = "x" .. t.count, owned = owned, sortKey = t.count }
+                end
+            end
+            local textOk = MatchesText(m.mob) or MatchesText(m.zone)
+            if not textOk then
+                for _, r in ipairs(tRows) do
+                    if MatchesText(r.left) then textOk = true; break end
+                end
+            end
+            if textOk and #tRows > 0 then
+                table.sort(tRows, function(a, b) return a.sortKey > b.sortKey end)
+                out[#out + 1] = {
+                    kind = "mob",
+                    title = string.format("%s  |cff888888(%s)|r", m.mob, m.zone or "?"),
+                    lineText = TopTomesText(tRows),
+                    tooltipStatus = string.format("%d tome(s) known from this mob", #tRows),
+                    tooltipHeader = "|cffffd100Tomes:|r",
+                    tooltipRows = tRows,
+                }
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.title < b.title end)
+    return out
+end
+
+local function BuildFilteredList()
+    if state.groupBy == "zone" then return BuildZoneItems() end
+    if state.groupBy == "mob" then return BuildMobItems() end
+    return BuildTomeItems()
 end
 
 ------------------------------------------------------------------------
@@ -109,35 +223,37 @@ local function CreateRow(parent)
     src:SetTextColor(0.75, 0.75, 0.75, 1)
     row._sources = src
 
-    -- Hover: item tooltip for the tome (icon, quality, description if the
-    -- client has it cached) plus the FULL drop-source list -- the on-row
-    -- text truncates to 3 sources, the tooltip is where "+N more" lives.
+    -- Hover: item tooltip for a tome row (icon, quality, description if the
+    -- client has it cached) or a plain text tooltip for zone/mob rows, plus
+    -- the FULL detail list -- the on-row text truncates to 3 entries, the
+    -- tooltip is where "+N more" lives.
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
-        local e = self._entry
-        if not e then return end
+        local item = self._item
+        if not item then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         local shownItemTooltip = false
-        if e.itemId then
-            shownItemTooltip = pcall(GameTooltip.SetHyperlink, GameTooltip, "item:" .. e.itemId)
+        if item.kind == "tome" and item.itemId then
+            shownItemTooltip = pcall(GameTooltip.SetHyperlink, GameTooltip, "item:" .. item.itemId)
         end
         if not shownItemTooltip then
             GameTooltip:ClearLines()
-            GameTooltip:AddLine(e.name or "?", 1, 0.82, 0)
+            GameTooltip:AddLine(item.title or "?", 1, 0.82, 0)
         end
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine(self._isOwned and "|cff1eff00Already collected|r" or "|cffff4444Missing|r")
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffffd100Known sources:|r")
-        if e.sources and #e.sources > 0 then
-            for _, s in ipairs(e.sources) do
-                GameTooltip:AddDoubleLine(
-                    (s.mob or "?") .. "  |cff888888(" .. (s.zone or "?") .. ")|r",
-                    "x" .. (s.count or 1),
-                    1, 1, 1, 1, 0.82, 0)
+        if item.tooltipStatus then
+            GameTooltip:AddLine(item.tooltipStatus)
+            GameTooltip:AddLine(" ")
+        end
+        GameTooltip:AddLine(item.tooltipHeader or "|cffffd100Details:|r")
+        if item.tooltipRows and #item.tooltipRows > 0 then
+            for _, r in ipairs(item.tooltipRows) do
+                local left = r.left or "?"
+                if r.owned then left = "|cff888888" .. left .. "|r" end
+                GameTooltip:AddDoubleLine(left, r.right or "", 1, 1, 1, 1, 0.82, 0)
             end
         else
-            GameTooltip:AddLine("No drop data yet -- be the first to loot one!", 0.6, 0.6, 0.6, true)
+            GameTooltip:AddLine(item.tooltipEmpty or "No data yet.", 0.6, 0.6, 0.6, true)
         end
         GameTooltip:Show()
     end)
@@ -214,34 +330,43 @@ local function Render()
         local row = rows[i]
         local item = filtered[offset + i]
         if item then
-            local e = item.entry
-            row._entry = e
-            row._isOwned = item.owned
-            row._name:SetText(e.name or "?")
-            if item.owned then
-                row._name:SetTextColor(0.55, 0.55, 0.55, 1)
-                row._owned:SetText("|cff1eff00(collected)|r")
+            row._item = item
+            row._name:SetText(item.title or "?")
+            if item.kind == "tome" then
+                if item.owned then
+                    row._name:SetTextColor(0.55, 0.55, 0.55, 1)
+                    row._owned:SetText("|cff1eff00(collected)|r")
+                else
+                    row._name:SetTextColor(1, 0.82, 0, 1)
+                    row._owned:SetText("")
+                end
             else
                 row._name:SetTextColor(1, 0.82, 0, 1)
                 row._owned:SetText("")
             end
-            row._sources:SetText(SourceText(e.sources))
+            row._sources:SetText(item.lineText or "")
             row._stripe:SetVertexColor(1, 1, 1, (offset + i) % 2 == 0 and 0.05 or 0.02)
             row:Show()
         else
-            row._entry = nil
+            row._item = nil
             row:Hide()
         end
     end
 
     local total = #EbonBuilds.TomeAtlas.List()
-    countLabel:SetText(string.format("%d shown / %d known", #filtered, total))
+    if state.groupBy == "zone" then
+        countLabel:SetText(string.format("%d zone(s) shown", #filtered))
+    elseif state.groupBy == "mob" then
+        countLabel:SetText(string.format("%d mob(s) shown", #filtered))
+    else
+        countLabel:SetText(string.format("%d shown / %d known", #filtered, total))
+    end
 
     if #filtered == 0 then
         if total == 0 then
             emptyText:SetText("No community drop data yet.\n\nTomes you loot are recorded automatically (mob + zone)\nand shared with other EbonBuilds users. Data from other\nplayers arrives when anyone syncs (Public Builds > Reload).")
         else
-            emptyText:SetText("No tome matches your filter.")
+            emptyText:SetText("Nothing matches your filter.")
         end
         emptyText:Show()
     else
@@ -375,11 +500,76 @@ local function BuildViewFrame(parent)
     countLabel:SetPoint("LEFT", controlsRow, "LEFT", 0, 0)
     countLabel:SetPoint("TOP", controlsRow, "TOP", 0, -3)
 
-    -- Rows container: anchored to controlsRow's bottom, not a magic number
+    -- Row 3: category system -- group the list by Tome (default), Zone,
+    -- or Mob, and optionally narrow everything to one zone. Same
+    -- fixed-height chaining as controlsRow (no wrap-dependent anchoring).
+    local filtersRow = CreateFrame("Frame", nil, f)
+    filtersRow:SetHeight(20)
+    filtersRow:SetPoint("TOPLEFT", controlsRow, "BOTTOMLEFT", 0, -12)
+    filtersRow:SetPoint("RIGHT", f, "RIGHT", -14, 0)
+
+    local GROUP_LABELS = { tome = "Group: Tome", zone = "Group: Zone", mob = "Group: Mob" }
+    local GROUP_ORDER = { "tome", "zone", "mob" }
+
+    local groupByBtn = EbonBuilds.Theme.CreateButton(f)
+    groupByBtn:SetSize(100, 20)
+    groupByBtn:SetPoint("LEFT", filtersRow, "LEFT", 0, 0)
+    groupByBtn:SetText(GROUP_LABELS[state.groupBy])
+    groupByBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Group Tome Atlas by", 1, 1, 1)
+        GameTooltip:AddLine("Tome: one row per tome, its known drop sources.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Zone: one row per zone, tomes findable there.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Mob: one row per mob, tomes it drops.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    groupByBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    groupByBtn:SetScript("OnClick", function(self)
+        local idx = 1
+        for i, g in ipairs(GROUP_ORDER) do if g == state.groupBy then idx = i break end end
+        state.groupBy = GROUP_ORDER[(idx % #GROUP_ORDER) + 1]
+        self:SetText(GROUP_LABELS[state.groupBy])
+        offset = 0
+        Render()
+    end)
+
+    local zoneDropdown = CreateFrame("Frame", "EbonBuildsTomeAtlasZoneDropdown", filtersRow, "UIDropDownMenuTemplate")
+    zoneDropdown:SetPoint("LEFT", groupByBtn, "RIGHT", 0, -2)
+    UIDropDownMenu_SetWidth(zoneDropdown, 150)
+    UIDropDownMenu_SetText(zoneDropdown, "All Zones")
+    UIDropDownMenu_Initialize(zoneDropdown, function()
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = "All Zones"
+        info.value = nil
+        info.func = function()
+            state.zoneFilter = nil
+            UIDropDownMenu_SetText(zoneDropdown, "All Zones")
+            CloseDropDownMenus()
+            offset = 0
+            Render()
+        end
+        info.checked = (state.zoneFilter == nil)
+        UIDropDownMenu_AddButton(info)
+        for _, zoneName in ipairs(EbonBuilds.TomeAtlas.ListZones()) do
+            info.text = zoneName
+            info.value = zoneName
+            info.func = function()
+                state.zoneFilter = zoneName
+                UIDropDownMenu_SetText(zoneDropdown, zoneName)
+                CloseDropDownMenus()
+                offset = 0
+                Render()
+            end
+            info.checked = (state.zoneFilter == zoneName)
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+
+    -- Rows container: anchored to filtersRow's bottom, not a magic number
     -- from the top of the frame -- header height can change again later
     -- without breaking this.
     scrollChild = CreateFrame("Frame", nil, f)
-    scrollChild:SetPoint("TOPLEFT", controlsRow, "BOTTOMLEFT", 4, -14)
+    scrollChild:SetPoint("TOPLEFT", filtersRow, "BOTTOMLEFT", 4, -14)
     scrollChild:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 12)
 
     for i = 1, VISIBLE_ROWS do

@@ -48,6 +48,7 @@ end
 -- Local observation: a tome dropped from a mob in a zone.
 function EbonBuilds.TomeAtlas.RecordDrop(itemId, itemName, mob, zone)
     if not itemId or not itemName then return nil end
+    if not EbonBuilds.TomeAtlas.IsTomeName(itemName) then return nil end
     local db = DB()
     local entry = db[itemId]
     if not entry then
@@ -61,8 +62,13 @@ function EbonBuilds.TomeAtlas.RecordDrop(itemId, itemName, mob, zone)
 end
 
 -- Community observation from the network. max() keeps merging idempotent.
+-- IMPORTANT: this is the one path that trusts data from OTHER players'
+-- clients -- validate the name is actually a tome here too, not just on
+-- the local-loot path (OnSelfLoot), or a buggy/malicious peer could
+-- inject arbitrary non-tome items into everyone's Atlas via sync.
 function EbonBuilds.TomeAtlas.Merge(itemId, itemName, mob, zone, count)
     if not itemId or not itemName then return end
+    if not EbonBuilds.TomeAtlas.IsTomeName(itemName) then return end
     count = tonumber(count) or 1
     if count < 1 then count = 1 end
     if count > 9999 then count = 9999 end
@@ -117,18 +123,110 @@ function EbonBuilds.TomeAtlas.SerializeAll(maxEntries)
 end
 
 -- Query for the UI: sorted list of { itemId, name, sources = {{mob, zone, count}} }
+-- Filters to actual tomes even though RecordDrop/Merge already reject
+-- non-tomes at write time -- this is the backstop for anything already
+-- sitting in saved data from before that existed.
 function EbonBuilds.TomeAtlas.List()
     local out = {}
     for itemId, entry in pairs(DB()) do
-        local sources = {}
-        for key, count in pairs(entry.sources or {}) do
-            local mob, zone = EbonBuilds.TomeAtlas.SplitSourceKey(key)
-            sources[#sources + 1] = { mob = mob, zone = zone, count = count }
+        if EbonBuilds.TomeAtlas.IsTomeName(entry.name) then
+            local sources = {}
+            for key, count in pairs(entry.sources or {}) do
+                local mob, zone = EbonBuilds.TomeAtlas.SplitSourceKey(key)
+                sources[#sources + 1] = { mob = mob, zone = zone, count = count }
+            end
+            table.sort(sources, function(a, b) return a.count > b.count end)
+            out[#out + 1] = { itemId = itemId, name = entry.name, sources = sources }
         end
-        table.sort(sources, function(a, b) return a.count > b.count end)
-        out[#out + 1] = { itemId = itemId, name = entry.name, sources = sources }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+    return out
+end
+
+-- Distinct zone names across all known tome sources (for the zone filter
+-- dropdown). Sorted alphabetically.
+function EbonBuilds.TomeAtlas.ListZones()
+    local seen = {}
+    for itemId, entry in pairs(DB()) do
+        if EbonBuilds.TomeAtlas.IsTomeName(entry.name) then
+            for key in pairs(entry.sources or {}) do
+                local _, zone = EbonBuilds.TomeAtlas.SplitSourceKey(key)
+                if zone and zone ~= "?" then seen[zone] = true end
+            end
+        end
+    end
+    local out = {}
+    for z in pairs(seen) do out[#out + 1] = z end
+    table.sort(out)
+    return out
+end
+
+-- Grouped by zone: { { zone, tomes = { {itemId, name, total, mobs = {{mob, count}}} }, tomeCount } }
+-- Sorted by how many distinct tomes are known in that zone (most first) --
+-- "where should I go" ordering, same spirit as the existing Best Farming line.
+function EbonBuilds.TomeAtlas.ListByZone()
+    local zones = {}
+    for itemId, entry in pairs(DB()) do
+        if EbonBuilds.TomeAtlas.IsTomeName(entry.name) then
+            for key, count in pairs(entry.sources or {}) do
+                local mob, zone = EbonBuilds.TomeAtlas.SplitSourceKey(key)
+                if zone and zone ~= "?" then
+                    zones[zone] = zones[zone] or { tomes = {} }
+                    local t = zones[zone].tomes[itemId]
+                    if not t then
+                        t = { itemId = itemId, name = entry.name, total = 0, mobs = {} }
+                        zones[zone].tomes[itemId] = t
+                    end
+                    t.mobs[#t.mobs + 1] = { mob = mob or "?", count = count }
+                    t.total = t.total + count
+                end
+            end
+        end
+    end
+    local out = {}
+    for zoneName, z in pairs(zones) do
+        local tomeList = {}
+        for _, t in pairs(z.tomes) do
+            table.sort(t.mobs, function(a, b) return a.count > b.count end)
+            tomeList[#tomeList + 1] = t
+        end
+        table.sort(tomeList, function(a, b) return (a.name or "") < (b.name or "") end)
+        out[#out + 1] = { zone = zoneName, tomes = tomeList, tomeCount = #tomeList }
+    end
+    table.sort(out, function(a, b)
+        if a.tomeCount ~= b.tomeCount then return a.tomeCount > b.tomeCount end
+        return a.zone < b.zone
+    end)
+    return out
+end
+
+-- Grouped by mob: { { mob, zone, tomes = {{itemId, name, count}}, tomeCount } }
+-- zone is whichever zone that mob name was most recently observed in
+-- (a reused mob name across zones is a rare edge case, not worth a
+-- separate row per zone for).
+function EbonBuilds.TomeAtlas.ListByMob()
+    local mobs = {}
+    for itemId, entry in pairs(DB()) do
+        if EbonBuilds.TomeAtlas.IsTomeName(entry.name) then
+            for key, count in pairs(entry.sources or {}) do
+                local mob, zone = EbonBuilds.TomeAtlas.SplitSourceKey(key)
+                mob = mob or "?"
+                mobs[mob] = mobs[mob] or { tomes = {}, zone = zone }
+                if zone and zone ~= "?" then mobs[mob].zone = zone end
+                local m = mobs[mob]
+                m.tomes[#m.tomes + 1] = { itemId = itemId, name = entry.name, count = count }
+            end
+        end
+    end
+    local out = {}
+    for mobName, m in pairs(mobs) do
+        table.sort(m.tomes, function(a, b) return (a.name or "") < (b.name or "") end)
+        out[#out + 1] = { mob = mobName, zone = m.zone or "?", tomes = m.tomes, tomeCount = #m.tomes }
+    end
+    table.sort(out, function(a, b)
+        if a.tomeCount ~= b.tomeCount then return a.tomeCount > b.tomeCount end
+        return a.mob < b.mob
+    end)
     return out
 end
 

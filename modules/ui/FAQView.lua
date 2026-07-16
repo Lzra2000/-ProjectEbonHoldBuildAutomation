@@ -15,8 +15,15 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.19",
+    title = "What's New in 2.20",
     lines = {
+        GOLD .. "2.20: Tome Atlas categories + item fix" .. R,
+        "- Fixed: items from other players via sync were never checked",
+        "  to actually be tomes -- a peer's bug could inject anything",
+        "- New: Group by Tome / Zone / Mob (cycle button)",
+        "- New: Zone filter dropdown, narrows any grouping to one zone",
+        "- Search still matches tome, mob, or zone text in every mode",
+        "",
         GOLD .. "2.19: Missing tab shows status dots" .. R,
         "- Green/red dot per row, same convention as the Affixes tab",
         "- New 'Show: All' / 'Show: Missing only' toggle (defaults to",
@@ -287,6 +294,8 @@ local PAGES = {
         "- 'Show: Missing only' hides everything you already collected",
         "  (matched against your Echoes spellbook)",
         "- (x3) behind a source = how often the community saw it drop",
+        "- 'Group: Tome/Zone/Mob' (2.20) reorganizes the whole list;",
+        "  the Zone dropdown narrows any of the three to one zone",
         "",
         GREY .. "New players: filter to Missing only and farm the zones" .. R,
         GREY .. "with the most entries - that is your collection route." .. R,
