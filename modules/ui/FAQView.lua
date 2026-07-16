@@ -15,8 +15,14 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.29",
+    title = "What's New in 2.30",
     lines = {
+        GOLD .. "2.30: fixed row overlap on long names" .. R,
+        "- Fixed: a long tome name wrapped to 2 lines and collided",
+        "  with the source text below it -- looked like a garbled",
+        "  extra entry, but was really just one long title",
+        "- Titles and source lines are single-line now",
+        "",
         GOLD .. "2.29: your public builds now show in Public Builds" .. R,
         "- Own public builds are no longer hidden from your own",
         "  Public Builds list -- tagged (You), Import replaced by a",

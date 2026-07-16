@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.29 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.30 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -170,6 +170,10 @@ The Missing tab and Tome Atlas both used to determine what you've learned by sca
 It used to be deliberately hidden there (you already have it in your left sidebar, so browsing it again seemed redundant) -- but that also meant there was no easy way to confirm a build actually published successfully. As of 2.29, your own public builds show up in Public Builds too, tagged **(You)** next to your name, with the Import button replaced by a disabled "Yours" label. If it's not there after making a build public, that's a real sign something's wrong (check the title-collision popup from 2.18 -- your build gets auto-unpublished if the exact title is already public under someone else).
 
 ## Changelog
+
+### 2.30 (2026-07-16) -- fix: long tome names visually overlapping the row below
+
+- **Fixed: an unusually long tome (or mob/zone) name wrapped to a second line, colliding with the source text underneath it.** Rows are a fixed height and the title FontString had word-wrap enabled by default -- a long enough name (e.g. "Libram of Saints Departed of Arcane Mind IV") wrapped, and the wrapped second line drew right on top of the source/drop-location text below, which looked like a completely different, garbled entry mixed in. Title and source text are both single-line now (word wrap disabled); this was a rendering bug, not actually a non-tome item slipping through the 2.20 filter.
 
 ### 2.29 (2026-07-16) -- your own public builds now show in Public Builds
 

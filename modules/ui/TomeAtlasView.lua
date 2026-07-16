@@ -222,6 +222,12 @@ local function CreateRow(parent)
     name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
     name:SetJustifyH("LEFT")
     name:SetWidth(250)
+    -- A long name (unusually long tome title, or "Mob (Zone)" in mob mode)
+    -- would otherwise wrap to a second line -- rows are a fixed height, so
+    -- a wrapped title visually collides with the source text below it.
+    -- One line only; ownedTag is anchored to the title's actual right
+    -- edge, so it still lands in the right place either way.
+    name:SetWordWrap(false)
     row._name = name
 
     local ownedTag = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -233,6 +239,7 @@ local function CreateRow(parent)
     src:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     src:SetJustifyH("LEFT")
     src:SetTextColor(0.75, 0.75, 0.75, 1)
+    src:SetWordWrap(false)
     row._sources = src
 
     -- Hover: item tooltip for a tome row (icon, quality, description if the
