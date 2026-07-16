@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.13 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.14 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -112,6 +112,10 @@ Four small standalone tools:
 The Public Builds **Reload** button now only requests builds for the class currently selected in the dropdown (your own class by default), instead of every class from every peer on every reload. Switch the dropdown to "All Classes" if you want the old everything-at-once behavior back. This cuts sync traffic and page count dramatically on classes many players share builds for.
 
 ## Changelog
+
+### 2.14 (2026-07-16) -- FAQ window overflow fix
+
+- **Fixed: the `/ebb faq` window's text could draw straight over the game world and action bars.** The page body was a bare FontString anchored to the window with no height limit and no clipping -- fine while pages were short, but as the "What's New" page accumulated more version history (2.12, 2.13, ...) it grew taller than the fixed-size window and simply kept drawing past the bottom edge, unclipped, over whatever was underneath. Rebuilt with a proper scrollframe: the body now scrolls (mouse wheel or the scrollbar) and can never overflow the window regardless of how long a page gets.
 
 ### 2.13 (2026-07-16)
 

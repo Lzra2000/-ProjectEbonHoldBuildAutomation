@@ -15,8 +15,15 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.13",
+    title = "What's New in 2.14",
     lines = {
+        GOLD .. "2.14: FAQ window fixed" .. R,
+        "- Fixed: this window's text could spill out past its own frame",
+        "  and draw straight over your action bars / the game world",
+        "  once a page got long enough (exactly what you're reading now",
+        "  wasn't clipped before -- it is now: a real scrollbar).",
+        "- Scroll with the mouse wheel or the bar on the right.",
+        "",
         GOLD .. "2.13: faster, smaller syncs" .. R,
         "- Public Builds Reload now only fetches the class you have",
         "  selected in the dropdown (your class by default)",
@@ -348,7 +355,7 @@ local PAGES = {
 -- Window
 ------------------------------------------------------------------------
 
-local frame, titleText, bodyText, pageLabel, prevBtn, nextBtn
+local frame, titleText, bodyText, scrollFrame, scrollChild, pageLabel, prevBtn, nextBtn
 local page = 1
 
 local function RenderPage()
@@ -356,6 +363,14 @@ local function RenderPage()
     if not p then return end
     titleText:SetText(GOLD .. p.title .. R)
     bodyText:SetText(table.concat(p.lines, "\n"))
+    -- FontStrings don't clip or scroll on their own -- the scroll child
+    -- must be resized to the text's actual rendered height (which varies
+    -- a lot page to page) so the scrollbar's range is correct and content
+    -- can never spill out past the window (see 2.12/2.13: growing "What's
+    -- New" pages overflowed straight over the game world and action bars).
+    local textHeight = bodyText:GetStringHeight() or 0
+    scrollChild:SetHeight(math.max(scrollFrame:GetHeight(), textHeight + 4))
+    scrollFrame:SetVerticalScroll(0)
     pageLabel:SetText(("Page %d / %d"):format(page, #PAGES))
     if page <= 1 then prevBtn:Disable() else prevBtn:Enable() end
     if page >= #PAGES then nextBtn:Disable() else nextBtn:Enable() end
@@ -363,7 +378,7 @@ end
 
 local function BuildWindow()
     local f = CreateFrame("Frame", "EbonBuildsFAQWindow", UIParent)
-    f:SetSize(560, 430)
+    f:SetSize(560, 480)
     f:SetPoint("CENTER", UIParent, "CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetToplevel(true)
@@ -393,11 +408,34 @@ local function BuildWindow()
     titleText:SetPoint("TOPLEFT", f, "TOPLEFT", 22, -42)
     EbonBuilds.Theme.AddHeaderRule(f, titleText, 516)
 
-    bodyText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    bodyText:SetPoint("TOPLEFT", f, "TOPLEFT", 22, -76)
-    bodyText:SetWidth(516)
+    -- Scrollable body: leaves room on the right for the scrollbar and at
+    -- the bottom for the Prev/Next/page-count row, and clips anything
+    -- that doesn't fit -- unlike the old bare FontString, content can
+    -- never draw outside this window regardless of how long a page is.
+    scrollFrame = CreateFrame("ScrollFrame", "EbonBuildsFAQSF", f, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", f, "TOPLEFT", 22, -76)
+    scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 48)
+
+    scrollChild = CreateFrame("Frame", nil, scrollFrame)
+    scrollChild:SetWidth(504)
+    scrollChild:SetHeight(1)
+    scrollFrame:SetScrollChild(scrollChild)
+
+    bodyText = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    bodyText:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+    bodyText:SetWidth(504)
     bodyText:SetJustifyH("LEFT")
     bodyText:SetJustifyV("TOP")
+
+    -- Mouse wheel scrolls content (UIPanelScrollFrameTemplate doesn't
+    -- wire this up automatically for a plain Frame scroll child the way
+    -- it does for an EditBox).
+    scrollFrame:EnableMouseWheel(true)
+    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local range = self:GetVerticalScrollRange()
+        local newScroll = self:GetVerticalScroll() - delta * 32
+        self:SetVerticalScroll(math.max(0, math.min(newScroll, range)))
+    end)
 
     -- Navigation
     prevBtn = EbonBuilds.Theme.CreateButton(f)
@@ -418,13 +456,6 @@ local function BuildWindow()
 
     pageLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     pageLabel:SetPoint("BOTTOM", f, "BOTTOM", 0, 18)
-
-    -- Mouse wheel flips pages too
-    f:EnableMouseWheel(true)
-    f:SetScript("OnMouseWheel", function(_, delta)
-        if delta < 0 and page < #PAGES then page = page + 1; RenderPage()
-        elseif delta > 0 and page > 1 then page = page - 1; RenderPage() end
-    end)
 
     tinsert(UISpecialFrames, "EbonBuildsFAQWindow")
     f:Hide()
