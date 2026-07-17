@@ -22,6 +22,7 @@ local evalTimerFrame    = nil
 local evalTimerElapsed  = 0
 local evalTimerActive   = false
 local pendingChoices    = nil
+local trainingNoticeShown = false -- once-per-session Manual Training notice (see the eval timer)
 local origPerkUIShow    = nil
 local freezeRoundActive    = false  -- true after freeze batch, cleared on select
 local locallyFrozenIndices = {}     -- indices frozen this round, for penalty tracking
@@ -47,13 +48,20 @@ local function StartEvalTimer()
                     return
                 end
                 -- Automation couldn't act, show the native perk UI. Only
-                -- explain why if automation was actually on for this build
-                -- and it wasn't Manual Training Mode intentionally
-                -- suspending it -- otherwise this toast would fire on
-                -- every choice screen for people who have automation off
-                -- on purpose, or who are deliberately training manually.
+                -- explain why if automation was actually on for this build.
+                -- Manual Training gets its own notice, once per session:
+                -- total silence made "Training: ON" indistinguishable from
+                -- a broken addon (real report: "automation doesn't pick
+                -- anything anymore" with both toggles on), but repeating
+                -- it every choice screen would nag people deliberately
+                -- training. Once per login is the middle ground.
                 if pendingChoices and origPerkUIShow then
-                    if wasActive and not isTraining then
+                    if wasActive and isTraining then
+                        if not trainingNoticeShown then
+                            trainingNoticeShown = true
+                            EbonBuilds.Toast.Show("Automation paused: Manual Training is ON for this build (its toggle on the build overview turns it off)")
+                        end
+                    elseif wasActive then
                         EbonBuilds.Toast.Show("Automation: no rule matched, choose manually")
                     end
                     origPerkUIShow(pendingChoices)

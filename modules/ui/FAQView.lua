@@ -15,8 +15,15 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 3.0",
+    title = "What's New in 3.01",
     lines = {
+        GOLD .. "3.01: Manual Training announces itself now" .. R,
+        "- New once-per-session toast when Training: ON suppresses",
+        "  automation -- total silence made it look like the addon",
+        "  was broken (real report: 'automation picks nothing')",
+        "- Shows once per login, then stays quiet -- deliberately not",
+        "  on every choice screen",
+        "",
         GOLD .. "3.0: Family Bonus tuning merged in from 2.59" .. R,
         "- Ported over the one capability the parallel 2.59 branch had that",
         "  this build didn't: Family Bonus suggestions",

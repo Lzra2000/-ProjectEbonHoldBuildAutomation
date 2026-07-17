@@ -253,6 +253,11 @@ This is deliberately approximate, not a controlled measurement: echoes stack tog
 
 ## Changelog
 
+### 3.01 (2026-07-18) -- Manual Training now announces itself instead of looking broken
+
+- **New: a once-per-session toast when Manual Training suppresses automation** ("Automation paused: Manual Training is ON for this build"). Previously this state was totally silent by design -- the code even had a comment explaining why (a toast on every choice screen would nag people deliberately training) -- but total silence made "Training: ON" indistinguishable from a broken addon: a real report came in as "automation doesn't pick anything anymore," and the cause turned out to be the Training toggle having been left on. Once per login is the middle ground: you find out the first time it matters, then it stays quiet.
+- The existing "no rule matched, choose manually" toast for genuinely-unmatched offers is unchanged.
+
 ### 3.0 (2026-07-18) -- merge: Family Bonus tuning ported in from the parallel 2.59 branch
 
 - This build and a separately-versioned 2.59 branch (see that entry's own changelog for its full history) had diverged after roughly the 2.54-2.58 point and developed independently -- this one toward the Stats/Logbook/EWL/test-suite work below, the other toward Manual Training refinements and a Quality/Family Bonus tuning pair. Comparing the two found exactly one capability present in 2.59 and missing here: **Family Bonus suggestions**, the family counterpart to the Quality Bonus suggestions already in this build.
