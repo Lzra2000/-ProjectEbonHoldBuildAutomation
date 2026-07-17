@@ -402,6 +402,14 @@ SlashCmdList["EbonBuilds"] = function(msg)
         EbonBuilds.ErrorLog.ShowWindow()
     elseif msg == "tuning" or msg == "advisor" then
         EbonBuilds.Calibration.ShowWindow()
+    elseif msg == "cleartraining" then
+        local build = EbonBuilds.Build.GetActive()
+        if not build then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff44ff44EbonBuilds:|r No active build.")
+        else
+            EbonBuilds.ManualTraining.Clear(build.id)
+            DEFAULT_CHAT_FRAME:AddMessage("|cff44ff44EbonBuilds:|r Cleared manual training data for \"" .. (build.title or "?") .. "\".")
+        end
     elseif msg == "autosell" then
         local on = not EbonBuilds.AutoSell.IsEnabled()
         EbonBuilds.AutoSell.SetEnabled(on)

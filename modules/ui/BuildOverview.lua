@@ -451,6 +451,41 @@ local function BuildOverviewTab(parent)
     outer._autoToggle = autoToggle
     outer._refreshAutoToggle = RefreshAutoToggle
 
+    -- Manual Training Mode toggle: independent of Automation on/off.
+    -- When on, automation never acts for this build (see the check in
+    -- Automation.Evaluate) -- the native perk UI shows and EbonBuilds
+    -- watches what you pick, building weight suggestions from your own
+    -- choices instead of measured DPS. See /ebb tuning or Export (AI).
+    local trainToggle = EbonBuilds.Theme.CreateButton(outer)
+    trainToggle:SetWidth(140)
+    trainToggle:SetHeight(22)
+    trainToggle:SetPoint("TOPLEFT", autoToggle, "BOTTOMLEFT", 0, -6)
+    local function RefreshTrainToggle(self, build)
+        local on = build and EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.IsEnabled(build)
+        self:SetText(on and "Training: ON" or "Training: OFF")
+        if on then
+            EbonBuilds.Theme.SetButtonAccent(self, "good")
+        else
+            EbonBuilds.Theme.ClearButtonAccent(self)
+        end
+    end
+    trainToggle:SetText("Training: OFF")
+    trainToggle:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Manual Training Mode", 1, 1, 1)
+        GameTooltip:AddLine("Independent of the Automation toggle above. When on, automation never acts for this build -- you pick manually in the native UI, and EbonBuilds compares your picks against what the current weights would suggest. Builds weight-adjustment suggestions from your own choices, shown in Export (AI).", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    trainToggle:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    trainToggle:SetScript("OnClick", function(self)
+        local build = state.build
+        if not build then return end
+        EbonBuilds.ManualTraining.SetEnabled(build, not EbonBuilds.ManualTraining.IsEnabled(build))
+        RefreshTrainToggle(self, build)
+    end)
+    outer._trainToggle = trainToggle
+    outer._refreshTrainToggle = RefreshTrainToggle
+
     local editBtn = EbonBuilds.Theme.CreateButton(outer)
     editBtn:SetWidth(120)
     editBtn:SetHeight(22)
@@ -508,7 +543,7 @@ local function BuildOverviewTab(parent)
     local applyBtn = EbonBuilds.Theme.CreateButton(outer)
     applyBtn:SetWidth(150)
     applyBtn:SetHeight(20)
-    applyBtn:SetPoint("TOPLEFT", autoToggle, "BOTTOMLEFT", 0, -8)
+    applyBtn:SetPoint("TOPLEFT", trainToggle, "BOTTOMLEFT", 0, -8)
     applyBtn:SetText("Apply to Character")
     applyBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -840,6 +875,7 @@ local function RefreshOverview()
     overviewOuter._statusLabel:SetText(publicText .. validatedText)
 
     overviewOuter._refreshAutoToggle(overviewOuter._autoToggle, build)
+    overviewOuter._refreshTrainToggle(overviewOuter._trainToggle, build)
 
     local desc = build.comments or ""
     overviewDescSmf:Clear()

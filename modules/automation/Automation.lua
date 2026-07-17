@@ -41,16 +41,19 @@ local function StartEvalTimer()
                 evalTimerFrame:Hide()
                 local build = EbonBuilds.Build.GetActive()
                 local wasActive = build and build.automationEnabled
+                local isTraining = build and EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.IsEnabled(build)
                 if EbonBuilds.Automation.Evaluate() then
                     pendingChoices = nil
                     return
                 end
                 -- Automation couldn't act, show the native perk UI. Only
-                -- explain why if automation was actually on for this build --
-                -- otherwise this toast would fire on every choice screen for
-                -- people who have it off on purpose.
+                -- explain why if automation was actually on for this build
+                -- and it wasn't Manual Training Mode intentionally
+                -- suspending it -- otherwise this toast would fire on
+                -- every choice screen for people who have automation off
+                -- on purpose, or who are deliberately training manually.
                 if pendingChoices and origPerkUIShow then
-                    if wasActive then
+                    if wasActive and not isTraining then
                         EbonBuilds.Toast.Show("Automation: no rule matched, choose manually")
                     end
                     origPerkUIShow(pendingChoices)
@@ -322,6 +325,13 @@ function EbonBuilds.Automation.Evaluate()
     local function body()
         local build = EbonBuilds.Build.GetActive()
         if not build or not build.automationEnabled then return false end
+        -- Manual Training Mode: an independent opt-in toggle, not tied to
+        -- automationEnabled. When on, automation never acts for this
+        -- build regardless of its own automationEnabled setting -- same
+        -- fallback path as automation being off (native UI shows after
+        -- the eval timer's brief delay), so the player can pick manually
+        -- while EbonBuilds.ManualTraining observes what they choose.
+        if EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.IsEnabled(build) then return false end
 
         local choices = ProjectEbonhold.PerkService.GetCurrentChoice()
         if not choices or #choices == 0 then return false end

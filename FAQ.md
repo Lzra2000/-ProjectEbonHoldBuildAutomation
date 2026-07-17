@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.49 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.50 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -197,6 +197,15 @@ Next to the regular Export button (build edit screen, any tab) is a new **Export
 This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
 
 ## Changelog
+
+### 2.50 (2026-07-16) -- Manual Training Mode: weight suggestions from your own picks
+
+- **New: "Training: ON/OFF" toggle** on the build overview screen, right below the Automation toggle. Independent of automation on/off. When on, automation never acts for that build -- the native perk UI shows (same fallback path already used when automation is simply off) and you pick manually, while EbonBuilds compares your choices against what the current weights would have scored highest.
+- **New weight-adjustment signal: revealed preference.** Whenever you pick an echo over another one the current weights scored higher, or pass over an echo the weights ranked above what you actually took, that's recorded. After a few repeats of the same pattern (3+), a weight suggestion appears -- a genuinely different kind of evidence than the existing DPS-based suggestions: this captures what you actually valued, not how well it measurably performed.
+- Shown in Export (AI) under its own section, clearly separate from the DPS-based suggestions, same "report only, not auto-applied" philosophy.
+- `/ebb cleartraining` clears the active build's recorded training data.
+- Verified in isolation: simulated 4 picks of a lower-scored echo over a higher-scored alternative plus 1 pick agreeing with the higher score -- correctly produced exactly two suggestions (raise the preferred one, lower the passed-over one) with accurate counts, and the agreeing pick correctly added no disagreement.
+- New module `modules/automation/ManualTraining.lua`; `Build.Save()` gained the `manualTrainingEnabled` field alongside the existing `automationEnabled` one.
 
 ### 2.49 (2026-07-16) -- community DPS sharing (same-class, opt-in, auto-merged)
 

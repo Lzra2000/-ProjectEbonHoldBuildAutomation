@@ -476,6 +476,30 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
         end
     end
 
+    -- Weight suggestions from Manual Training Mode -- a different kind of
+    -- evidence than DPS (revealed preference: what you actually chose,
+    -- not how well it performed). See BuildOverview's "Training: ON/OFF"
+    -- toggle.
+    if EbonBuilds.ManualTraining then
+        local trainSuggestions = EbonBuilds.ManualTraining.SuggestWeightAdjustments(build)
+        if #trainSuggestions > 0 then
+            add("--- Weight suggestions from Manual Training (report only, not auto-applied) ---")
+            add("Based on picks you made yourself with automation suspended (Training: ON), not")
+            add("measured performance. Each line: how many times you picked/passed on this echo")
+            add("despite the current weights scoring the alternative differently.")
+            for _, sug in ipairs(trainSuggestions) do
+                if sug.direction == "raise" then
+                    add("%s: weight %d -> %d suggested (chosen over a higher-scored alternative %d times)",
+                        sug.name, sug.currentWeight, sug.suggestedWeight, sug.count)
+                else
+                    add("%s: weight %d -> %d suggested (passed over for a lower-scored alternative %d times)",
+                        sug.name, sug.currentWeight, sug.suggestedWeight, sug.count)
+                end
+            end
+            add("")
+        end
+    end
+
     -- Locked echo slots
     add("--- Locked echoes (always picked if offered) ---")
     local anyLocked = false

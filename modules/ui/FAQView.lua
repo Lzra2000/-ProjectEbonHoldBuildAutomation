@@ -15,8 +15,20 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.49",
+    title = "What's New in 2.50",
     lines = {
+        GOLD .. "2.50: Manual Training Mode" .. R,
+        "- New 'Training: ON/OFF' toggle on the build overview screen,",
+        "  independent of Automation on/off",
+        "- When on, automation never acts -- you pick manually in the",
+        "  native UI, EbonBuilds compares your picks against what",
+        "  current weights would suggest",
+        "- New signal: revealed preference -- what you actually chose,",
+        "  not measured DPS. A different kind of evidence than the",
+        "  existing DPS-based weight suggestions",
+        "- Shown in Export (AI), its own section",
+        "- /ebb cleartraining wipes the active build's training data",
+        "",
         GOLD .. "2.49: community DPS sharing (opt-in)" .. R,
         "- 'Track DPS by echo' renamed 'Track + share DPS by echo' --",
         "  now also shares your per-echo averages with other same-",

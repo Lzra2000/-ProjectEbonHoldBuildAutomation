@@ -519,6 +519,7 @@ function EbonBuilds.Build.Save(id, data)
     if data.settings then build.settings = data.settings end
     if data.echoWeights then build.echoWeights = data.echoWeights end
     if data.automationEnabled ~= nil then build.automationEnabled = data.automationEnabled end
+    if data.manualTrainingEnabled ~= nil then build.manualTrainingEnabled = data.manualTrainingEnabled end
     if data.isPublic ~= nil then build.isPublic = data.isPublic end
     build.version         = (build.version or 1) + 1
     build._checksum       = EbonBuilds.Build.Checksum(build)
