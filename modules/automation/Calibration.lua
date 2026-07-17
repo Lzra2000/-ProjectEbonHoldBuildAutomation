@@ -417,7 +417,12 @@ local function BuildWindow()
     subtitle:SetWidth(528)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetText("Compares your current thresholds against what your build actually gets offered, and suggests values based on the real distribution instead of the theoretical scoring model. Works with both Classic and Smart (EV) mode.")
-    subtitle:SetHeight(28)
+    -- No fixed SetHeight: this text needs 3 lines at this width, and a
+    -- height sized for 2 (28px) clipped the third line instead of
+    -- showing it. Auto-sizing to the wrapped content is safe here --
+    -- banishRow/rerollRow/freezeRow below all anchor to fixed offsets
+    -- from the window itself, not chained to subtitle, so subtitle
+    -- growing a bit taller doesn't push anything else out of place.
 
     modeWarning = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     modeWarning:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -6)

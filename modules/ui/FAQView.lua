@@ -15,8 +15,14 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.50",
+    title = "What's New in 2.51",
     lines = {
+        GOLD .. "2.51: fixed -- Tuning Advisor text clipped + gap" .. R,
+        "- The subtitle text was cut off mid-sentence (needed 3 lines,",
+        "  only had room for 2) and left a large empty gap above Banish",
+        "- Same root cause, same fix as 2.41's Settings dialog bug --",
+        "  removed a fixed height that was too short for the real text",
+        "",
         GOLD .. "2.50: Manual Training Mode" .. R,
         "- New 'Training: ON/OFF' toggle on the build overview screen,",
         "  independent of Automation on/off",

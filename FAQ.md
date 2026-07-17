@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.50 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.51 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -197,6 +197,11 @@ Next to the regular Export button (build edit screen, any tab) is a new **Export
 This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
 
 ## Changelog
+
+### 2.51 (2026-07-16) -- fix: Tuning Advisor subtitle clipped, and the oversized gap below it
+
+- **Fixed: the Tuning Advisor's subtitle text was cut off mid-sentence, with a large unexplained gap between it and the Banish row below.** Both had the same cause: the subtitle FontString had a fixed `SetHeight(28)` sized for 2 lines, but the actual text needs 3 lines at its width -- the third line got clipped instead of shown, and since Banish/Reroll/Freeze are anchored at fixed offsets from the window (not chained to the subtitle), the space reserved for a full 3-line subtitle sat mostly empty. Removed the fixed height so the FontString sizes to its actual wrapped content; this is the same class of bug fixed for the Settings dialog in 2.41, height instead of width this time.
+- Scanned the rest of the addon for the same fixed-height + fixed-width + word-wrap-enabled combination and found 16 other candidates, none confirmed broken yet -- flagged for follow-up if anyone spots actual clipped text elsewhere, rather than changing 16 files speculatively.
 
 ### 2.50 (2026-07-16) -- Manual Training Mode: weight suggestions from your own picks
 
