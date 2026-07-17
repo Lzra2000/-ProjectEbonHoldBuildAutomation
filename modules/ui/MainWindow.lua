@@ -389,6 +389,8 @@ SlashCmdList["EbonBuilds"] = function(msg)
         EbonBuilds.DebugLog.ShowWindow()
     elseif msg == "faq" or msg == "help" or msg == "whatsnew" then
         EbonBuilds.FAQ.Show()
+    elseif msg == "showcase" or msg == "commands" or msg == "welcome" then
+        EbonBuilds.ShowcaseView.Show()
     elseif msg == "atlas" or msg == "tomes" then
         EbonBuilds.MainWindow.Toggle()
         EbonBuilds.ViewRouter.Show("tomeAtlas")

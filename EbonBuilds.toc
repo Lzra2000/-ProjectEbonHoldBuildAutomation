@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: EbonBuilds
-## Version: 2.51
+## Version: 2.52
 ## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced
 ## SavedVariables: EbonBuildsDB
 ## SavedVariablesPerCharacter: EbonBuildsCharDB
@@ -36,6 +36,7 @@ modules/sync/Sync.lua
 modules/sync/ChatLink.lua
 modules/ui/WeightsView.lua
 modules/ui/WelcomeView.lua
+modules/ui/ShowcaseView.lua
 modules/ui/PublicBuildsView.lua
 modules/ui/TomeAtlasView.lua
 modules/ui/AffixView.lua

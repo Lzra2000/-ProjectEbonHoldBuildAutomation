@@ -15,8 +15,16 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.51",
+    title = "What's New in 2.52",
     lines = {
+        GOLD .. "2.52: first-login showcase" .. R,
+        "- New one-time popup on first login, listing every /ebb",
+        "  command grouped by category with a one-line explanation",
+        "- Account-wide, shows once ever (not per character)",
+        "- Reopen anytime with /ebb showcase",
+        "- Not a replacement for /ebb faq's deeper pages -- meant to",
+        "  be skimmable in under a minute",
+        "",
         GOLD .. "2.51: fixed -- Tuning Advisor text clipped + gap" .. R,
         "- The subtitle text was cut off mid-sentence (needed 3 lines,",
         "  only had room for 2) and left a large empty gap above Banish",

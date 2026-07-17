@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.51 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.52 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -197,6 +197,13 @@ Next to the regular Export button (build edit screen, any tab) is a new **Export
 This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
 
 ## Changelog
+
+### 2.52 (2026-07-16) -- first-login showcase: full command reference popup
+
+- **New: a one-time "Welcome to EbonBuilds" popup**, shown automatically the first time the addon ever loads (account-wide, not per-character -- the command list is the same for every alt), listing every `/ebb` slash command grouped by category (Core, Tuning & Automation, Reference, Quality of Life, Diagnostics) with a one-line explanation each. Not a replacement for `/ebb faq`'s much deeper per-feature pages -- meant to be skimmable in under a minute, pointing to the FAQ for anything that needs more than one line.
+- Reopen anytime with `/ebb showcase` (also `/ebb commands` or `/ebb welcome`).
+- Content height is measured against the actual rendered text at the content area's real width rather than guessed or hardcoded, specifically to avoid the class of clipping bug fixed in 2.41 and 2.51.
+- New module `modules/ui/ShowcaseView.lua`.
 
 ### 2.51 (2026-07-16) -- fix: Tuning Advisor subtitle clipped, and the oversized gap below it
 
