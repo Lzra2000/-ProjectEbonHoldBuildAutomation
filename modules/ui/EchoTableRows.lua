@@ -160,6 +160,13 @@ local function WireIconTooltip(iconFrame)
                 GameTooltip:AddLine(description, 1, 1, 1, true)
             end
         end
+        if spellName and EbonBuilds.Calibration and EbonBuilds.Calibration.GetAppearanceStats then
+            local ap = EbonBuilds.Calibration.GetAppearanceStats(spellName)
+            if ap then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine(string.format("Appears in ~%.1f%% of offers (%d evaluations)", ap.pct, ap.totalEvals), 0.6, 0.8, 1)
+            end
+        end
         GameTooltip:Show()
     end)
     iconFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)

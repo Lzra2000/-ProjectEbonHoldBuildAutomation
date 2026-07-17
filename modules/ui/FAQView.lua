@@ -15,8 +15,14 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.54",
+    title = "What's New in 2.55",
     lines = {
+        GOLD .. "2.55: appearance rate now shown on the Echo tab" .. R,
+        "- Hovering an echo's icon on Echo Weights now shows its",
+        "  appearance rate in the tooltip (was only in Export (AI))",
+        "- Added to the existing tooltip, not a new column -- avoids",
+        "  the layout-overlap risk of a tightly packed row",
+        "",
         GOLD .. "2.54: auto-apply weights + Quality Bonus tuning" .. R,
         "- New: 'Auto-apply weight suggestions' toggle -- requires",
         "  Continuous auto-tune too, applies DPS + Manual Training",

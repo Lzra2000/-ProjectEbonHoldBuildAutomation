@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.54 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.55 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -197,6 +197,11 @@ Next to the regular Export button (build edit screen, any tab) is a new **Export
 This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
 
 ## Changelog
+
+### 2.55 (2026-07-16) -- echo appearance rate now shown in-game, on the Echo tab
+
+- **New: hovering an echo's icon on the Echo Weights tab now shows its appearance rate** ("Appears in ~X% of offers, N evaluations") at the bottom of the tooltip, alongside the existing name and effect description. Previously this was only visible in Export (AI)'s text dump.
+- Added directly to the existing tooltip rather than as a new column -- the Echo tab's row layout is already tightly packed (icon, name, score range, weight box), and adding a visible column risked the same class of overlap bug fixed a few times already this session. The tooltip was free real estate that didn't need any layout changes.
 
 ### 2.54 (2026-07-16) -- auto-apply weight suggestions, and a first pass at Quality Bonus tuning
 
