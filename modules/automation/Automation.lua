@@ -367,6 +367,19 @@ function EbonBuilds.Automation.Evaluate()
             EbonBuilds.Calibration.MaybeAutoTune()
         end
 
+        -- How often does each echo actually show up on a choice screen?
+        -- Always-on (cheap, no Details! needed) -- separate from the
+        -- score-based samples above, which are about VALUE, not
+        -- FREQUENCY.
+        if EbonBuilds.Calibration and EbonBuilds.Calibration.RecordAppearance then
+            EbonBuilds.Calibration.RecordEvaluation()
+            for _, s in ipairs(scored) do
+                if s.name then
+                    EbonBuilds.Calibration.RecordAppearance(s.name)
+                end
+            end
+        end
+
         local banList    = settings.echoBanList or {}
         local whitelist  = settings.banishFamilyWhitelist or {}
         AnnotateScored(scored, banList, whitelist, lockedList)

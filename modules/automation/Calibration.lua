@@ -87,6 +87,166 @@ function EbonBuilds.Calibration.Clear()
 end
 
 ------------------------------------------------------------------------
+-- Echo appearance frequency -- how often does each echo actually show
+-- up on a choice screen, as a % of evaluations? A different question
+-- from the score-based samples above (which are about VALUE): this is
+-- about how often the server offers it at all. Always-on locally (cheap,
+-- needs nothing but the same evaluation loop already running); sharing
+-- with other same-class players is a separate opt-in toggle, since
+-- unlike EchoPerformance's DPS tracking this doesn't need Details! at
+-- all and shouldn't be gated behind that requirement.
+------------------------------------------------------------------------
+
+local MAX_TRUSTED_APPEARANCE_EVALS = 5000  -- reject a single peer claiming more evaluations than this
+local APPEARANCE_BROADCAST_BATCH   = 8
+local APPEARANCE_BROADCAST_INTERVAL = 180  -- seconds
+
+local function GetAppearanceStore()
+    EbonBuildsCharDB.appearance = EbonBuildsCharDB.appearance or { counts = {}, totalEvals = 0 }
+    return EbonBuildsCharDB.appearance
+end
+
+local function GetAppearanceCommunityStore()
+    EbonBuildsCharDB.appearanceCommunity = EbonBuildsCharDB.appearanceCommunity or {}
+    return EbonBuildsCharDB.appearanceCommunity
+end
+
+function EbonBuilds.Calibration.IsAppearanceSharingEnabled()
+    return EbonBuildsCharDB.appearanceSharingEnabled == true
+end
+
+function EbonBuilds.Calibration.SetAppearanceSharingEnabled(on)
+    EbonBuildsCharDB.appearanceSharingEnabled = on and true or false
+end
+
+-- Called once per evaluation, regardless of what happens after.
+function EbonBuilds.Calibration.RecordEvaluation()
+    local store = GetAppearanceStore()
+    store.totalEvals = store.totalEvals + 1
+end
+
+-- Called once per offered echo per evaluation.
+function EbonBuilds.Calibration.RecordAppearance(name)
+    if not name then return end
+    local store = GetAppearanceStore()
+    store.counts[name] = (store.counts[name] or 0) + 1
+end
+
+function EbonBuilds.Calibration.ClearAppearance()
+    EbonBuildsCharDB.appearance = { counts = {}, totalEvals = 0 }
+    EbonBuildsCharDB.appearanceCommunity = {}
+end
+
+-- Merges one peer's reported appearance batch. Idempotent per sender
+-- (replaced, not added, each time) and class-matched, same
+-- anti-poisoning philosophy as EchoPerformance's DPS sharing.
+function EbonBuilds.Calibration.MergeAppearanceContribution(sender, class, totalEvals, counts)
+    if not (sender and class and totalEvals and counts) then return end
+    if sender == UnitName("player") then return end
+    local build = EbonBuilds.Build and EbonBuilds.Build.GetActive and EbonBuilds.Build.GetActive()
+    if not build or build.class ~= class then return end
+    totalEvals = tonumber(totalEvals)
+    if not totalEvals or totalEvals <= 0 or totalEvals > MAX_TRUSTED_APPEARANCE_EVALS then return end
+
+    local store = GetAppearanceCommunityStore()
+    store[sender] = store[sender] or {}
+    store[sender][class] = { totalEvals = totalEvals, counts = counts }
+end
+
+-- % of evaluations this echo was offered in, combining personal +
+-- community data. Returns nil if there's no evaluation data at all yet.
+function EbonBuilds.Calibration.GetAppearanceStats(name)
+    local personal = GetAppearanceStore()
+    local totalEvals = personal.totalEvals or 0
+    local count = personal.counts[name] or 0
+
+    local communityStore = GetAppearanceCommunityStore()
+    local build = EbonBuilds.Build and EbonBuilds.Build.GetActive and EbonBuilds.Build.GetActive()
+    local class = build and build.class
+    if class then
+        for _, byClass in pairs(communityStore) do
+            local c = byClass[class]
+            if c then
+                totalEvals = totalEvals + (c.totalEvals or 0)
+                count = count + (c.counts[name] or 0)
+            end
+        end
+    end
+    if totalEvals == 0 then return nil end
+    return { pct = count / totalEvals * 100, totalEvals = totalEvals, personalEvals = personal.totalEvals or 0 }
+end
+
+------------------------------------------------------------------------
+-- Wire format: APR|<class>|<totalEvals>|name1:count1;name2:count2;...
+-- A rotating batch, same rationale as EchoPerformance's PRF -- short
+-- messages over the sync channel rather than one giant payload.
+------------------------------------------------------------------------
+
+function EbonBuilds.Calibration.SerializeAppearanceBatch(class, names)
+    if not class or not names or #names == 0 then return nil end
+    local store = GetAppearanceStore()
+    local parts = {}
+    for _, name in ipairs(names) do
+        local count = store.counts[name]
+        if count and count > 0 then
+            parts[#parts + 1] = string.format("%s:%d", name, count)
+        end
+    end
+    if #parts == 0 then return nil end
+    return string.format("APR|%s|%d|%s", class, store.totalEvals or 0, table.concat(parts, ";"))
+end
+
+function EbonBuilds.Calibration.ParseAppearanceBatch(payload)
+    local class, totalEvals, body = payload:match("^APR|([^|]+)|(%d+)|(.+)$")
+    if not class then return nil end
+    local counts = {}
+    for entry in body:gmatch("[^;]+") do
+        local name, count = entry:match("^(.+):(%d+)$")
+        if name then counts[name] = tonumber(count) end
+    end
+    return class, tonumber(totalEvals), counts
+end
+
+function EbonBuilds.Calibration.HandleAppearanceBroadcast(payload, sender)
+    if not EbonBuilds.Calibration.IsAppearanceSharingEnabled() then return end
+    local class, totalEvals, counts = EbonBuilds.Calibration.ParseAppearanceBatch(payload)
+    if not class then return end
+    EbonBuilds.Calibration.MergeAppearanceContribution(sender, class, totalEvals, counts)
+end
+
+local appearanceBroadcastElapsed = 0
+local appearanceBroadcastCursor = 1
+
+function EbonBuilds.Calibration.MaybeBroadcastAppearance(dt)
+    if not EbonBuilds.Calibration.IsAppearanceSharingEnabled() then return end
+    if not (EbonBuilds.Sync and EbonBuilds.Sync.BroadcastPerfBatch) then return end
+    appearanceBroadcastElapsed = appearanceBroadcastElapsed + (dt or 0)
+    if appearanceBroadcastElapsed < APPEARANCE_BROADCAST_INTERVAL then return end
+    appearanceBroadcastElapsed = 0
+
+    local build = EbonBuilds.Build and EbonBuilds.Build.GetActive and EbonBuilds.Build.GetActive()
+    if not build or not build.class then return end
+
+    local store = GetAppearanceStore()
+    local names = {}
+    for name in pairs(store.counts) do names[#names + 1] = name end
+    if #names == 0 then return end
+    table.sort(names)
+
+    local batch = {}
+    for i = 1, APPEARANCE_BROADCAST_BATCH do
+        local idx = ((appearanceBroadcastCursor - 1 + i - 1) % #names) + 1
+        batch[#batch + 1] = names[idx]
+    end
+    appearanceBroadcastCursor = ((appearanceBroadcastCursor - 1 + APPEARANCE_BROADCAST_BATCH) % #names) + 1
+
+    local payload = EbonBuilds.Calibration.SerializeAppearanceBatch(build.class, batch)
+    if payload then
+        EbonBuilds.Sync.BroadcastPerfBatch(payload)
+    end
+end
+
+------------------------------------------------------------------------
 -- Continuous auto-tune (opt-in)
 --
 -- Off by default. When enabled, thresholds don't just get SUGGESTED --
@@ -387,7 +547,7 @@ end
 
 local function BuildWindow()
     local f = CreateFrame("Frame", "EbonBuildsTuningAdvisorWindow", UIParent)
-    f:SetSize(560, 440)
+    f:SetSize(560, 470)
     f:SetPoint("CENTER", UIParent, "CENTER")
     f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetToplevel(true)
@@ -479,18 +639,39 @@ local function BuildWindow()
         EbonBuilds.EchoPerformance.SetEnabled(self:GetChecked() and true or false)
     end)
 
+    local appearCB = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    appearCB:SetWidth(24)
+    appearCB:SetHeight(24)
+    appearCB:SetPoint("TOPLEFT", perfCB, "BOTTOMLEFT", 0, -6)
+    local appearLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    appearLabel:SetPoint("LEFT", appearCB, "RIGHT", 2, 0)
+    appearLabel:SetText("Share echo appearance rates")
+    appearCB:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Share echo appearance rates", 1, 1, 1)
+        GameTooltip:AddLine("Off by default. Doesn't need Details! -- separate from DPS tracking above. Tracks how often each echo actually shows up on a choice screen (not how good it scores, just how often the server offers it), as a % of all evaluations. Always recorded locally; this toggle only controls sharing it with other same-class EbonBuilds users and merging theirs back into yours.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(" ", 1, 1, 1)
+        GameTooltip:AddLine("Same safeguards as DPS sharing: only merges from a class-matched peer, a single peer's claimed evaluation count is capped, and re-broadcasts can't inflate the total. Shown in Export (AI).", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    appearCB:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    appearCB:SetScript("OnClick", function(self)
+        EbonBuilds.Calibration.SetAppearanceSharingEnabled(self:GetChecked() and true or false)
+    end)
+
     local clearBtn = EbonBuilds.Theme.CreateButton(f, "danger")
     clearBtn:SetSize(140, 20)
-    clearBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 12)
+    clearBtn:SetPoint("TOPLEFT", appearCB, "BOTTOMLEFT", 0, -12)
     clearBtn:SetText("Clear Collected Data")
     clearBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Wipes recorded samples. Worth doing after a major reweight, since old samples reflect the previous weighting.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Wipes recorded samples, including appearance-rate data. Worth doing after a major reweight, since old samples reflect the previous weighting.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     clearBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     clearBtn:SetScript("OnClick", function()
         EbonBuilds.Calibration.Clear()
+        EbonBuilds.Calibration.ClearAppearance()
         EbonBuilds.Calibration.RefreshWindow()
     end)
 
@@ -499,6 +680,7 @@ local function BuildWindow()
 
     f._autoTuneCB = autoTuneCB
     f._perfCB = perfCB
+    f._appearCB = appearCB
     tinsert(UISpecialFrames, "EbonBuildsTuningAdvisorWindow")
     f:Hide()
     return f
@@ -511,6 +693,9 @@ function EbonBuilds.Calibration.RefreshWindow()
     end
     if frame._perfCB then
         frame._perfCB:SetChecked(EbonBuilds.EchoPerformance.IsEnabled())
+    end
+    if frame._appearCB then
+        frame._appearCB:SetChecked(EbonBuilds.Calibration.IsAppearanceSharingEnabled())
     end
     local build = EbonBuilds.Build.GetActive()
     if not build then
@@ -548,4 +733,20 @@ function EbonBuilds.Calibration.ShowWindow()
     if not frame then frame = BuildWindow() end
     EbonBuilds.Calibration.RefreshWindow()
     frame:Show()
+end
+
+------------------------------------------------------------------------
+-- Ticker: drives the appearance-sharing broadcast independent of
+-- combat state (unlike EchoPerformance's DPS sampling, this doesn't
+-- need to be in combat to fire -- it's just periodically re-sending
+-- already-collected counts).
+------------------------------------------------------------------------
+
+local tickerFrame
+function EbonBuilds.Calibration.Init()
+    if tickerFrame then return end
+    tickerFrame = CreateFrame("Frame")
+    tickerFrame:SetScript("OnUpdate", function(self, dt)
+        EbonBuilds.Calibration.MaybeBroadcastAppearance(dt)
+    end)
 end

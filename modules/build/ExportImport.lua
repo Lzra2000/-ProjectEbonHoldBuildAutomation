@@ -590,7 +590,7 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
     local perfAvailable = EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled()
         and EbonBuilds.EchoPerformance.IsDetailsAvailable()
     if perfAvailable then
-        add("Format: Name | weight | quality | family/families | avg DPS while active (samples) | effect")
+        add("Format: Name | weight | quality | family/families | appears in | avg DPS while active (samples) | effect")
         add("(DPS tracking is a rough signal, not a controlled measurement -- echoes stack together")
         add("and fights vary a lot, so this can't isolate any single echo's true effect on its own.")
         add("Sample counts marked \"shared\" came from other same-class EbonBuilds users over sync,")
@@ -625,9 +625,16 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
             end
         end
     else
-        add("Format: Name | weight | quality | family/families | effect")
+        add("Format: Name | weight | quality | family/families | appears in | effect")
     end
     for _, e in ipairs(entries) do
+        local appearText = "?"
+        if EbonBuilds.Calibration and EbonBuilds.Calibration.GetAppearanceStats then
+            local ap = EbonBuilds.Calibration.GetAppearanceStats(e.name)
+            if ap then
+                appearText = string.format("%.1f%% (%d evals)", ap.pct, ap.totalEvals)
+            end
+        end
         if perfAvailable then
             local perf = EbonBuilds.EchoPerformance.GetStats(e.name)
             local perfText
@@ -640,9 +647,9 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
             else
                 perfText = "no data"
             end
-            add("%s | %d | %s | %s | %s | %s", e.name, e.weight, e.quality, e.families, perfText, GetDescription(e.spellId))
+            add("%s | %d | %s | %s | %s | %s | %s", e.name, e.weight, e.quality, e.families, appearText, perfText, GetDescription(e.spellId))
         else
-            add("%s | %d | %s | %s | %s", e.name, e.weight, e.quality, e.families, GetDescription(e.spellId))
+            add("%s | %d | %s | %s | %s | %s", e.name, e.weight, e.quality, e.families, appearText, GetDescription(e.spellId))
         end
     end
 

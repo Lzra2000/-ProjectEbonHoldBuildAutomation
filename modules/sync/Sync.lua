@@ -552,6 +552,13 @@ local function HandleChannelMessage(msg, sender, _, channelName, _, _, _, channe
         end
         return
     end
+    if code == "APR" then
+        if EbonBuilds.Calibration and EbonBuilds.Calibration.HandleAppearanceBroadcast then
+            local ok, err = pcall(EbonBuilds.Calibration.HandleAppearanceBroadcast, decoded, sender)
+            if not ok then Log("Calibration.HandleAppearanceBroadcast error: " .. tostring(err)) end
+        end
+        return
+    end
     if code ~= "REQ" then return end
 
     -- We received a valid REQ on this channel — learn its index
@@ -862,6 +869,11 @@ local function DispatchAddon(prefix, payload, dist, sender)
         if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.HandleBroadcast then
             local ok, err = pcall(EbonBuilds.EchoPerformance.HandleBroadcast, payload, sender)
             if not ok then Log("EchoPerformance.HandleBroadcast error: " .. tostring(err)) end
+        end
+    elseif code == "APR" then
+        if EbonBuilds.Calibration and EbonBuilds.Calibration.HandleAppearanceBroadcast then
+            local ok, err = pcall(EbonBuilds.Calibration.HandleAppearanceBroadcast, payload, sender)
+            if not ok then Log("Calibration.HandleAppearanceBroadcast error: " .. tostring(err)) end
         end
     end
 end

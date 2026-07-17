@@ -15,8 +15,18 @@ local R = "|r"
 
 local PAGES = {
 {
-    title = "What's New in 2.52",
+    title = "What's New in 2.53",
     lines = {
+        GOLD .. "2.53: echo appearance rates" .. R,
+        "- New: tracks how often each echo actually appears on a",
+        "  choice screen (% of evaluations), not how good it scores",
+        "- Always-on locally, no toggle needed -- costs almost nothing",
+        "- New: 'Share echo appearance rates' toggle in /ebb tuning,",
+        "  off by default, doesn't need Details!",
+        "- Same safeguards as DPS sharing: class-matched, capped,",
+        "  idempotent, self-broadcasts ignored",
+        "- Shown in Export (AI) as a new 'appears in' column",
+        "",
         GOLD .. "2.52: first-login showcase" .. R,
         "- New one-time popup on first login, listing every /ebb",
         "  command grouped by category with a one-line explanation",

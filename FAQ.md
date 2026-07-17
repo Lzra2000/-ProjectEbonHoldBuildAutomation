@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 2.52 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 2.53 — also available in-game via* `/ebb faq`
 
 ---
 
@@ -197,6 +197,14 @@ Next to the regular Export button (build edit screen, any tab) is a new **Export
 This is deliberately approximate, not a controlled measurement: echoes stack together and fight difficulty/duration/execution vary a lot run to run, so it can't isolate any single echo's true causal effect. Treat it as a rough supplementary signal to combine with the scoring model and Tuning Advisor data, not a replacement for either. If Details! isn't installed, the checkbox tells you and won't enable.
 
 ## Changelog
+
+### 2.53 (2026-07-16) -- echo appearance rates, tracked always, shared opt-in
+
+- **New: EbonBuilds now tracks how often each echo actually appears on a choice screen** (as a % of all evaluations) -- a different question from DPS (value) or the Tuning Advisor's offer-distribution samples (also value-based): this is purely about frequency. Recorded automatically and always-on, no toggle needed, since it costs nothing beyond a counter increment already happening in the same evaluation loop.
+- **New: "Share echo appearance rates" toggle** in `/ebb tuning`, off by default. Unlike DPS tracking this needs no Details! -- broadcasts your counts to other same-class EbonBuilds users and merges theirs back into yours, same aggregate-only philosophy and safeguards as 2.49's DPS sharing (class-matched, per-peer counts capped, idempotent per-sender storage so re-broadcasts can't inflate the total, self-broadcasts ignored).
+- Shown in Export (AI) as a new "appears in" column for every class-eligible echo, independent of whether DPS tracking is on.
+- New wire format `APR|class|totalEvals|name:count;...`, reusing Sync.lua's existing generic broadcast transport (channel + guild) added for DPS sharing.
+- Verified in isolation: personal-only percentage correct, merge math correct ((4+8)/(10+20) = 40%), wrong-class/oversized-count/self-broadcast/re-broadcast-doubling all correctly rejected, serialize/parse round-trip correct, and the new Export (AI) column renders correctly in the right position for both the DPS-enabled and DPS-disabled table formats.
 
 ### 2.52 (2026-07-16) -- first-login showcase: full command reference popup
 
