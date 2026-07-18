@@ -133,6 +133,9 @@ local function CreateRow(parent)
         GameTooltip:Hide()
     end)
     row:SetScript("OnClick", function(self) Pick(self._entry) end)
+    if scrollFrame and scrollBar then
+        EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, ROW_HEIGHT, row)
+    end
     return row
 end
 
@@ -302,13 +305,7 @@ local function BuildFrame()
     scrollBar:SetScript("OnValueChanged", function(_, value)
         scrollFrame:SetVerticalScroll(value)
     end)
-
-    scrollFrame:EnableMouseWheel(true)
-    scrollFrame:SetScript("OnMouseWheel", function(_, delta)
-        local minValue, maxValue = scrollBar:GetMinMaxValues()
-        local nextValue = scrollBar:GetValue() - delta * ROW_HEIGHT
-        scrollBar:SetValue(math.max(minValue, math.min(maxValue, nextValue)))
-    end)
+    EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, ROW_HEIGHT, scrollChild)
 
     emptyText = listPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     emptyText:SetPoint("CENTER", listPanel, "CENTER", 0, 10)

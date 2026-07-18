@@ -281,19 +281,14 @@ local function BuildViewFrame(parent)
     scrollBar:SetValueStep(24)
     scrollBar:SetValue(0)
     scrollBar:SetScript("OnValueChanged", function(_, value)
-        scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, value)
-    end)
-
-    scrollFrame:EnableMouseWheel(true)
-    scrollFrame:SetScript("OnMouseWheel", function(_, delta)
-        local min, max = scrollBar:GetMinMaxValues()
-        scrollBar:SetValue(math.max(min, math.min(max, scrollBar:GetValue() - delta * 24)))
+        scrollFrame:SetVerticalScroll(value)
     end)
     scrollFrame:SetScript("OnSizeChanged", UpdateScrollRange)
 
     BuildQualitySection(scrollChild, 4, -4)
     BuildFamilySection(scrollChild, 4, -140)
     BuildNoveltySection(scrollChild, 4, -338)
+    EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, 24, scrollChild)
     return f
 end
 

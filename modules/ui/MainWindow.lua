@@ -152,12 +152,6 @@ local function BuildSettingsPopup()
     end
     scrollFrame:SetScript("OnSizeChanged", RefreshSettingsScrollRange)
 
-    scrollFrame:EnableMouseWheel(true)
-    scrollFrame:SetScript("OnMouseWheel", function(_, delta)
-        local minValue, maxValue = settingsScrollBar:GetMinMaxValues()
-        local newScroll = settingsScrollBar:GetValue() - delta * 32
-        settingsScrollBar:SetValue(math.max(minValue, math.min(newScroll, maxValue)))
-    end)
     RefreshSettingsScrollRange()
 
     -- Helper: label -> optional flavor text -> slider with track and value
@@ -310,6 +304,8 @@ local function BuildSettingsPopup()
     cancelBtn:SetPoint("BOTTOM", popup, "BOTTOM", -43, 18)
     cancelBtn:SetText("Cancel")
     cancelBtn:SetScript("OnClick", function() popup:Hide() end)
+
+    EbonBuilds.Theme.BindScrollWheel(scrollFrame, settingsScrollBar, 32, scrollChild)
 
     popup:SetScript("OnShow", function()
         local gs = EbonBuildsDB.globalSettings

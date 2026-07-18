@@ -1209,6 +1209,7 @@ local function EnsureEchoRow(index)
         ApplyEchoRowBaseStyle(self)
         GameTooltip:Hide()
     end)
+    if echoScroll and echoBar then Theme.BindScrollWheel(echoScroll, echoBar, 36, row) end
     echoRows[index] = row
     return row
 end
@@ -2161,11 +2162,7 @@ local function BuildEchoes(parent)
     echoBar:SetPoint("BOTTOMRIGHT", echoScroll, "BOTTOMRIGHT", 15, 2)
     echoBar:SetValueStep(36)
     echoBar:SetScript("OnValueChanged", function(_, value) echoScroll:SetVerticalScroll(value) end)
-    echoScroll:EnableMouseWheel(true)
-    echoScroll:SetScript("OnMouseWheel", function(_, delta)
-        local mn, mx = echoBar:GetMinMaxValues()
-        echoBar:SetValue(math.max(mn, math.min(mx, echoBar:GetValue() - delta * 36)))
-    end)
+    Theme.BindScrollWheel(echoScroll, echoBar, 36, echoChild)
     echoScroll:SetScript("OnSizeChanged", function(self)
         local width = math.max(680, self:GetWidth())
         if echoChild._statsWidth == width then return end

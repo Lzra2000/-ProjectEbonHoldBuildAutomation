@@ -818,6 +818,34 @@ function T.BindScrollWheel(scrollFrame, scrollBar, step, ...)
     return context.handler
 end
 
+-- Virtualized lists use their Slider value as a row offset instead of a native
+-- ScrollFrame pixel offset. They still need the same child-tree wheel routing
+-- and boundary behavior, but must not call SetVerticalScroll.
+function T.BindSliderWheel(ownerFrame, scrollBar, step, ...)
+    if not ownerFrame or not scrollBar then return nil end
+    ownerFrame._ebonSliderWheelContext = ownerFrame._ebonSliderWheelContext or {}
+    local context = ownerFrame._ebonSliderWheelContext
+    context.bar = scrollBar
+    context.step = math.max(1, tonumber(step) or 1)
+
+    if not context.handler then
+        context.handler = function(_, delta)
+            local active = ownerFrame._ebonSliderWheelContext
+            if not active or not active.bar then return end
+            local minimum, maximum = active.bar:GetMinMaxValues()
+            local nextValue = NextWheelScrollValue(active.bar:GetValue(), delta, minimum, maximum, active.step)
+            active.bar:SetValue(nextValue)
+        end
+    end
+
+    AttachWheelTarget(ownerFrame, ownerFrame, context.handler)
+    AttachWheelTarget(scrollBar, ownerFrame, context.handler)
+    for index = 1, select("#", ...) do
+        AttachWheelTarget(select(index, ...), ownerFrame, context.handler)
+    end
+    return context.handler
+end
+
 T._NextWheelScrollValue = NextWheelScrollValue
 
 ------------------------------------------------------------------------

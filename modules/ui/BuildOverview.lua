@@ -733,8 +733,8 @@ local function BuildOverviewTab(parent)
     descBar:SetPoint("TOPLEFT",    descScroll, "TOPRIGHT",    -2, -4)
     descBar:SetPoint("BOTTOMLEFT", descScroll, "BOTTOMRIGHT", -2,  4)
     descBar:SetValueStep(20)
-    descBar:SetScript("OnValueChanged", function(self, value)
-        descChild:SetPoint("TOPLEFT", descScroll, "TOPLEFT", 0, value)
+    descBar:SetScript("OnValueChanged", function(_, value)
+        descScroll:SetVerticalScroll(value)
     end)
 
     -- SMF inside scroll child -- renders text with hyperlink tooltip support
@@ -748,7 +748,6 @@ local function BuildOverviewTab(parent)
     descSmf:SetMaxLines(500)
     descSmf:SetHyperlinksEnabled(true)
     descSmf:EnableMouse(true)
-    descSmf:EnableMouseWheel(false)
     descSmf:SetScript("OnHyperlinkEnter", function(self, link)
         GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
         GameTooltip:SetHyperlink(link)
@@ -757,23 +756,16 @@ local function BuildOverviewTab(parent)
     descSmf:SetScript("OnHyperlinkLeave", function()
         GameTooltip:Hide()
     end)
-    descSmf:SetScript("OnMouseWheel", function(self, delta)
-        local v = descBar:GetValue()
-        local mn, mx = descBar:GetMinMaxValues()
-        descBar:SetValue(math.max(mn, math.min(mx, v - delta * 20)))
-    end)
 
     -- Hidden FontString with same width -- used only to measure wrapped text height
     local descMeasure = descChild:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     descMeasure:SetWidth(416)
     descMeasure:Hide()
 
-    descScroll:EnableMouseWheel(true)
-    descScroll:SetScript("OnMouseWheel", function(self, delta)
-        local v = descBar:GetValue()
-        local mn, mx = descBar:GetMinMaxValues()
-        descBar:SetValue(math.max(mn, math.min(mx, v - delta * 20)))
-    end)
+    -- Use the shared 3.3.5a-safe route. Moving the child with SetPoint left
+    -- ScrollFrame:GetVerticalScroll() at zero, so the description could become
+    -- trapped at the bottom when the wheel was turned over the message frame.
+    EbonBuilds.Theme.BindScrollWheel(descScroll, descBar, 20, descChild)
 
     outer._descSmf = descSmf
     outer._descMeasure = descMeasure
@@ -893,14 +885,11 @@ local function BuildMissingTab(parent)
     bar:SetValueStep(16)
 
     bar:SetScript("OnValueChanged", function(self, value)
-        child:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, value)
+        -- Keep the ScrollFrame's native offset authoritative so the shared
+        -- wheel router can move away from the exact bottom boundary reliably.
+        scroll:SetVerticalScroll(value)
     end)
-    scroll:EnableMouseWheel(true)
-    scroll:SetScript("OnMouseWheel", function(self, delta)
-        local v = bar:GetValue()
-        local mn, mx = bar:GetMinMaxValues()
-        bar:SetValue(math.max(mn, math.min(mx, v - delta * 16)))
-    end)
+    EbonBuilds.Theme.BindScrollWheel(scroll, bar, 16, child)
 
     return scroll, child, bar
 end
@@ -981,7 +970,16 @@ local function RefreshOverview()
     local textHeight = overviewDescMeasure:GetStringHeight() or 0
     overviewDescSmf:SetHeight(math.max(textHeight + 4, 14))
     overviewDescChild:SetHeight(math.max(textHeight + 6, overviewDescScroll:GetHeight()))
-    overviewDescBar:SetMinMaxValues(0, math.max(0, overviewDescChild:GetHeight() - overviewDescScroll:GetHeight()))
+    local maxDescriptionScroll = math.max(0, overviewDescChild:GetHeight() - overviewDescScroll:GetHeight())
+    overviewDescBar:SetMinMaxValues(0, maxDescriptionScroll)
+    if overviewOuter._lastDescription ~= desc then
+        overviewOuter._lastDescription = desc
+        overviewDescBar:SetValue(0)
+        overviewDescScroll:SetVerticalScroll(0)
+    elseif overviewDescBar:GetValue() > maxDescriptionScroll then
+        overviewDescBar:SetValue(maxDescriptionScroll)
+        overviewDescScroll:SetVerticalScroll(maxDescriptionScroll)
+    end
 end
 
 local QUALITY_COLORS = EbonBuilds.Quality.RGB
@@ -1114,6 +1112,9 @@ RefreshMissing = function(assumeNoneOwned)
                 GameTooltip:Show()
             end)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            -- Rows are created after the initial content-tree binding, so route
+            -- their wheel events into the same Missing-list scroll context.
+            EbonBuilds.Theme.BindScrollWheel(missingScroll, missingBar, 16, btn)
             -- Icon
             local icon = btn:CreateTexture(nil, "ARTWORK")
             icon:SetWidth(24)

@@ -71,20 +71,9 @@ local function UpdateSearchPlaceholder()
     end
 end
 
-local function ScrollList(delta)
-    if not scrollBar then return end
-    local minValue, maxValue = scrollBar:GetMinMaxValues()
-    local nextValue = scrollBar:GetValue() - delta * 42
-    scrollBar:SetValue(math.max(minValue, math.min(maxValue, nextValue)))
-end
-
 local function WireBuildListMouseWheel(frame)
-    if not frame or frame._ebonBuildWheelWired then return end
-    frame._ebonBuildWheelWired = true
-    frame:EnableMouseWheel(true)
-    frame:SetScript("OnMouseWheel", function(_, delta)
-        ScrollList(delta)
-    end)
+    if not frame or not scrollFrame or not scrollBar then return end
+    EbonBuilds.Theme.BindSliderWheel(scrollFrame, scrollBar, 42, frame)
 end
 
 ------------------------------------------------------------------------
@@ -399,8 +388,7 @@ function EbonBuilds.BuildList.Init(parent)
         scrollFrame:SetVerticalScroll(value)
     end)
 
-    WireBuildListMouseWheel(scrollFrame)
-    WireBuildListMouseWheel(parent)
+    EbonBuilds.Theme.BindSliderWheel(scrollFrame, scrollBar, 42, scrollChild)
 
     emptyState = EbonBuilds.Theme.CreateEmptyState(scrollFrame, "No builds yet", "Create or import a build to begin.")
     emptyState:SetSize(190, 92)

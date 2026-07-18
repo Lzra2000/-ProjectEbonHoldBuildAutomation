@@ -592,15 +592,10 @@ local function BuildViewFrame(parent)
     pickerBar:SetPoint("TOPLEFT",    pickerScroll, "TOPRIGHT",    -2, -4)
     pickerBar:SetPoint("BOTTOMLEFT", pickerScroll, "BOTTOMRIGHT", -2,  4)
     pickerBar:SetValueStep(20)
-    pickerBar:SetScript("OnValueChanged", function(self, value)
-        pickerChild:SetPoint("TOPLEFT", pickerScroll, "TOPLEFT", 0, value)
+    pickerBar:SetScript("OnValueChanged", function(_, value)
+        pickerScroll:SetVerticalScroll(value)
     end)
-    pickerScroll:EnableMouseWheel(true)
-    pickerScroll:SetScript("OnMouseWheel", function(self, delta)
-        local v = pickerBar:GetValue()
-        local mn, mx = pickerBar:GetMinMaxValues()
-        pickerBar:SetValue(math.max(mn, math.min(mx, v - delta * 20)))
-    end)
+    EbonBuilds.Theme.BindScrollWheel(pickerScroll, pickerBar, 20, pickerChild)
 
     local PICKER_ROW_H = 20
     local pickerRows = {}
@@ -643,6 +638,7 @@ local function BuildViewFrame(parent)
                 row._hl = hl
                 row:SetScript("OnEnter", function(self) self._hl:Show() end)
                 row:SetScript("OnLeave", function(self) self._hl:Hide() end)
+                EbonBuilds.Theme.BindScrollWheel(pickerScroll, pickerBar, PICKER_ROW_H, row)
                 local label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
                 label:SetPoint("LEFT", row, "LEFT", 4, 0)
                 label:SetJustifyH("LEFT")
@@ -710,12 +706,7 @@ local function BuildViewFrame(parent)
         Render()
     end)
 
-    f:EnableMouseWheel(true)
-    f:SetScript("OnMouseWheel", function(_, delta)
-        local minV, maxV = scrollBar:GetMinMaxValues()
-        local v = scrollBar:GetValue() - delta
-        scrollBar:SetValue(math.max(minV, math.min(maxV, v)))
-    end)
+    EbonBuilds.Theme.BindSliderWheel(f, scrollBar, 1, scrollChild)
 
     return f
 end

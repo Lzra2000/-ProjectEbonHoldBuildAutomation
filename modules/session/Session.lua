@@ -8,6 +8,7 @@ EbonBuilds.Session = {}
 local POLL_INTERVAL = 2  -- seconds between level checks for reset detection
 local EARLY_OFFER_MAX_LEVEL = 3
 local EPIC_QUALITY = 3
+local MAX_RUN_SELECTIONS = 79
 
 local maxLevel     = 0   -- highest level seen in the active session
 local pollFrame    = nil
@@ -62,6 +63,9 @@ local function CreateSession()
         buildTitle    = GetActiveBuildTitle(),
         startLevel    = UnitLevel("player"),
         logs          = {},
+        completed     = false,
+        completionReason = "active",
+        selectionCount = 0,
         -- Original offers for the first three levels. Each level is written
         -- at most once, before any automated action or manual-mode opt-out,
         -- so rerolls and banish replacements cannot inflate the statistic.
@@ -271,6 +275,30 @@ function EbonBuilds.Session.RecordInitialOffer(choices)
     return true
 end
 
+local function IsSelectionAction(action)
+    action = tostring(action or "")
+    return action:find("^Select") ~= nil or action:find("^Manual") ~= nil
+end
+
+local function RecordedSelectionCount(session)
+    if not session then return 0 end
+
+    -- Older sessions may carry a stale selectionCount (for example 2) while the
+    -- log already contains dozens of finalized selections. Never return early
+    -- from the saved value; use the greatest trustworthy progress signal.
+    local explicit = math.max(0, tonumber(session.selectionCount) or 0)
+    local highestPick, rawCount = 0, 0
+    for _, entry in ipairs(session.logs or {}) do
+        if IsSelectionAction(entry.action) then
+            local pickIndex = tonumber(entry.pickIndex)
+            if pickIndex and pickIndex > highestPick then highestPick = pickIndex end
+            rawCount = rawCount + 1
+        end
+    end
+
+    return math.min(MAX_RUN_SELECTIONS, math.max(explicit, highestPick, rawCount))
+end
+
 ------------------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------------------
@@ -287,12 +315,21 @@ function EbonBuilds.Session.EndCurrentSession()
 
     session.endTime   = time()
     session.soulAshes = GetRunSoulAshes()
-    session.maxLevel  = maxLevel
+    local recordedSelections = RecordedSelectionCount(session)
+    session.selectionCount = recordedSelections
+    session.maxLevel = math.min(80, recordedSelections + 1)
+
+    local completed = session.picksCompleted == true
+        or session.completionReason == "all_picks_complete"
+        or recordedSelections >= MAX_RUN_SELECTIONS
+    session.completed = completed
+    session.completionReason = completed and "all_picks_complete" or "interrupted"
+    if completed and not session.completionTime then session.completionTime = session.endTime end
 
     -- Per-build run counters for the Stats tab (were never written before).
     local build = EbonBuilds.Build.GetActive()
     if build and build.stats then
-        if (session.maxLevel or 0) >= 80 then
+        if completed then
             build.stats.runsCompleted = (build.stats.runsCompleted or 0) + 1
         else
             build.stats.runsReset = (build.stats.runsReset or 0) + 1
@@ -324,6 +361,11 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
 
     local session = EbonBuildsDB.sessions[idx]
     if not session then return end
+
+    local selectionAction = IsSelectionAction(action)
+    local priorSelectionCount = RecordedSelectionCount(session)
+    local pickIndex = selectionAction and math.min(MAX_RUN_SELECTIONS, priorSelectionCount + 1) or nil
+    local runLevel = math.min(80, priorSelectionCount + (selectionAction and 1 or 0) + 1)
 
     local build = EbonBuilds.Build.GetActive()
     local settings = build and build.settings or EbonBuilds.Build.DefaultSettings()
@@ -376,7 +418,8 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
 
     local entry = {
         timestamp   = time(),
-        level       = level,
+        level       = runLevel,
+        pickIndex   = pickIndex,
         action      = action,
         choices     = choices,
         targetIndex = targetIndex,
@@ -385,6 +428,16 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
     }
 
     session.logs[#session.logs + 1] = entry
+    if selectionAction then
+        session.selectionCount = pickIndex
+        session.maxLevel = runLevel
+        if pickIndex >= MAX_RUN_SELECTIONS then
+            session.picksCompleted = true
+            session.completed = true
+            session.completionReason = "all_picks_complete"
+            session.completionTime = entry.timestamp
+        end
+    end
     session.analyticsRevision = (tonumber(session.analyticsRevision) or 0) + 1
     if EbonBuilds.StatsView and EbonBuilds.StatsView.OnSessionAnalyticsChanged then
         EbonBuilds.StatsView.OnSessionAnalyticsChanged(build and build.id or nil)
@@ -452,6 +505,7 @@ end
 -- Test/integration helpers. These are pure and do not mutate saved data.
 EbonBuilds.Session._CountEpicChoices = CountEpicChoices
 EbonBuilds.Session._EarlyOfferMaxLevel = EARLY_OFFER_MAX_LEVEL
+EbonBuilds.Session._RecordedSelectionCount = RecordedSelectionCount
 
 ------------------------------------------------------------------------
 -- Init
