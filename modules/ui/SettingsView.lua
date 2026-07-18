@@ -85,7 +85,8 @@ local advancedExpanded = false
 local suppressWrite = false
 local cachedStats = { peak = 0, peakName = nil, mean = 0, evBest3 = 0 }
 
-local COLLAPSED_HEIGHT = 560
+local ADVANCED_TOGGLE_H = 26
+local COLLAPSED_HEIGHT = 580 -- toggle bottom at 566 plus visible bottom padding
 local EXPANDED_HEIGHT = 1035
 
 ------------------------------------------------------------------------
@@ -917,7 +918,7 @@ local function BuildViewFrame(parent)
     actionControls.freeze = CreatePercentControl(scrollChild, ACTIONS[3], -452)
 
     advancedButton = Theme.CreateButton(scrollChild)
-    advancedButton:SetSize(190, 24)
+    advancedButton:SetSize(190, ADVANCED_TOGGLE_H)
     advancedButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -540)
     advancedButton:SetText("Show advanced controls")
     advancedButton:SetScript("OnClick", function()

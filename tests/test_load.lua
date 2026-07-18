@@ -205,6 +205,87 @@ do
 end
 print("Verified SessionHistory builders stay below the Lua 5.1 upvalue limit.")
 
+-- The run selector must remain a bounded virtualized browser. A generic
+-- dropdown creates one button per session and can cover the entire screen.
+do
+    local file = assert(io.open("modules/ui/SessionHistory.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    if not source:find("local RUN_BROWSER_VISIBLE_ROWS = 8", 1, true)
+        or not source:find("CreateRunBrowserRow", 1, true)
+        or not source:find("Search level, date, duration, or events", 1, true)
+        or source:find('Theme.CreateDropdown(topPanel, 500, "Choose a run"', 1, true) then
+        io.stderr:write("RUN BROWSER FAIL: Logbook run selection is not using the bounded recycled-row browser\n")
+        os.exit(1)
+    end
+end
+print("Verified the Logbook run browser is fixed-height and virtualized.")
+
+-- The decision inspector's offer cards must sit below the evidence text.
+-- Anchoring the cards to the panel bottom caused flags/resources to render
+-- underneath the Echo icons on compact windows.
+do
+    local file = assert(io.open("modules/ui/SessionHistory.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    if not source:find("local DETAIL_H = 184", 1, true)
+        or not source:find('card:SetPoint("TOPLEFT", detailFlags, "BOTTOMLEFT", 0, -8)', 1, true)
+        or not source:find('detailResources:SetPoint("TOPLEFT", detailFlags, "TOPRIGHT", 15, 0)', 1, true) then
+        io.stderr:write("DECISION INSPECTOR FAIL: offer cards can overlap the evidence text\n")
+        os.exit(1)
+    end
+end
+print("Verified Decision Inspector offer cards stay below the evidence text.")
+
+-- Logbook filter controls share one readable height and enough horizontal room
+-- for their labels. Narrow 22-24 px controls made the search placeholder and
+-- dropdown/button text appear clipped at common UI scales.
+do
+    local file = assert(io.open("modules/ui/SessionHistory.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    local required = {
+        "local FILTER_TOOLBAR_H = 30",
+        "local FILTER_CONTROL_H = 26",
+        "local FILTER_SEARCH_W = 210",
+        "local FILTER_SOURCE_W = 104",
+        'placeholder:SetPoint("RIGHT", edit, "RIGHT", -2, 0)',
+        'actionDropdown:SetHeight(FILTER_CONTROL_H)',
+        'sourceDropdown:SetHeight(FILTER_CONTROL_H)',
+        'importantButton:SetSize(FILTER_IMPORTANT_W, FILTER_CONTROL_H)',
+        'groupButton:SetSize(FILTER_GROUP_W, FILTER_CONTROL_H)',
+    }
+    for _, token in ipairs(required) do
+        if not source:find(token, 1, true) then
+            io.stderr:write("LOGBOOK FILTER LAYOUT FAIL: missing " .. token .. "\n")
+            os.exit(1)
+        end
+    end
+end
+print("Verified Logbook search and filter controls use unclipped shared dimensions.")
+
+-- The collapsed Autopilot scroll child must extend below the advanced toggle.
+-- A 560 px child clipped the bottom four pixels of the 24 px button anchored
+-- at y=-540, making its lower border and text appear cut off at the bottom.
+do
+    local file = assert(io.open("modules/ui/SettingsView.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    local required = {
+        "local ADVANCED_TOGGLE_H = 26",
+        "local COLLAPSED_HEIGHT = 580",
+        "advancedButton:SetSize(190, ADVANCED_TOGGLE_H)",
+        'advancedButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -540)',
+    }
+    for _, token in ipairs(required) do
+        if not source:find(token, 1, true) then
+            io.stderr:write("AUTOPILOT TOGGLE LAYOUT FAIL: missing " .. token .. "\n")
+            os.exit(1)
+        end
+    end
+end
+print("Verified the collapsed Autopilot view fully exposes the advanced-controls toggle.")
+
 -- All long-form panels use the shared 3.3.5a-safe wheel router. It must
 -- move away from both boundaries, and the affected panels must bind their
 -- mouse-enabled content trees so nested cards/buttons cannot trap the wheel.
@@ -229,9 +310,24 @@ do
 
     local requiredBindings = {
         { "modules/ui/SessionHistory.lua", "Theme.BindScrollWheel(logScroll, logBar" },
+        { "modules/ui/SessionHistory.lua", "Theme.BindScrollWheel(scroll, bar, 18, edit)" },
         { "modules/ui/SettingsView.lua", "Theme.BindScrollWheel(scrollFrame, scrollBar" },
         { "modules/ui/StatsView.lua", "Theme.BindScrollWheel(recScroll, recBar" },
+        { "modules/ui/StatsView.lua", "Theme.BindScrollWheel(echoScroll, echoBar, 36, echoChild)" },
         { "modules/ui/BuildOverview.lua", "Theme.BindScrollWheel(scroll, bar, 16, child)" },
+        { "modules/ui/BuildOverview.lua", "Theme.BindScrollWheel(descScroll, descBar, 20, descChild)" },
+        { "modules/ui/BuildForm.lua", "Theme.BindScrollWheel(scroll, descriptionScrollBar, 28, box)" },
+        { "modules/ui/BonusView.lua", "Theme.BindScrollWheel(scrollFrame, scrollBar, 24, scrollChild)" },
+        { "modules/ui/EchoPicker.lua", "Theme.BindScrollWheel(scrollFrame, scrollBar, ROW_HEIGHT, scrollChild)" },
+        { "modules/ui/PublicBuildsView.lua", "Theme.BindScrollWheel(scrollFrame, scrollBar, 40, scrollChild)" },
+        { "modules/ui/TomeAtlasView.lua", "Theme.BindScrollWheel(pickerScroll, pickerBar, 20, pickerChild)" },
+        { "modules/ui/ShowcaseView.lua", "Theme.BindScrollWheel(scroll, bar, 20, child)" },
+        { "modules/ui/FAQView.lua", "Theme.BindScrollWheel(scrollFrame, scrollBar, 32, scrollChild)" },
+        { "modules/ui/MainWindow.lua", "Theme.BindScrollWheel(scrollFrame, settingsScrollBar, 32, scrollChild)" },
+        { "modules/ui/AffixView.lua", "Theme.BindSliderWheel(f, scrollBar, 1, scrollChild)" },
+        { "modules/ui/BuildList.lua", "Theme.BindSliderWheel(scrollFrame, scrollBar, 42, scrollChild)" },
+        { "modules/ui/EchoTable.lua", "Theme.BindSliderWheel(sf, bar, ROW_HEIGHT, scrollChild)" },
+        { "modules/ui/TomeAtlasView.lua", "Theme.BindSliderWheel(f, scrollBar, 1, scrollChild)" },
     }
     for _, definition in ipairs(requiredBindings) do
         local file = assert(io.open(definition[1], "r"))
@@ -242,8 +338,66 @@ do
             os.exit(1)
         end
     end
+
+    local overviewFile = assert(io.open("modules/ui/BuildOverview.lua", "r"))
+    local overviewSource = overviewFile:read("*a")
+    overviewFile:close()
+    if not overviewSource:find('descScroll:SetVerticalScroll(value)', 1, true)
+        or overviewSource:find('descChild:SetPoint("TOPLEFT", descScroll, "TOPLEFT", 0, value)', 1, true) then
+        io.stderr:write("SHARED SCROLL FAIL: build description still moves its child manually instead of the native offset\n")
+        os.exit(1)
+    end
+
+    local themeFile = assert(io.open("modules/ui/Theme.lua", "r"))
+    local themeSource = themeFile:read("*a")
+    themeFile:close()
+    if not themeSource:find("function T.BindSliderWheel", 1, true) then
+        io.stderr:write("SHARED SCROLL FAIL: virtualized lists do not share the boundary-safe wheel router\n")
+        os.exit(1)
+    end
+
+    local allowedDirectWheel = {
+        ["modules/ui/BuildWizard.lua"] = true, -- mouse-only scroller; no visible scrollbar
+        ["modules/ui/SessionHistory.lua"] = true, -- recycled timeline uses its own buffered renderer
+        ["modules/ui/Theme.lua"] = true, -- shared router implementation
+    }
+    for _, file in ipairs(files) do
+        if file:match("^modules/ui/") and not allowedDirectWheel[file] then
+            local handle = assert(io.open(file, "r"))
+            local source = handle:read("*a")
+            handle:close()
+            if source:find('SetScript("OnMouseWheel"', 1, true) then
+                io.stderr:write("SHARED SCROLL FAIL: ad-hoc mouse-wheel logic remains in " .. file .. "\n")
+                os.exit(1)
+            end
+        end
+    end
 end
-print("Verified shared boundary-safe scrolling for Logbook, Autopilot, Recommendations, and Missing Echoes.")
+print("Verified shared boundary-safe scrolling across standard content panels and nested controls.")
+
+-- Decision Inspector resources should use readable names and ASCII-safe
+-- change summaries instead of compressed B/R/F transitions with an arrow
+-- glyph that is not supported by every 3.3.5a client font.
+do
+    local formatResources = EbonBuilds.SessionHistory and EbonBuilds.SessionHistory._ResourceDisplayText
+    if type(formatResources) ~= "function" then
+        io.stderr:write("DECISION RESOURCE FAIL: resource display formatter is missing\n")
+        os.exit(1)
+    end
+    local text = formatResources(
+        { ban = 15, reroll = 15, freeze = 9 },
+        { ban = 15, reroll = 14, freeze = 9 }
+    )
+    if not text:find("Used: 1 Reroll", 1, true)
+        or not text:find("Banish", 1, true)
+        or not text:find("Reroll", 1, true)
+        or not text:find("Freeze", 1, true)
+        or text:find("→", 1, true) then
+        io.stderr:write("DECISION RESOURCE FAIL: resource state is not readable or ASCII-safe\n")
+        os.exit(1)
+    end
+end
+print("Verified readable Decision Inspector resource changes and remaining charges.")
 
 -- The first global-settings control must be anchored at the visible top of
 -- the scroll child. Anchoring to BOTTOMLEFT makes the modal appear blank.
@@ -888,6 +1042,196 @@ local analyticsOK, analyticsErr = xpcall(function()
 
     EbonBuilds.StatsView.SetView("summary")
     EbonBuilds.ManualTraining.SuggestWeightAdjustments = oldTrainingSuggestions
+
+    local originalSessions = EbonBuildsDB.sessions
+    local manySessions = { originalSessions[1] }
+    for index = 2, 49 do
+        manySessions[#manySessions + 1] = {
+            id = "browser-run-" .. tostring(index),
+            buildId = build.id,
+            buildTitle = build.title,
+            startTime = 1 - index * 1000,
+            endTime = 1 - index * 1000 + (index % 3 == 0 and 300 or 1200),
+            maxLevel = index % 2 == 0 and 80 or 8,
+            logs = {},
+        }
+    end
+    EbonBuildsDB.sessions = manySessions
+    EbonBuilds.SessionHistory.RefreshSessionList()
+    local browser = EbonBuilds.SessionHistory._EnsureRunBrowserForTest()
+    browser:Show()
+    EbonBuilds.SessionHistory.RefreshRunBrowser(true)
+    if EbonBuilds.SessionHistory._GetRunBrowserRowCountForTest() ~= 8 then
+        error("Run browser did not keep a fixed pool of eight reusable rows")
+    end
+    if EbonBuilds.SessionHistory._GetRunBrowserResultCountForTest() ~= 49 then
+        error("Run browser did not include all matching sessions before filtering")
+    end
+    EbonBuilds.SessionHistory._SetRunBrowserFilterForTest("complete", "")
+    if EbonBuilds.SessionHistory._GetRunBrowserResultCountForTest() ~= 24 then
+        error("Run browser Complete filter returned the wrong result count")
+    end
+    local fastLevel80 = {
+        id = "fast-level-80",
+        startTime = 100,
+        endTime = 200,
+        maxLevel = 80,
+        logs = {},
+    }
+    if EbonBuilds.SessionHistory._RunIsShort(fastLevel80) then
+        error("A completed Level 80 run was incorrectly classified as Short because of its duration")
+    end
+    local interruptedRun = {
+        id = "interrupted-run",
+        startTime = 100,
+        endTime = 2000,
+        maxLevel = 42,
+        logs = {},
+    }
+    if not EbonBuilds.SessionHistory._RunIsShort(interruptedRun) then
+        error("A finished sub-80 run was not classified as Short")
+    end
+
+    local raritySession = {
+        id = "rarity-run",
+        analyticsRevision = 1,
+        logs = {
+            { timestamp = 1, level = 1, action = "Select", targetIndex = 1, choices = { { spellId = 101, quality = 3 } } },
+            { timestamp = 2, level = 2, action = "Select", targetIndex = 1, choices = { { spellId = 102, quality = 2 } } },
+            { timestamp = 3, level = 3, action = "Manual", targetIndex = 1, choices = { { spellId = 103, quality = 1 } } },
+            { timestamp = 4, level = 4, action = "Banish", targetIndex = 1, choices = { { spellId = 104, quality = 0 } } },
+            { timestamp = 5, level = 5, action = "Select", targetIndex = 1, choices = { { spellId = 105, quality = 0 } } },
+            -- Duplicate logger path at the same level but a different timestamp.
+            -- This must still count as one completed pick.
+            { timestamp = 6, level = 5, action = "Select", targetIndex = 1, choices = { { spellId = 105, quality = 0 } } },
+            -- A manual record for the same level is authoritative if duplicate
+            -- automatic and manual records disagree.
+            { timestamp = 7, level = 5, action = "Manual Select", targetIndex = 1, choices = { { spellId = 107, quality = 0 } } },
+            { timestamp = 8, level = 6, action = "Select", targetIndex = 1, choices = { { spellId = 106 } } },
+        },
+    }
+    local rarity = EbonBuilds.SessionHistory._RunQualitySummary(raritySession)
+    if rarity.totalSelectionCount ~= 5 or rarity.classifiedSelectionCount ~= 4
+        or rarity.counts[3] ~= 1 or rarity.counts[2] ~= 1
+        or rarity.counts[1] ~= 1 or rarity.counts[0] ~= 1 then
+        error("Run rarity summary did not count unique selected Echo qualities correctly")
+    end
+    local doubledLegacyLogs = {}
+    for copy = 1, 2 do
+        for pick = 1, 79 do
+            local quality = (pick - 1) % 4
+            doubledLegacyLogs[#doubledLegacyLogs + 1] = {
+                timestamp = copy * 1000 + pick,
+                action = "Select",
+                targetIndex = 1,
+                choices = {
+                    { spellId = 200000 + pick, quality = quality },
+                    { spellId = 210000 + pick, quality = (quality + 1) % 4 },
+                    { spellId = 220000 + pick, quality = (quality + 2) % 4 },
+                },
+            }
+        end
+    end
+    local doubledLegacySession = {
+        id = "doubled-legacy-run",
+        analyticsRevision = 1,
+        startLevel = 1,
+        maxLevel = 80,
+        endTime = 3000,
+        logs = doubledLegacyLogs,
+    }
+    local doubledLegacyRarity = EbonBuilds.SessionHistory._RunQualitySummary(doubledLegacySession)
+    if doubledLegacyRarity.totalSelectionCount ~= 79
+        or doubledLegacyRarity.classifiedSelectionCount ~= 79
+        or doubledLegacyRarity.discardedDuplicateCount ~= 79 then
+        error("Run rarity summary did not collapse a duplicated legacy selection history to 79 picks")
+    end
+    local resumedMidRunSession = {
+        id = "resumed-mid-run",
+        analyticsRevision = 1,
+        startLevel = 78,
+        maxLevel = 80,
+        logs = {
+            { timestamp = 1, action = "Select", targetIndex = 1, choices = { { spellId = 301, quality = 3 } } },
+            { timestamp = 2, action = "Select", targetIndex = 1, choices = { { spellId = 302, quality = 2 } } },
+            { timestamp = 3, action = "Select", targetIndex = 1, choices = { { spellId = 303, quality = 1 } } },
+            { timestamp = 4, action = "Select", targetIndex = 1, choices = { { spellId = 304, quality = 0 } } },
+            { timestamp = 5, action = "Select", targetIndex = 1, choices = { { spellId = 305, quality = 2 } } },
+        },
+    }
+    local resumedMidRunRarity = EbonBuilds.SessionHistory._RunQualitySummary(resumedMidRunSession)
+    if resumedMidRunRarity.totalSelectionCount ~= 5
+        or resumedMidRunRarity.classifiedSelectionCount ~= 5 then
+        error("Run rarity summary incorrectly capped a resumed Level 80 session to maxLevel - startLevel")
+    end
+    local activeConstantLevelLogs = {}
+    for pick = 1, 60 do
+        activeConstantLevelLogs[#activeConstantLevelLogs + 1] = {
+            timestamp = 4000 + pick,
+            level = 80, -- legacy logger stored permanent character level
+            action = "Select",
+            targetIndex = 1,
+            choices = { { spellId = 400000 + pick, quality = (pick - 1) % 4 } },
+        }
+    end
+    local activeConstantLevelSession = {
+        id = "active-character-level-80",
+        analyticsRevision = 1,
+        startLevel = 80,
+        maxLevel = 80,
+        logs = activeConstantLevelLogs,
+    }
+    local activeConstantRarity = EbonBuilds.SessionHistory._RunQualitySummary(activeConstantLevelSession)
+    if activeConstantRarity.totalSelectionCount ~= 60
+        or activeConstantRarity.classifiedSelectionCount ~= 60 then
+        error("Active rarity summary collapsed sequential picks that shared character level 80")
+    end
+    if EbonBuilds.SessionHistory._RunDisplayLevel(activeConstantLevelSession) ~= 61 then
+        error("Active run level was not derived from 60 finalized selections")
+    end
+    if EbonBuilds.SessionHistory._GetRunCompletionState(activeConstantLevelSession) ~= "active" then
+        error("Live session was not kept Active when stale Level 80 metadata was present")
+    end
+
+    local activeTwoLevelLogs = {}
+    for pick = 1, 60 do
+        activeTwoLevelLogs[#activeTwoLevelLogs + 1] = {
+            timestamp = 5000 + pick,
+            level = pick <= 30 and 1 or 2, -- stale legacy progress values
+            action = "Select",
+            targetIndex = 1,
+            choices = { { spellId = 500000 + pick, quality = (pick - 1) % 4 } },
+        }
+    end
+    local activeTwoLevelSession = {
+        id = "active-two-stale-levels",
+        analyticsRevision = 1,
+        selectionCount = 2, -- stale saved value from the broken migration
+        startLevel = 1,
+        maxLevel = 80,
+        logs = activeTwoLevelLogs,
+    }
+    local activeTwoLevelRarity = EbonBuilds.SessionHistory._RunQualitySummary(activeTwoLevelSession)
+    if activeTwoLevelRarity.totalSelectionCount ~= 60
+        or activeTwoLevelRarity.classifiedSelectionCount ~= 60 then
+        error("Active rarity summary collapsed 60 picks into two stale legacy levels")
+    end
+    if EbonBuilds.SessionHistory._RunDisplayLevel(activeTwoLevelSession) ~= 61 then
+        error("Active run display trusted stale selectionCount instead of 60 finalized picks")
+    end
+
+    local doubledTotal = 0
+    for quality = 0, 3 do doubledTotal = doubledTotal + (doubledLegacyRarity.counts[quality] or 0) end
+    if doubledTotal ~= 79 then
+        error("Run rarity quality counts exceeded the actual number of completed picks")
+    end
+
+    if not EbonBuilds.SessionHistory._RunBrowserSearchBlob(manySessions[2]):find("level 80", 1, true) then
+        error("Run browser search index omitted the recorded level")
+    end
+    browser:Hide()
+    EbonBuildsDB.sessions = originalSessions
+
     EbonBuilds.SessionHistory.RefreshSessionList()
     EbonBuilds.SessionHistory.RefreshLogView()
     EbonBuilds.SessionHistory.ShowDecisionDetail(EbonBuildsDB.sessions[1].logs[2])

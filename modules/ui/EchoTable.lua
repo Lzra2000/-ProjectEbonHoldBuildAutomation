@@ -329,6 +329,7 @@ RefreshRows = function()
     for poolIdx = 1, visibleCount do
         if not rowPool[poolIdx] then
             rowPool[poolIdx] = EbonBuilds.EchoTableRows.CreateRow(scrollChild, poolIdx)
+            EbonBuilds.Theme.BindSliderWheel(scrollFrame, scrollBar, ROW_HEIGHT, rowPool[poolIdx])
         end
         local entry = filteredList[scrollOffset + poolIdx]
         if entry then
@@ -346,11 +347,7 @@ end
 
 local function WireScrollBar(sf, bar)
     bar:SetScript("OnValueChanged", RefreshRows)
-    sf:EnableMouseWheel(true)
-    sf:SetScript("OnMouseWheel", function(_, delta)
-        local minValue, maxValue = bar:GetMinMaxValues()
-        bar:SetValue(math.max(minValue, math.min(maxValue, bar:GetValue() - delta * ROW_HEIGHT)))
-    end)
+    EbonBuilds.Theme.BindSliderWheel(sf, bar, ROW_HEIGHT, scrollChild)
     sf:SetScript("OnSizeChanged", function()
         SyncChildWidth(sf, scrollChild)
         UpdateScrollRange()

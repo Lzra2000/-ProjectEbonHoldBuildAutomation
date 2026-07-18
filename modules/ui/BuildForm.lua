@@ -396,13 +396,6 @@ local function BuildDescriptionField(parent, x, y, height)
         scroll:SetVerticalScroll(value)
     end)
 
-    scroll:EnableMouseWheel(true)
-    scroll:SetScript("OnMouseWheel", function(_, delta)
-        local minValue, maxValue = descriptionScrollBar:GetMinMaxValues()
-        local nextValue = descriptionScrollBar:GetValue() - delta * 28
-        descriptionScrollBar:SetValue(math.max(minValue, math.min(maxValue, nextValue)))
-    end)
-
     local box = CreateFrame("EditBox", nil, scroll)
     box:SetMultiLine(true)
     box:SetMaxLetters(0)
@@ -485,6 +478,8 @@ local function BuildDescriptionField(parent, x, y, height)
             end
         end
     end)
+
+    EbonBuilds.Theme.BindScrollWheel(scroll, descriptionScrollBar, 28, box)
 end
 
 ------------------------------------------------------------------------

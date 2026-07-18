@@ -277,12 +277,7 @@ local function BuildViewFrame(parent)
         Render()
     end)
 
-    f:EnableMouseWheel(true)
-    f:SetScript("OnMouseWheel", function(_, delta)
-        local minV, maxV = scrollBar:GetMinMaxValues()
-        local v = scrollBar:GetValue() - delta
-        scrollBar:SetValue(math.max(minV, math.min(maxV, v)))
-    end)
+    EbonBuilds.Theme.BindSliderWheel(f, scrollBar, 1, scrollChild)
 
     return f
 end

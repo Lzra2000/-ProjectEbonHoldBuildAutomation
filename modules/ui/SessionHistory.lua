@@ -20,13 +20,34 @@ local ACTION_COLORS = {
 local EVENT_ROW_H = 34
 local LEVEL_ROW_H = 22
 local TOP_H = 84
-local SUMMARY_H = 54
-local DETAIL_H = 154
+local SUMMARY_H = 76
+local DETAIL_H = 184
 local DETAIL_WIDTH_GAP = 8
+local FILTER_TOOLBAR_H = 30
+local FILTER_CONTROL_H = 26
+local FILTER_GAP = 6
+local FILTER_SEARCH_W = 210
+local FILTER_ACTION_W = 100
+local FILTER_SOURCE_W = 104
+local FILTER_IMPORTANT_W = 112
+local FILTER_GROUP_W = 116
 
 local topPanel, summaryStrip, bottomPanel
 local runDropdown, previousRunButton, nextRunButton, runPositionLabel, historyDropdown
+local runBrowser, runBrowserSearch, runBrowserPlaceholder, runBrowserCountLabel
+local runBrowserScroll, runBrowserChild, runBrowserBar, runBrowserEmpty, runBrowserClear
+local runBrowserFilterButtons = {}
+local runBrowserRows = {}
+local runBrowserResults = {}
+local runBrowserSearchText = ""
+local runBrowserFilter = "all"
+
+local RUN_BROWSER_VISIBLE_ROWS = 8
+local RUN_BROWSER_ROW_H = 50
+local RUN_BROWSER_WIDTH = 560
 local summaryMetrics = {}
+local summaryRarityFrame, summaryRarityText
+local runQualityCache = {}
 local toolbar, searchInput, searchPlaceholder, actionDropdown, sourceDropdown
 local importantButton, groupButton, clearFiltersButton, resultLabel
 local chipFrame, chipPool, chipEmpty = nil, {}, nil
@@ -261,6 +282,297 @@ local function SelectedSession()
     return selectedSessionId and FindSession(selectedSessionId) or nil
 end
 
+local function GetRunCompletionState(session)
+    if not session then return "unknown" end
+    -- A live session remains Active even if an older logger accidentally set a
+    -- completion flag from the character's permanent level. Completion is only
+    -- authoritative after the session has an end time.
+    if not session.endTime then return "active" end
+    if session.completed == true or session.completionReason == "all_picks_complete" or session.picksCompleted == true then
+        return "complete"
+    end
+    if (tonumber(session.maxLevel or session.startLevel) or 1) >= 80 then
+        return "complete"
+    end
+    return "short"
+end
+
+local function RunDisplayEndTime(session)
+    if not session then return nil end
+    if GetRunCompletionState(session) == "complete" and session.completionTime then
+        return session.completionTime
+    end
+    return session.endTime
+end
+
+local function RunStatusLabel(session)
+    local state = GetRunCompletionState(session)
+    if state == "active" then return "Active" end
+    if state == "complete" then return "Complete" end
+    if state == "short" then return "Short" end
+    return "Unknown"
+end
+
+local function ResolveChoiceQuality(choice)
+    if type(choice) ~= "table" then return nil end
+    local quality = tonumber(choice.quality)
+    if quality ~= nil and EbonBuilds.Quality and EbonBuilds.Quality.IsValid and EbonBuilds.Quality.IsValid(quality) then
+        return quality
+    end
+
+    local spellId = tonumber(choice.spellId)
+    local database = ProjectEbonhold and ProjectEbonhold.PerkDatabase
+    local data = spellId and database and (database[spellId] or database[tostring(spellId)])
+    quality = data and tonumber(data.quality) or nil
+    if quality ~= nil and EbonBuilds.Quality and EbonBuilds.Quality.IsValid and EbonBuilds.Quality.IsValid(quality) then
+        return quality
+    end
+    return nil
+end
+
+local function RunQualityCacheToken(session)
+    local databaseReady = ProjectEbonhold and ProjectEbonhold.PerkDatabase and 1 or 0
+    return table.concat({
+        tostring(session and session.analyticsRevision or 0),
+        tostring(session and #(session.logs or {}) or 0),
+        tostring(session and session.endTime or 0),
+        tostring(session and session.maxLevel or 0),
+        tostring(session and session.selectionCount or ""),
+        tostring(session and session.completed or false),
+        tostring(session and session.completionReason or ""),
+        tostring(databaseReady),
+    }, ":")
+end
+
+local function SelectionFingerprint(entry, target)
+    if type(entry) ~= "table" or type(target) ~= "table" then return nil end
+
+    local explicitId = tostring(entry.selectionId or "")
+    if explicitId ~= "" then return "id:" .. explicitId end
+
+    local targetKey = tostring(target.spellId or VisibleEchoName(target.name) or "")
+    local targetQuality = tostring(target.quality == nil and "" or target.quality)
+    local offer = {}
+    for arrayIndex, choice in ipairs(entry.choices or {}) do
+        offer[#offer + 1] = table.concat({
+            tostring(arrayIndex),
+            tostring(choice.spellId or VisibleEchoName(choice.name) or ""),
+            tostring(choice.quality == nil and "" or choice.quality),
+        }, ":")
+    end
+
+    return table.concat({ targetKey, targetQuality, tostring(entry.targetIndex or ""), table.concat(offer, ",") }, "|")
+end
+
+local function ExpectedRunSelectionCount(session)
+    if not session then return nil end
+
+    -- selectionCount may be stale on sessions created before pickIndex existed.
+    -- Derive the best available count from every finalized selection record and
+    -- never let a smaller saved value truncate a longer real history.
+    local explicit = math.max(0, tonumber(session.selectionCount) or 0)
+    local highestPick = 0
+    local rawSelections = 0
+    for _, entry in ipairs(session.logs or {}) do
+        local action = NormalizeAction(entry.action)
+        if (action == "Select" or action == "Manual") and TargetChoice(entry) then
+            rawSelections = rawSelections + 1
+            local pickIndex = tonumber(entry.pickIndex)
+            if pickIndex and pickIndex > highestPick then highestPick = pickIndex end
+        end
+    end
+
+    local cap = 79
+    local state = GetRunCompletionState(session)
+    local recordedLevel = tonumber(session.maxLevel)
+    if state == "short" and recordedLevel and recordedLevel > 1 and recordedLevel < 80 then
+        cap = math.min(cap, recordedLevel - 1)
+    end
+
+    local derived = math.max(explicit, highestPick, math.min(cap, rawSelections))
+    if state == "complete" then derived = math.max(derived, math.min(79, rawSelections)) end
+    return math.min(79, derived)
+end
+
+local function RunQualitySummary(session)
+    local empty = {
+        counts = { [0] = 0, [1] = 0, [2] = 0, [3] = 0 },
+        totalSelectionCount = 0,
+        classifiedSelectionCount = 0,
+        expectedSelectionCount = 0,
+        discardedDuplicateCount = 0,
+    }
+    if not session then return empty end
+
+    local cacheKey = tostring(session.id or session)
+    local token = RunQualityCacheToken(session)
+    local cached = runQualityCache[cacheKey]
+    if cached and cached.token == token then return cached.summary end
+
+    local result = {
+        counts = { [0] = 0, [1] = 0, [2] = 0, [3] = 0 },
+        totalSelectionCount = 0,
+        classifiedSelectionCount = 0,
+        expectedSelectionCount = ExpectedRunSelectionCount(session) or 0,
+        discardedDuplicateCount = 0,
+    }
+
+    -- New logs carry an explicit pickIndex. Older logs used UnitLevel("player")
+    -- as entry.level, which can be 80 for every event even while the Echo run is
+    -- only at Level 61. Treat such constant-level histories as sequential picks;
+    -- otherwise they collapse to one record and produce totals such as U 2.
+    local candidates = {}
+    local rawSelectionCount = 0
+    local levelFrequency = {}
+    local levelAwareCount = 0
+
+    local function PreferRecord(existing, candidate)
+        if not existing then return candidate end
+        if candidate.action == "Manual" and existing.action ~= "Manual" then return candidate end
+        if candidate.action ~= "Manual" and existing.action == "Manual" then return existing end
+        return candidate.logIndex >= existing.logIndex and candidate or existing
+    end
+
+    for logIndex, entry in ipairs(session.logs or {}) do
+        local action = NormalizeAction(entry.action)
+        if action == "Select" or action == "Manual" then
+            local target = TargetChoice(entry)
+            if target then
+                rawSelectionCount = rawSelectionCount + 1
+                local pickIndex = tonumber(entry.pickIndex)
+                local level = tonumber(entry.level)
+                if level then
+                    levelFrequency[level] = (levelFrequency[level] or 0) + 1
+                    levelAwareCount = levelAwareCount + 1
+                end
+                candidates[#candidates + 1] = {
+                    target = target,
+                    action = action,
+                    logIndex = logIndex,
+                    pickIndex = pickIndex,
+                    level = level,
+                    fingerprint = SelectionFingerprint(entry, target),
+                }
+            end
+        end
+    end
+
+    local distinctLevels = 0
+    for _ in pairs(levelFrequency) do distinctLevels = distinctLevels + 1 end
+
+    -- Legacy builds sometimes stored only one or two character-level values for
+    -- dozens of Echo picks. Treat levels as pick identifiers only when they cover
+    -- most of the selection sequence. A tiny number of repeated levels must not
+    -- collapse 60 real picks into two records.
+    local minimumDistinctLevels = math.max(3, math.floor((rawSelectionCount + 1) / 2))
+    local levelsAreTrustworthy = rawSelectionCount > 0
+        and distinctLevels >= minimumDistinctLevels
+
+    local records = {}
+    local recordsByPick = {}
+    local recordsByLevel = {}
+    local recordsByExplicitId = {}
+
+    for _, record in ipairs(candidates) do
+        if record.pickIndex and record.pickIndex >= 1 and record.pickIndex <= 79 then
+            recordsByPick[record.pickIndex] = PreferRecord(recordsByPick[record.pickIndex], record)
+        elseif levelsAreTrustworthy and record.level and record.level >= 1 and record.level <= 80 then
+            recordsByLevel[record.level] = PreferRecord(recordsByLevel[record.level], record)
+        else
+            -- No trustworthy progress key exists. Keep the event as a sequential
+            -- finalized pick. Only an explicit selectionId is safe to deduplicate;
+            -- repeated Echo names/offers can legitimately occur in different picks.
+            local explicitId = record.fingerprint and record.fingerprint:match("^id:(.+)$")
+            if explicitId then
+                recordsByExplicitId[explicitId] = PreferRecord(recordsByExplicitId[explicitId], record)
+            else
+                records[#records + 1] = record
+            end
+        end
+    end
+
+    for _, record in pairs(recordsByPick) do records[#records + 1] = record end
+    for _, record in pairs(recordsByLevel) do records[#records + 1] = record end
+    for _, record in pairs(recordsByExplicitId) do records[#records + 1] = record end
+    table.sort(records, function(left, right) return left.logIndex < right.logIndex end)
+
+    -- Completed runs contain at most 79 picks. This also repairs legacy
+    -- histories where an entire 79-pick sequence was appended twice. Active
+    -- runs are not capped from the stale maxLevel field; all currently recorded
+    -- finalized picks remain visible.
+    local expected = result.expectedSelectionCount
+    -- expectedSelectionCount is derived from the complete log above, so stale
+    -- session.selectionCount values can no longer reduce the list to 2 records.
+    local hardCap = expected and expected > 0 and expected or 79
+    if #records > hardCap then
+        local bounded = {}
+        for index = 1, hardCap do bounded[index] = records[index] end
+        records = bounded
+    end
+
+    local function CountSelection(record)
+        if not record or not record.target then return end
+        result.totalSelectionCount = result.totalSelectionCount + 1
+        local quality = ResolveChoiceQuality(record.target)
+        if quality ~= nil then
+            result.counts[quality] = (result.counts[quality] or 0) + 1
+            result.classifiedSelectionCount = result.classifiedSelectionCount + 1
+        end
+    end
+
+    for _, record in ipairs(records) do CountSelection(record) end
+    result.discardedDuplicateCount = math.max(0, rawSelectionCount - result.totalSelectionCount)
+
+    runQualityCache[cacheKey] = { token = token, summary = result }
+    return result
+end
+
+local function RunDisplayLevel(session)
+    if not session then return 1 end
+    local state = GetRunCompletionState(session)
+    if state == "complete" then return 80 end
+
+    local summary = RunQualitySummary(session)
+    local picks = math.max(
+        tonumber(session.selectionCount) or 0,
+        tonumber(summary.totalSelectionCount) or 0
+    )
+    if picks > 0 then return math.min(80, picks + 1) end
+
+    local recorded = tonumber(session.maxLevel or session.startLevel)
+    if recorded and recorded >= 1 and recorded < 80 then return recorded end
+    return 1
+end
+
+local function QualityCountText(summary, compact)
+    summary = summary or RunQualitySummary(nil)
+    local total = tonumber(summary.totalSelectionCount) or 0
+    local classified = tonumber(summary.classifiedSelectionCount) or 0
+    if total == 0 then
+        return compact and "Selected: no Echo data" or "Selected Echo quality: no selections recorded"
+    end
+    if classified == 0 then
+        return compact and "Selected quality unavailable" or "Selected Echo quality unavailable for this legacy run"
+    end
+
+    local counts = summary.counts or {}
+    if compact then
+        return table.concat({
+            EbonBuilds.Quality.Colorize("E " .. tostring(counts[3] or 0), 3),
+            EbonBuilds.Quality.Colorize("R " .. tostring(counts[2] or 0), 2),
+            EbonBuilds.Quality.Colorize("U " .. tostring(counts[1] or 0), 1),
+            EbonBuilds.Quality.Colorize("C " .. tostring(counts[0] or 0), 0),
+        }, "  ·  ")
+    end
+
+    return "Selected Echo quality  " .. table.concat({
+        EbonBuilds.Quality.Colorize("Epic " .. tostring(counts[3] or 0), 3),
+        EbonBuilds.Quality.Colorize("Rare " .. tostring(counts[2] or 0), 2),
+        EbonBuilds.Quality.Colorize("Uncommon " .. tostring(counts[1] or 0), 1),
+        EbonBuilds.Quality.Colorize("Common " .. tostring(counts[0] or 0), 0),
+    }, "  ·  ")
+end
+
 local function SessionSummary(session)
     local result = {
         events = 0,
@@ -282,6 +594,7 @@ local function SessionSummary(session)
         end
     end
     result.averageSelected = result.selectedCount > 0 and result.selectedSum / result.selectedCount or 0
+    result.quality = RunQualitySummary(session)
     return result
 end
 
@@ -510,8 +823,8 @@ end
 
 local function RunMenuLabel(session)
     if not session then return "Choose a run" end
-    local status = session.endTime and "Complete" or "Active"
-    return string.format("%s · Level %s · %s · %d events", status, tostring(session.maxLevel or session.startLevel or 1), FormatDuration(session.startTime, session.endTime), #(session.logs or {}))
+    local status = RunStatusLabel(session)
+    return string.format("%s · Level %s · %s · %d events", status, tostring(RunDisplayLevel(session)), FormatDuration(session.startTime, RunDisplayEndTime(session)), #(session.logs or {}))
 end
 
 local function RefreshRunNavigatorText()
@@ -565,18 +878,457 @@ function H.RefreshSessionList()
     if not selectedSessionId and active then selectedSessionId = active.id end
     if not selectedSessionId and relevantSessionCache[1] then selectedSessionId = relevantSessionCache[1].id end
     RefreshRunNavigatorText()
+    if runBrowser and runBrowser:IsShown() and H.RefreshRunBrowser then H.RefreshRunBrowser(true) end
+end
+
+local function RunDurationSeconds(session)
+    if not session then return 0 end
+    return math.max(0, (RunDisplayEndTime(session) or time()) - (session.startTime or time()))
+end
+
+local function RunRelativeDate(session)
+    local started = tonumber(session and session.startTime)
+    if not started then return "Unknown date" end
+    local today = date("%Y-%m-%d", time())
+    local yesterday = date("%Y-%m-%d", time() - 86400)
+    local runDay = date("%Y-%m-%d", started)
+    if runDay == today then return "Today " .. date("%H:%M", started) end
+    if runDay == yesterday then return "Yesterday " .. date("%H:%M", started) end
+    return date("%d %b %Y %H:%M", started)
+end
+
+local function RunIsShort(session)
+    return GetRunCompletionState(session) == "short"
+end
+
+local function RunIsRecent(session)
+    local started = tonumber(session and session.startTime) or 0
+    return started > 0 and (time() - started) <= 86400
+end
+
+local function RunBrowserSearchBlob(session)
+    if not session then return "" end
+    local completionState = GetRunCompletionState(session)
+    local status = completionState == "complete" and "complete completed"
+        or completionState == "short" and "short incomplete interrupted"
+        or completionState == "active" and "active recording"
+        or "unknown"
+    local level = RunDisplayLevel(session)
+    local eventCount = #(session.logs or {})
+    local quality = RunQualitySummary(session)
+    local fields = {
+        status,
+        "level " .. tostring(level),
+        tostring(level),
+        FormatDuration(session.startTime, RunDisplayEndTime(session)),
+        FormatRunDate(session.startTime),
+        RunRelativeDate(session),
+        tostring(eventCount),
+        tostring(eventCount) .. " events",
+        "epic " .. tostring(quality.counts[3] or 0),
+        "rare " .. tostring(quality.counts[2] or 0),
+        "uncommon " .. tostring(quality.counts[1] or 0),
+        "common " .. tostring(quality.counts[0] or 0),
+    }
+    if RunIsShort(session) then fields[#fields + 1] = "short" end
+    if RunIsRecent(session) then fields[#fields + 1] = "recent" end
+    return SearchSafeLower(table.concat(fields, " "))
+end
+
+local function RunMatchesBrowserFilter(session)
+    if runBrowserFilter == "complete" then
+        return GetRunCompletionState(session) == "complete"
+    elseif runBrowserFilter == "short" then
+        return RunIsShort(session)
+    elseif runBrowserFilter == "recent" then
+        return RunIsRecent(session)
+    end
+    return true
+end
+
+local function UpdateRunBrowserFilterButtons()
+    for key, button in pairs(runBrowserFilterButtons) do
+        Theme.SetTabSelected(button, key == runBrowserFilter)
+    end
+end
+
+local function UpdateRunBrowserSearchPlaceholder()
+    if not runBrowserSearch or not runBrowserPlaceholder then return end
+    if runBrowserSearch:HasFocus() or (runBrowserSearch:GetText() or "") ~= "" then
+        runBrowserPlaceholder:Hide()
+    else
+        runBrowserPlaceholder:Show()
+    end
+end
+
+local function ApplyRunBrowserRowVisual(row, hovered)
+    local session = row and row._session
+    if not row or not session then return end
+    local selected = session.id == selectedSessionId
+    local active = not session.endTime
+    if hovered then
+        row:SetBackdropColor(unpack(Theme.CARD_HOVER))
+        row:SetBackdropBorderColor(unpack(selected and Theme.ACCENT_GOLD or Theme.BORDER))
+    else
+        row:SetBackdropColor(unpack(Theme.CARD_BG))
+        row:SetBackdropBorderColor(unpack(selected and Theme.ACCENT_GOLD or Theme.BORDER_DIM))
+    end
+    local marker = active and Theme.SUCCESS or selected and Theme.ACCENT_GOLD or Theme.BORDER_DIM
+    row._marker:SetVertexColor(marker[1], marker[2], marker[3], (active or selected) and 1 or 0.75)
+end
+
+local function RefreshRunBrowserRows()
+    if not runBrowser or not runBrowser:IsShown() or not runBrowserScroll then return end
+    local firstIndex = math.floor((runBrowserScroll:GetVerticalScroll() or 0) / RUN_BROWSER_ROW_H) + 1
+    for rowIndex, row in ipairs(runBrowserRows) do
+        local dataIndex = firstIndex + rowIndex - 1
+        local session = runBrowserResults[dataIndex]
+        if session then
+            local level = RunDisplayLevel(session)
+            local events = #(session.logs or {})
+            local quality = RunQualitySummary(session)
+            row._session = session
+            row._qualitySummary = quality
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", runBrowserChild, "TOPLEFT", 0, -((dataIndex - 1) * RUN_BROWSER_ROW_H))
+            row:SetPoint("RIGHT", runBrowserChild, "RIGHT", 0, 0)
+            row._primary:SetText(string.format("Level %d · %s", level, FormatDuration(session.startTime, RunDisplayEndTime(session))))
+            row._secondary:SetText(string.format("%s · %s", RunStatusLabel(session), RunRelativeDate(session)))
+            row._rarity:SetText(QualityCountText(quality, true))
+            row._events:SetText(string.format("%d events", events))
+            row._events:SetTextColor(events == 0 and 0.52 or Theme.TEXT_MUTED[1], events == 0 and 0.52 or Theme.TEXT_MUTED[2], events == 0 and 0.56 or Theme.TEXT_MUTED[3], 1)
+            ApplyRunBrowserRowVisual(row, false)
+            row:Show()
+        else
+            row._session = nil
+            row._qualitySummary = nil
+            row:Hide()
+        end
+    end
+end
+
+local function ScrollRunBrowserToSelected()
+    if not runBrowserBar then return end
+    local selectedIndex
+    for index, session in ipairs(runBrowserResults) do
+        if session.id == selectedSessionId then selectedIndex = index; break end
+    end
+    local _, maximum = runBrowserBar:GetMinMaxValues()
+    local target = 0
+    if selectedIndex then
+        target = math.max(0, (selectedIndex - math.ceil(RUN_BROWSER_VISIBLE_ROWS / 2)) * RUN_BROWSER_ROW_H)
+    end
+    runBrowserBar:SetValue(math.min(maximum or 0, target))
+end
+
+function H.RefreshRunBrowser(scrollToSelected)
+    if not runBrowser then return end
+    runBrowserResults = {}
+    local needle = SearchSafeLower(runBrowserSearchText)
+    for _, session in ipairs(relevantSessionCache) do
+        if RunMatchesBrowserFilter(session) and (needle == "" or RunBrowserSearchBlob(session):find(needle, 1, true)) then
+            runBrowserResults[#runBrowserResults + 1] = session
+        end
+    end
+
+    local totalHeight = math.max(1, #runBrowserResults * RUN_BROWSER_ROW_H)
+    local viewportHeight = RUN_BROWSER_VISIBLE_ROWS * RUN_BROWSER_ROW_H
+    runBrowserChild:SetHeight(totalHeight)
+    local maximum = math.max(0, totalHeight - viewportHeight)
+    runBrowserBar:SetMinMaxValues(0, maximum)
+    if scrollToSelected then
+        ScrollRunBrowserToSelected()
+    elseif runBrowserBar:GetValue() > maximum then
+        runBrowserBar:SetValue(maximum)
+    else
+        runBrowserScroll:SetVerticalScroll(runBrowserBar:GetValue())
+        RefreshRunBrowserRows()
+    end
+
+    if runBrowserCountLabel then
+        if #runBrowserResults == #relevantSessionCache then
+            local completeCount, shortCount, activeCount = 0, 0, 0
+            for _, session in ipairs(relevantSessionCache) do
+                local state = GetRunCompletionState(session)
+                if state == "complete" then completeCount = completeCount + 1
+                elseif state == "short" then shortCount = shortCount + 1
+                elseif state == "active" then activeCount = activeCount + 1 end
+            end
+            local suffix = activeCount > 0 and string.format(" · %d active", activeCount) or ""
+            runBrowserCountLabel:SetText(string.format("%d runs · %d complete · %d short%s", #relevantSessionCache, completeCount, shortCount, suffix))
+        else
+            runBrowserCountLabel:SetText(string.format("%d of %d runs", #runBrowserResults, #relevantSessionCache))
+        end
+    end
+    if runBrowserEmpty then
+        if #runBrowserResults == 0 then runBrowserEmpty:Show() else runBrowserEmpty:Hide() end
+    end
+    if runBrowserClear then
+        if runBrowserFilter ~= "all" or runBrowserSearchText ~= "" then runBrowserClear:Show() else runBrowserClear:Hide() end
+    end
+    UpdateRunBrowserFilterButtons()
+    RefreshRunBrowserRows()
+end
+
+local function CloseRunBrowser()
+    if runBrowser then runBrowser:Hide() end
+    if runBrowserSearch then runBrowserSearch:ClearFocus() end
+end
+
+local function CreateRunBrowserRow(parent)
+    local row = CreateFrame("Button", nil, parent)
+    row:SetHeight(RUN_BROWSER_ROW_H - 2)
+    Theme.ApplyCard(row)
+
+    local marker = row:CreateTexture(nil, "ARTWORK")
+    marker:SetTexture("Interface\\Buttons\\WHITE8X8")
+    marker:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    marker:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    marker:SetWidth(3)
+    row._marker = marker
+
+    local primary = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    primary:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -5)
+    primary:SetPoint("RIGHT", row, "RIGHT", -92, 0)
+    primary:SetJustifyH("LEFT")
+    primary:SetTextColor(unpack(Theme.TEXT_PRIMARY))
+    row._primary = primary
+
+    local secondary = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    secondary:SetPoint("TOPLEFT", primary, "BOTTOMLEFT", 0, -3)
+    secondary:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+    secondary:SetJustifyH("LEFT")
+    secondary:SetTextColor(unpack(Theme.TEXT_MUTED))
+    row._secondary = secondary
+
+    local rarity = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    rarity:SetPoint("TOPLEFT", secondary, "BOTTOMLEFT", 0, -2)
+    rarity:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+    rarity:SetJustifyH("LEFT")
+    rarity:SetTextColor(unpack(Theme.TEXT_MUTED))
+    row._rarity = rarity
+
+    local events = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    events:SetPoint("TOPRIGHT", row, "TOPRIGHT", -9, -5)
+    events:SetWidth(78)
+    events:SetJustifyH("RIGHT")
+    row._events = events
+
+    row:SetScript("OnEnter", function(self)
+        ApplyRunBrowserRowVisual(self, true)
+        local session = self._session
+        local quality = self._qualitySummary
+        if not session or not quality then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine(RunMenuLabel(session), 1, 0.82, 0)
+        GameTooltip:AddLine("Rarity counts include selected Echoes only; offered, banished, frozen-only, and rerolled Echoes are excluded.", 0.78, 0.78, 0.82, true)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(string.format("Epic %d · Rare %d · Uncommon %d · Common %d", quality.counts[3] or 0, quality.counts[2] or 0, quality.counts[1] or 0, quality.counts[0] or 0), 0.86, 0.86, 0.90)
+        if quality.classifiedSelectionCount < quality.totalSelectionCount then
+            GameTooltip:AddLine(string.format("%d of %d selections could be classified by quality.", quality.classifiedSelectionCount, quality.totalSelectionCount), 1, 0.66, 0.16, true)
+        else
+            GameTooltip:AddLine(string.format("%d selected Echo%s classified.", quality.classifiedSelectionCount, quality.classifiedSelectionCount == 1 and "" or "es"), 0.68, 0.68, 0.74)
+        end
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function(self)
+        ApplyRunBrowserRowVisual(self, false)
+        GameTooltip:Hide()
+    end)
+    row:SetScript("OnClick", function(self)
+        if self._session then
+            SelectSession(self._session.id)
+            CloseRunBrowser()
+        end
+    end)
+    return row
+end
+
+local function EnsureRunBrowser()
+    if runBrowser then return runBrowser end
+
+    local popup = CreateFrame("Frame", nil, UIParent)
+    popup:SetSize(RUN_BROWSER_WIDTH, 526)
+    popup:SetFrameStrata("FULLSCREEN_DIALOG")
+    popup:SetToplevel(true)
+    popup:SetClampedToScreen(true)
+    popup:EnableMouse(true)
+    Theme.ApplyWindow(popup)
+    popup:Hide()
+    runBrowser = popup
+
+    local title = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -11)
+    title:SetText("Select run")
+    title:SetTextColor(unpack(Theme.TEXT_PRIMARY))
+
+    local close = Theme.CreateButton(popup)
+    close:SetSize(24, 22)
+    close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -8, -7)
+    close:SetText("x")
+    close:SetScript("OnClick", CloseRunBrowser)
+
+    runBrowserCountLabel = popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    runBrowserCountLabel:SetPoint("RIGHT", close, "LEFT", -10, 0)
+    runBrowserCountLabel:SetJustifyH("RIGHT")
+    runBrowserCountLabel:SetTextColor(unpack(Theme.TEXT_MUTED))
+
+    local searchWrap = CreateFrame("Frame", nil, popup)
+    searchWrap:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, -38)
+    searchWrap:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -10, -38)
+    searchWrap:SetHeight(24)
+    Theme.ApplyInput(searchWrap)
+
+    local search = CreateFrame("EditBox", nil, searchWrap)
+    search:SetPoint("TOPLEFT", searchWrap, "TOPLEFT", 7, -3)
+    search:SetPoint("BOTTOMRIGHT", searchWrap, "BOTTOMRIGHT", -22, 3)
+    search:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+    search:SetAutoFocus(false)
+    search:SetTextColor(1, 1, 1, 1)
+    Theme.WireEditBox(search, searchWrap)
+    runBrowserSearch = search
+
+    local placeholder = searchWrap:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    placeholder:SetPoint("LEFT", search, "LEFT", 0, 0)
+    placeholder:SetText("Search level, date, duration, or events...")
+    placeholder:SetTextColor(unpack(Theme.TEXT_MUTED))
+    runBrowserPlaceholder = placeholder
+
+    local clearSearch = CreateFrame("Button", nil, searchWrap)
+    clearSearch:SetSize(18, 18)
+    clearSearch:SetPoint("RIGHT", searchWrap, "RIGHT", -2, 0)
+    local clearText = clearSearch:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    clearText:SetPoint("CENTER")
+    clearText:SetText("x")
+    clearText:SetTextColor(unpack(Theme.TEXT_MUTED))
+    clearSearch:SetScript("OnClick", function() search:SetText(""); search:ClearFocus() end)
+
+    search:SetScript("OnTextChanged", function(self)
+        runBrowserSearchText = self:GetText() or ""
+        UpdateRunBrowserSearchPlaceholder()
+        H.RefreshRunBrowser(false)
+        if runBrowserBar then runBrowserBar:SetValue(0) end
+    end)
+    search:SetScript("OnEditFocusGained", UpdateRunBrowserSearchPlaceholder)
+    search:SetScript("OnEditFocusLost", UpdateRunBrowserSearchPlaceholder)
+    search:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    search:SetScript("OnEscapePressed", function(self)
+        if (self:GetText() or "") ~= "" then self:SetText("") else CloseRunBrowser() end
+    end)
+    Theme.AttachTooltip(searchWrap, "Search runs", "Matches status, level, duration, date, event count, and selected-Echo rarity totals.")
+
+    local filterDefs = {
+        { key = "all", label = "All", tip = "Show every run recorded for this build." },
+        { key = "complete", label = "Complete", tip = "Show finished runs where all Echo picks were completed. Legacy Level 80 runs are treated as complete." },
+        { key = "short", label = "Short", tip = "Show finished runs that ended before all Echo picks were completed. Active runs and completed Level 80 runs are excluded." },
+        { key = "recent", label = "Recent", tip = "Show runs started during the last 24 hours." },
+    }
+    local previous
+    for _, def in ipairs(filterDefs) do
+        local item = def
+        local button = Theme.CreateTab(popup, item.label)
+        button:SetSize(item.key == "complete" and 82 or 68, 22)
+        if previous then button:SetPoint("LEFT", previous, "RIGHT", 5, 0) else button:SetPoint("TOPLEFT", searchWrap, "BOTTOMLEFT", 0, -7) end
+        button:SetScript("OnClick", function()
+            runBrowserFilter = item.key
+            if runBrowserBar then runBrowserBar:SetValue(0) end
+            H.RefreshRunBrowser(false)
+        end)
+        Theme.AttachTooltip(button, item.label .. " runs", item.tip)
+        runBrowserFilterButtons[item.key] = button
+        previous = button
+    end
+
+    local listTop = -94
+    runBrowserScroll = CreateFrame("ScrollFrame", nil, popup)
+    runBrowserScroll:SetPoint("TOPLEFT", popup, "TOPLEFT", 10, listTop)
+    runBrowserScroll:SetSize(RUN_BROWSER_WIDTH - 34, RUN_BROWSER_VISIBLE_ROWS * RUN_BROWSER_ROW_H)
+    runBrowserScroll:EnableMouseWheel(true)
+
+    runBrowserChild = CreateFrame("Frame", nil, runBrowserScroll)
+    runBrowserChild:SetWidth(RUN_BROWSER_WIDTH - 40)
+    runBrowserChild:SetHeight(1)
+    runBrowserScroll:SetScrollChild(runBrowserChild)
+
+    runBrowserBar = Theme.CreateScrollBar(popup)
+    runBrowserBar:SetPoint("TOPRIGHT", runBrowserScroll, "TOPRIGHT", 17, -1)
+    runBrowserBar:SetPoint("BOTTOMRIGHT", runBrowserScroll, "BOTTOMRIGHT", 17, 1)
+    runBrowserBar:SetValueStep(RUN_BROWSER_ROW_H)
+    runBrowserBar:SetScript("OnValueChanged", function(_, value)
+        runBrowserScroll:SetVerticalScroll(value)
+        RefreshRunBrowserRows()
+    end)
+
+    for index = 1, RUN_BROWSER_VISIBLE_ROWS do
+        runBrowserRows[index] = CreateRunBrowserRow(runBrowserChild)
+    end
+    Theme.BindScrollWheel(runBrowserScroll, runBrowserBar, RUN_BROWSER_ROW_H, runBrowserChild)
+    for _, row in ipairs(runBrowserRows) do Theme.BindScrollWheel(runBrowserScroll, runBrowserBar, RUN_BROWSER_ROW_H, row) end
+
+    runBrowserEmpty = CreateFrame("Frame", nil, runBrowserScroll)
+    runBrowserEmpty:SetAllPoints(runBrowserScroll)
+    runBrowserEmpty:EnableMouse(false)
+    local emptyTitle = runBrowserEmpty:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    emptyTitle:SetPoint("CENTER", runBrowserEmpty, "CENTER", 0, 10)
+    emptyTitle:SetText("No matching runs")
+    local emptyBody = runBrowserEmpty:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    emptyBody:SetPoint("TOP", emptyTitle, "BOTTOM", 0, -6)
+    emptyBody:SetText("Clear the search or select All.")
+    emptyBody:SetTextColor(unpack(Theme.TEXT_MUTED))
+
+    runBrowserClear = Theme.CreateButton(popup)
+    runBrowserClear:SetSize(104, 22)
+    runBrowserClear:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -10, 9)
+    runBrowserClear:SetText("Clear filters")
+    runBrowserClear:SetScript("OnClick", function()
+        runBrowserFilter = "all"
+        runBrowserSearchText = ""
+        if runBrowserSearch then runBrowserSearch:SetText("") end
+        if runBrowserBar then runBrowserBar:SetValue(0) end
+        H.RefreshRunBrowser(false)
+    end)
+
+    local footer = popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    footer:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 11, 14)
+    footer:SetText("Click a run to load it. The popup closes after selection.")
+    footer:SetTextColor(unpack(Theme.TEXT_MUTED))
+
+    popup:SetScript("OnHide", function()
+        if runBrowserSearch then runBrowserSearch:ClearFocus() end
+    end)
+    return popup
+end
+
+local function ToggleRunBrowser()
+    local popup = EnsureRunBrowser()
+    if popup:IsShown() then
+        CloseRunBrowser()
+        return
+    end
+    popup:ClearAllPoints()
+    popup:SetPoint("TOPLEFT", runDropdown, "BOTTOMLEFT", 0, -4)
+    popup:Show()
+    H.RefreshRunBrowser(true)
 end
 
 local function UpdateSummary(session)
     local data = SessionSummary(session)
     local values = {
-        level = tostring(session and (session.maxLevel or session.startLevel or 1) or "—"),
-        duration = session and FormatDuration(session.startTime, session.endTime) or "—",
+        level = tostring(session and (RunDisplayLevel(session)) or "—"),
+        duration = session and FormatDuration(session.startTime, RunDisplayEndTime(session)) or "—",
         events = tostring(data.events or 0),
         score = data.selectedCount > 0 and string.format("%.1f", data.averageSelected or 0) or "—",
         actions = string.format("B %d  R %d  F %d", data.actions.Banish or 0, data.actions.Reroll or 0, data.actions.Freeze or 0),
     }
     for key, value in pairs(values) do if summaryMetrics[key] then summaryMetrics[key].value:SetText(value) end end
+    if summaryRarityText then
+        summaryRarityText:SetText(QualityCountText(data.quality, false))
+    end
+    if summaryRarityFrame then
+        summaryRarityFrame._qualitySummary = data.quality
+        summaryRarityFrame._session = session
+    end
 end
 
 local function SessionEventCount(session)
@@ -589,7 +1341,7 @@ local function ShowDeleteSelectedConfirmation()
     pendingDeleteSessionId = session.id
     local dialog = StaticPopupDialogs["EBONBUILDS_DELETE_SELECTED_SESSION"]
     if dialog then
-        dialog.text = string.format("Delete this completed run?\n\nLevel %s · %s · %d events\n\nThis cannot be undone.", tostring(session.maxLevel or session.startLevel or 1), FormatDuration(session.startTime, session.endTime), SessionEventCount(session))
+        dialog.text = string.format("Delete this completed run?\n\nLevel %s · %s · %d events\n\nThis cannot be undone.", tostring(RunDisplayLevel(session)), FormatDuration(session.startTime, RunDisplayEndTime(session)), SessionEventCount(session))
     end
     StaticPopup_Show("EBONBUILDS_DELETE_SELECTED_SESSION")
 end
@@ -878,6 +1630,46 @@ local function PreviousEntryCharges(entry)
     return nil
 end
 
+local RESOURCE_DEFINITIONS = {
+    { key = "ban", label = "Banish", color = "ffff6b6b" },
+    { key = "reroll", label = "Reroll", color = "ff55aaff" },
+    { key = "freeze", label = "Freeze", color = "ff55ddee" },
+}
+
+local function ResourceChangeSummary(before, after, colored)
+    after = after or {}
+    local used, restored, remaining = {}, {}, {}
+    for _, resource in ipairs(RESOURCE_DEFINITIONS) do
+        local current = tonumber(after[resource.key]) or 0
+        local previous = before and (tonumber(before[resource.key]) or 0) or nil
+        local label = resource.label
+        if colored then label = "|c" .. resource.color .. label .. "|r" end
+        remaining[#remaining + 1] = string.format("%s %d", label, current)
+        if previous then
+            local delta = previous - current
+            if delta > 0 then
+                used[#used + 1] = string.format("%d %s", delta, resource.label)
+            elseif delta < 0 then
+                restored[#restored + 1] = string.format("%d %s", -delta, resource.label)
+            end
+        end
+    end
+
+    local change = nil
+    if #used > 0 then change = "Used: " .. table.concat(used, ", ") end
+    if #restored > 0 then
+        local restoredText = "Restored: " .. table.concat(restored, ", ")
+        change = change and (change .. "  |  " .. restoredText) or restoredText
+    end
+    local remainingText = "Remaining: " .. table.concat(remaining, "  |  ")
+    return change, remainingText
+end
+
+local function ResourceDisplayText(before, after)
+    local change, remaining = ResourceChangeSummary(before, after, true)
+    return change and (change .. "\n" .. remaining) or remaining
+end
+
 local function ResizeDetailChoiceCards()
     if not detailPanel then return end
     local available = math.max(480, (detailPanel:GetWidth() or 700) - 24)
@@ -886,7 +1678,7 @@ local function ResizeDetailChoiceCards()
         card:SetWidth(width)
         card:ClearAllPoints()
         if index == 1 then
-            card:SetPoint("BOTTOMLEFT", detailPanel, "BOTTOMLEFT", 12, 10)
+            card:SetPoint("TOPLEFT", detailFlags, "BOTTOMLEFT", 0, -8)
         else
             card:SetPoint("LEFT", detailChoiceRows[index - 1], "RIGHT", DETAIL_WIDTH_GAP, 0)
         end
@@ -915,8 +1707,11 @@ local function BuildDecisionExport(entry)
         lines[#lines + 1] = string.format("%d. %s%s · quality %s · weight %s · modifiers %s · final %s", index, choice.name or "Unknown Echo", choice == target and " [TARGET]" or "", tostring(choice.quality or "?"), tostring(choice.baseWeight or "?"), choice.modifierDelta ~= nil and string.format("%+.0f", choice.modifierDelta) or "?", tostring(choice.score or "?"))
     end
     local charges = entry.charges or {}
+    local change, remaining = ResourceChangeSummary(PreviousEntryCharges(entry), charges, false)
     lines[#lines + 1] = ""
-    lines[#lines + 1] = string.format("Resources after: Banish %d · Reroll %d · Freeze %d", charges.ban or 0, charges.reroll or 0, charges.freeze or 0)
+    lines[#lines + 1] = "Resources"
+    if change then lines[#lines + 1] = change end
+    lines[#lines + 1] = remaining
     return table.concat(lines, "\n")
 end
 
@@ -946,11 +1741,7 @@ function H.ShowDecisionDetail(entry)
 
     local after = entry.charges or {}
     local before = PreviousEntryCharges(entry)
-    if before then
-        detailResources:SetText(string.format("Resources  B %d→%d   R %d→%d   F %d→%d", before.ban or 0, after.ban or 0, before.reroll or 0, after.reroll or 0, before.freeze or 0, after.freeze or 0))
-    else
-        detailResources:SetText(string.format("Resources after  B %d   R %d   F %d", after.ban or 0, after.reroll or 0, after.freeze or 0))
-    end
+    detailResources:SetText(ResourceDisplayText(before, after))
 
     local target = TargetChoice(entry)
     for i = 1, 3 do
@@ -1095,11 +1886,7 @@ local function EnsureExportDialog()
     bar:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 18, 2)
     bar:SetValueStep(18)
     bar:SetScript("OnValueChanged", function(_, value) scroll:SetVerticalScroll(value) end)
-    scroll:EnableMouseWheel(true)
-    scroll:SetScript("OnMouseWheel", function(_, delta)
-        local minimum, maximum = bar:GetMinMaxValues()
-        bar:SetValue(math.max(minimum, math.min(maximum, bar:GetValue() - delta * 18)))
-    end)
+    Theme.BindScrollWheel(scroll, bar, 18, edit)
     frame._title, frame._edit, frame._scroll, frame._bar = title, edit, scroll, bar
     exportDialog = frame
     return frame
@@ -1124,8 +1911,8 @@ end
 local function SessionExportLines(session)
     local lines = {}
     if not session then return { "No session selected." } end
-    lines[#lines + 1] = string.format("Run: Level %d | Duration: %s | Soul Ashes: %s | Events: %d", session.maxLevel or session.startLevel or 1, FormatDuration(session.startTime, session.endTime), session.soulAshes or 0, #(session.logs or {}))
-    lines[#lines + 1] = string.format("Started: %s | Status: %s", FormatRunDate(session.startTime), session.endTime and "Complete" or "Active")
+    lines[#lines + 1] = string.format("Run: Level %d | Duration: %s | Soul Ashes: %s | Events: %d", RunDisplayLevel(session), FormatDuration(session.startTime, RunDisplayEndTime(session)), session.soulAshes or 0, #(session.logs or {}))
+    lines[#lines + 1] = string.format("Started: %s | Status: %s", FormatRunDate(session.startTime), RunStatusLabel(session))
     lines[#lines + 1] = ""
     for _, entry in ipairs(session.logs or {}) do
         local name, score = DecisionLabel(entry)
@@ -1164,21 +1951,23 @@ end
 
 local function CreateSearch(parent)
     local wrap = CreateFrame("Frame", nil, parent)
-    wrap:SetSize(190, 24)
+    wrap:SetSize(FILTER_SEARCH_W, FILTER_CONTROL_H)
     Theme.ApplyInput(wrap)
     local edit = CreateFrame("EditBox", nil, wrap)
-    edit:SetPoint("TOPLEFT", wrap, "TOPLEFT", 7, -3)
-    edit:SetPoint("BOTTOMRIGHT", wrap, "BOTTOMRIGHT", -22, 3)
+    edit:SetPoint("TOPLEFT", wrap, "TOPLEFT", 8, -2)
+    edit:SetPoint("BOTTOMRIGHT", wrap, "BOTTOMRIGHT", -25, 2)
     edit:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
     edit:SetAutoFocus(false)
     edit:SetTextColor(1, 1, 1, 1)
     Theme.WireEditBox(edit, wrap)
     local placeholder = wrap:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     placeholder:SetPoint("LEFT", edit, "LEFT", 0, 0)
-    placeholder:SetText("Search Echoes, actions, reasons…")
+    placeholder:SetPoint("RIGHT", edit, "RIGHT", -2, 0)
+    placeholder:SetJustifyH("LEFT")
+    placeholder:SetText("Search Echoes, actions, reasons")
     placeholder:SetTextColor(unpack(Theme.TEXT_MUTED))
     local clear = CreateFrame("Button", nil, wrap)
-    clear:SetSize(18, 18)
+    clear:SetSize(20, 20)
     clear:SetPoint("RIGHT", wrap, "RIGHT", -2, 0)
     local x = clear:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     x:SetPoint("CENTER")
@@ -1284,24 +2073,24 @@ local function BuildRunNavigator(container)
     nextRunButton:SetScript("OnClick", function() MoveSession(1) end)
     Theme.AttachTooltip(nextRunButton, "Older run", "Move to the next run in the current build history.")
 
-    runDropdown = Theme.CreateDropdown(topPanel, 500, "Choose a run", { menuWidth = 560 })
+    runDropdown = Theme.CreateButton(topPanel)
     runDropdown:SetPoint("TOPLEFT", previousRunButton, "TOPRIGHT", 6, 0)
     runDropdown:SetPoint("TOPRIGHT", nextRunButton, "TOPLEFT", -6, 0)
     runDropdown:SetHeight(38)
-    runDropdown:SetMenuBuilder(function()
-        local items = {}
-        for index, session in ipairs(relevantSessionCache) do
-            local current = session
-            items[#items + 1] = {
-                text = string.format("%d. %s", index, RunMenuLabel(current)),
-                checked = current.id == selectedSessionId,
-                func = function() SelectSession(current.id) end,
-                tooltipTitle = current.endTime and "Completed run" or "Active run",
-                tooltipBody = string.format("Started %s. %d recorded events.", FormatRunDate(current.startTime), #(current.logs or {})),
-            }
-        end
-        return items
-    end)
+    runDropdown:SetText("Choose a run")
+    local runLabel = runDropdown:GetFontString()
+    if runLabel then
+        runLabel:ClearAllPoints()
+        runLabel:SetPoint("LEFT", runDropdown, "LEFT", 10, 0)
+        runLabel:SetPoint("RIGHT", runDropdown, "RIGHT", -26, 0)
+        runLabel:SetJustifyH("LEFT")
+    end
+    local runCaret = runDropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    runCaret:SetPoint("RIGHT", runDropdown, "RIGHT", -9, 0)
+    runCaret:SetText("v")
+    runCaret:SetTextColor(unpack(Theme.TEXT_MUTED))
+    runDropdown:SetScript("OnClick", ToggleRunBrowser)
+    Theme.AttachTooltip(runDropdown, "Select a recorded run", "Opens a compact searchable browser. Only eight reusable rows are created regardless of history size.")
 
     runPositionLabel = topPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     runPositionLabel:SetPoint("TOPLEFT", runDropdown, "BOTTOMLEFT", 3, -5)
@@ -1327,9 +2116,40 @@ local function BuildSummaryStrip(container)
     for i, def in ipairs(metricDefs) do
         local card = Theme.CreateMetricCard(summaryStrip, def[2])
         card:SetSize(i == 5 and 152 or 112, 42)
-        card:SetPoint("LEFT", summaryStrip, "LEFT", 7 + (i - 1) * 126, 0)
+        card:SetPoint("TOPLEFT", summaryStrip, "TOPLEFT", 7 + (i - 1) * 126, -5)
         summaryMetrics[def[1]] = card
     end
+
+    summaryRarityFrame = CreateFrame("Frame", nil, summaryStrip)
+    summaryRarityFrame:SetPoint("BOTTOMLEFT", summaryStrip, "BOTTOMLEFT", 8, 4)
+    summaryRarityFrame:SetPoint("BOTTOMRIGHT", summaryStrip, "BOTTOMRIGHT", -8, 4)
+    summaryRarityFrame:SetHeight(18)
+    summaryRarityFrame:EnableMouse(true)
+
+    summaryRarityText = summaryRarityFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    summaryRarityText:SetPoint("LEFT", summaryRarityFrame, "LEFT", 0, 0)
+    summaryRarityText:SetPoint("RIGHT", summaryRarityFrame, "RIGHT", 0, 0)
+    summaryRarityText:SetJustifyH("LEFT")
+    summaryRarityText:SetTextColor(unpack(Theme.TEXT_MUTED))
+    summaryRarityText:SetText("Selected Echo quality: no selections recorded")
+
+    summaryRarityFrame:SetScript("OnEnter", function(self)
+        local quality = self._qualitySummary
+        if not quality then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine("Selected Echo quality", 1, 0.82, 0)
+        GameTooltip:AddLine("Counts include successfully selected Echoes only. Offered, banished, frozen-only, and rerolled Echoes are excluded.", 0.78, 0.78, 0.82, true)
+        if quality.totalSelectionCount > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(string.format("Epic %d · Rare %d · Uncommon %d · Common %d", quality.counts[3] or 0, quality.counts[2] or 0, quality.counts[1] or 0, quality.counts[0] or 0), 0.86, 0.86, 0.90)
+            if quality.classifiedSelectionCount < quality.totalSelectionCount then
+                GameTooltip:AddLine(string.format("%d of %d selections could be classified by quality.", quality.classifiedSelectionCount, quality.totalSelectionCount), 1, 0.66, 0.16, true)
+            end
+        end
+        GameTooltip:Show()
+    end)
+    summaryRarityFrame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
 local function BuildFilterToolbar(container)
@@ -1340,13 +2160,14 @@ local function BuildFilterToolbar(container)
     toolbar = CreateFrame("Frame", nil, bottomPanel)
     toolbar:SetPoint("TOPLEFT", bottomPanel, "TOPLEFT", 0, 0)
     toolbar:SetPoint("TOPRIGHT", bottomPanel, "TOPRIGHT", 0, 0)
-    toolbar:SetHeight(28)
+    toolbar:SetHeight(FILTER_TOOLBAR_H)
 
     local search = CreateSearch(toolbar)
     search:SetPoint("LEFT", toolbar, "LEFT", 0, 0)
 
-    actionDropdown = Theme.CreateDropdown(toolbar, 96, "All actions")
-    actionDropdown:SetPoint("LEFT", search, "RIGHT", 7, 0)
+    actionDropdown = Theme.CreateDropdown(toolbar, FILTER_ACTION_W, "All actions")
+    actionDropdown:SetHeight(FILTER_CONTROL_H)
+    actionDropdown:SetPoint("LEFT", search, "RIGHT", FILTER_GAP, 0)
     actionDropdown:SetMenuBuilder(function()
         local items = {}
         for _, action in ipairs({ "All", "Select", "Banish", "Reroll", "Freeze", "Manual" }) do
@@ -1365,8 +2186,9 @@ local function BuildFilterToolbar(container)
         return items
     end)
 
-    sourceDropdown = Theme.CreateDropdown(toolbar, 96, "All sources")
-    sourceDropdown:SetPoint("LEFT", actionDropdown, "RIGHT", 7, 0)
+    sourceDropdown = Theme.CreateDropdown(toolbar, FILTER_SOURCE_W, "All sources")
+    sourceDropdown:SetHeight(FILTER_CONTROL_H)
+    sourceDropdown:SetPoint("LEFT", actionDropdown, "RIGHT", FILTER_GAP, 0)
     sourceDropdown:SetMenuBuilder(function()
         local items = {}
         for _, source in ipairs({ "All", "Automatic", "Manual" }) do
@@ -1386,8 +2208,8 @@ local function BuildFilterToolbar(container)
     end)
 
     importantButton = Theme.CreateTab(toolbar, "Important only")
-    importantButton:SetSize(108, 22)
-    importantButton:SetPoint("LEFT", sourceDropdown, "RIGHT", 7, 0)
+    importantButton:SetSize(FILTER_IMPORTANT_W, FILTER_CONTROL_H)
+    importantButton:SetPoint("LEFT", sourceDropdown, "RIGHT", FILTER_GAP, 0)
     importantButton:SetScript("OnClick", function()
         importantOnly = not importantOnly
         H.UpdateFilterVisuals()
@@ -1396,8 +2218,8 @@ local function BuildFilterToolbar(container)
     Theme.AttachTooltip(importantButton, "Important decisions", "Shows close comparisons, final-charge actions, modifier overrides, failures, and meaningful manual disagreements.")
 
     groupButton = Theme.CreateTab(toolbar, "Group by level")
-    groupButton:SetSize(112, 22)
-    groupButton:SetPoint("LEFT", importantButton, "RIGHT", 7, 0)
+    groupButton:SetSize(FILTER_GROUP_W, FILTER_CONTROL_H)
+    groupButton:SetPoint("LEFT", importantButton, "RIGHT", FILTER_GAP, 0)
     groupButton:SetScript("OnClick", function()
         groupByLevel = not groupByLevel
         SavePreferences()
@@ -1516,13 +2338,17 @@ local function BuildDecisionInspector()
     detailFlags = detailPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     detailFlags:SetPoint("TOPLEFT", detailReason, "BOTTOMLEFT", 0, -4)
     detailFlags:SetWidth(330)
+    detailFlags:SetHeight(28)
     detailFlags:SetJustifyH("LEFT")
+    detailFlags:SetJustifyV("TOP")
     detailFlags:SetTextColor(unpack(Theme.WARNING))
 
     detailResources = detailPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    detailResources:SetPoint("LEFT", detailFlags, "RIGHT", 15, 0)
+    detailResources:SetPoint("TOPLEFT", detailFlags, "TOPRIGHT", 15, 0)
     detailResources:SetPoint("RIGHT", detailPanel, "RIGHT", -12, 0)
+    detailResources:SetHeight(28)
     detailResources:SetJustifyH("RIGHT")
+    detailResources:SetJustifyV("TOP")
     detailResources:SetTextColor(unpack(Theme.TEXT_MUTED))
 
     for i = 1, 3 do
@@ -1574,7 +2400,7 @@ local function DurationTick(self, elapsed)
     if self._elapsed < 1 then return end
     self._elapsed = 0
     local session = SelectedSession()
-    if not session or session.endTime then self:Hide(); return end
+    if not session or GetRunCompletionState(session) ~= "active" then self:Hide(); return end
     RefreshRunNavigatorText()
     UpdateSummary(session)
 end
@@ -1587,6 +2413,10 @@ function H.Show(container)
         searchText = ""
         importantOnly = false
         if searchInput then searchInput:SetText("") end
+        runBrowserSearchText = ""
+        runBrowserFilter = "all"
+        if runBrowserSearch then runBrowserSearch:SetText("") end
+        CloseRunBrowser()
     end
     lastBuildKey = buildKey
 
@@ -1606,7 +2436,7 @@ function H.Show(container)
     H.RefreshLogView()
 
     local session = SelectedSession()
-    if session and not session.endTime then
+    if session and GetRunCompletionState(session) == "active" then
         if not durationTimer then
             durationTimer = CreateFrame("Frame")
             durationTimer:SetScript("OnUpdate", DurationTick)
@@ -1625,6 +2455,7 @@ function H.Hide()
     if bottomPanel then bottomPanel:Hide() end
     if detailPanel then detailPanel:Hide() end
     if exportDialog then exportDialog:Hide() end
+    CloseRunBrowser()
     if durationTimer then durationTimer:Hide() end
     selectedEntry = nil
 end
@@ -1681,6 +2512,22 @@ H._VisibleItems = VisibleItems
 H._ClearFilters = ClearFilters
 H._SetSort = SetSort
 H._NextWheelScrollValue = NextWheelScrollValue
+H._RunIsShort = RunIsShort
+H._RunIsRecent = RunIsRecent
+H._GetRunCompletionState = GetRunCompletionState
+H._RunDisplayLevel = RunDisplayLevel
+H._RunQualitySummary = RunQualitySummary
+H._ResourceDisplayText = ResourceDisplayText
+H._QualityCountText = QualityCountText
+H._RunBrowserSearchBlob = RunBrowserSearchBlob
+H._EnsureRunBrowserForTest = EnsureRunBrowser
+H._GetRunBrowserRowCountForTest = function() return #runBrowserRows end
+H._GetRunBrowserResultCountForTest = function() return #runBrowserResults end
+H._SetRunBrowserFilterForTest = function(filter, search)
+    runBrowserFilter = filter or "all"
+    runBrowserSearchText = search or ""
+    H.RefreshRunBrowser(false)
+end
 H._UIBuildFunctions = {
     BuildRunNavigator = BuildRunNavigator,
     BuildSummaryStrip = BuildSummaryStrip,

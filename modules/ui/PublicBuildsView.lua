@@ -278,6 +278,9 @@ local function CreateCard(parent)
     importBtn:SetText("Import")
     card._importBtn = importBtn
 
+    if scrollFrame and scrollBar then
+        EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, 40, card)
+    end
     return card
 end
 
@@ -519,17 +522,10 @@ end
 ------------------------------------------------------------------------
 
 local function WireScrollBar()
-    scrollBar:SetScript("OnValueChanged", function()
-        local offset = scrollBar:GetValue()
-        scrollChild:SetPoint("TOPLEFT", scrollFrame, "TOPLEFT", 0, offset)
+    scrollBar:SetScript("OnValueChanged", function(_, value)
+        scrollFrame:SetVerticalScroll(value)
     end)
-
-    scrollFrame:EnableMouseWheel(true)
-    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
-        local v = scrollBar:GetValue()
-        local mn, mx = scrollBar:GetMinMaxValues()
-        scrollBar:SetValue(math.max(mn, math.min(mx, v - delta * 40)))
-    end)
+    EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, 40, scrollChild)
 end
 
 ------------------------------------------------------------------------

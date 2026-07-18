@@ -487,13 +487,7 @@ local function BuildWindow()
     scrollBar:SetScript("OnValueChanged", function(_, value)
         scrollFrame:SetVerticalScroll(value)
     end)
-
-    scrollFrame:EnableMouseWheel(true)
-    scrollFrame:SetScript("OnMouseWheel", function(_, delta)
-        local minValue, maxValue = scrollBar:GetMinMaxValues()
-        local newScroll = scrollBar:GetValue() - delta * 32
-        scrollBar:SetValue(math.max(minValue, math.min(newScroll, maxValue)))
-    end)
+    EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, 32, scrollChild)
 
     -- Navigation
     prevBtn = EbonBuilds.Theme.CreateButton(f)
