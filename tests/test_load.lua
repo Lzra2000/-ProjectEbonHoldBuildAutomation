@@ -231,6 +231,7 @@ do
         { "modules/ui/SessionHistory.lua", "Theme.BindScrollWheel(logScroll, logBar" },
         { "modules/ui/SettingsView.lua", "Theme.BindScrollWheel(scrollFrame, scrollBar" },
         { "modules/ui/StatsView.lua", "Theme.BindScrollWheel(recScroll, recBar" },
+        { "modules/ui/BuildOverview.lua", "Theme.BindScrollWheel(scroll, bar, 16, child)" },
     }
     for _, definition in ipairs(requiredBindings) do
         local file = assert(io.open(definition[1], "r"))
@@ -242,7 +243,21 @@ do
         end
     end
 end
-print("Verified shared boundary-safe scrolling for Logbook, Autopilot, and Recommendations.")
+print("Verified shared boundary-safe scrolling for Logbook, Autopilot, Recommendations, and Missing Echoes.")
+
+-- The first global-settings control must be anchored at the visible top of
+-- the scroll child. Anchoring to BOTTOMLEFT makes the modal appear blank.
+do
+    local file = assert(io.open("modules/ui/MainWindow.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    if not source:find('if yAnchor == scrollChild then', 1, true)
+        or not source:find('label:SetPoint("TOPLEFT", scrollChild, "TOPLEFT"', 1, true) then
+        io.stderr:write("SETTINGS POPUP FAIL: first setting is not anchored to the visible top of the scroll child\n")
+        os.exit(1)
+    end
+end
+print("Verified global Settings controls begin inside the visible viewport.")
 
 -- EWL export is available from the build overview and slash command.
 do
@@ -281,12 +296,15 @@ do
         os.exit(1)
     end
 
+    local hiddenVariant = "Iron Constitution" .. string.char(0) .. "2"
     local weighted = EbonBuilds.BuildOverview._BuildWeightedEchoSet({
         ["Positive Echo"] = { [3] = 0, [2] = 5, [1] = 0, [0] = 0 },
         ["Negative Echo"] = { [3] = -4, [2] = 0, [1] = 0, [0] = 0 },
         ["Zero Echo"] = { [3] = 0, [2] = 0, [1] = 0, [0] = 0 },
+        [hiddenVariant] = { [3] = 15, [2] = 15, [1] = 15, [0] = 15 },
     })
-    if not weighted["positive echo"] or not weighted["negative echo"] or weighted["zero echo"] then
+    if not weighted["positive echo"] or not weighted["negative echo"] or weighted["zero echo"]
+        or not weighted["iron constitution"] then
         io.stderr:write("MISSING VIEW FAIL: non-zero rank values do not define weighted Echoes correctly\n")
         os.exit(1)
     end
@@ -721,7 +739,10 @@ local analyticsOK, analyticsErr = xpcall(function()
         title = "Analytics Test",
         class = "MAGE",
         spec = 1,
-        echoWeights = { ["Spell 1"] = { [3] = 12 } },
+        echoWeights = {
+            ["Spell 1"] = { [3] = 12 },
+            ["Iron Constitution" .. string.char(0) .. "2"] = { [0] = 15 },
+        },
         settings = EbonBuilds.Build.NewBuildSettings(),
     })
     EbonBuilds.Build.SetActive(build.id)
@@ -791,8 +812,8 @@ local analyticsOK, analyticsErr = xpcall(function()
         error("Stats cache rebuilt expensive recommendations without any data change")
     end
     EbonBuilds.StatsView.SetView("echoes")
-    if EbonBuilds.StatsView._GetEchoRenderCountForTest() < 1 then
-        error("Echoes panel did not render rows when opened; a sort click should not be required")
+    if EbonBuilds.StatsView._GetEchoRenderCountForTest() < 2 then
+        error("Echoes panel did not safely render weighted rows with hidden Echo discriminators")
     end
     EbonBuilds.StatsView.SetView("actions")
     EbonBuilds.StatsView.SetView("recommendations")

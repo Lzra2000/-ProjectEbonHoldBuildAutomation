@@ -126,7 +126,12 @@ local QUALITY_SUFFIXES = { " - common", " - uncommon", " - rare", " - epic" }
 
 local function NormalizeEchoName(name)
     if not name then return nil end
-    local n = strlower(name)
+    local visible = EbonBuilds.Weights and EbonBuilds.Weights.VisibleName
+        and EbonBuilds.Weights.VisibleName(name) or tostring(name or "")
+    if visible == "" then return nil end
+    -- Never feed raw imported keys with control-byte suffixes to WoW's
+    -- 3.3.5a locale lowercasing helper.
+    local n = string.lower(visible)
     for _, prefix in ipairs(PREFIXES) do
         if n:sub(1, #prefix) == prefix then
             n = n:sub(#prefix + 1)

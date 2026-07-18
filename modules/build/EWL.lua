@@ -42,7 +42,24 @@ end
 
 local function CleanEchoName(name)
     if not name then return nil end
-    local cleaned = tostring(name)
+    -- Imported weight keys may contain hidden control-byte discriminators used
+    -- by Project Ebonhold to distinguish same-name variants. Keep those bytes
+    -- in the build's storage key, but never pass them to WoW's locale helpers
+    -- or UI strings. On the 3.3.5a client, strlower/string.lower can terminate
+    -- the client when given an embedded NUL byte.
+    local cleaned
+    if EbonBuilds.Weights and EbonBuilds.Weights.VisibleName then
+        cleaned = EbonBuilds.Weights.VisibleName(name)
+    else
+        cleaned = tostring(name)
+        for index = 1, #cleaned do
+            local byte = cleaned:byte(index)
+            if byte and (byte < 32 or byte == 127) then
+                cleaned = cleaned:sub(1, index - 1)
+                break
+            end
+        end
+    end
     cleaned = string.gsub(cleaned, "^%s+", "")
     cleaned = string.gsub(cleaned, "%s+$", "")
     cleaned = EbonBuilds.Weights.StripQualitySuffix(cleaned)
@@ -129,6 +146,7 @@ local function ExtractUnlockTomeName(text)
 end
 
 local function FindTomeSpellIdByName(echoName)
+    echoName = CleanEchoName(echoName)
     if not echoName or echoName == "" then return nil end
     local key = string.lower(echoName)
     if TOME_SPELL_CACHE[key] ~= nil then return TOME_SPELL_CACHE[key] or nil end
@@ -145,6 +163,7 @@ local function FindTomeSpellIdByName(echoName)
 end
 
 local function FindEchoSpellIdByName(echoName)
+    echoName = CleanEchoName(echoName)
     if not echoName or echoName == "" then return nil end
     local key = string.lower(echoName)
     if ECHO_SPELL_CACHE[key] ~= nil then return ECHO_SPELL_CACHE[key] or nil end

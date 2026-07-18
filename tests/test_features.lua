@@ -194,6 +194,52 @@ do
     check(not ewl:find("101:0", 1, true), "an all-zero Echo is omitted")
 end
 
+-- Imported Project Ebonhold builds can contain hidden control-byte suffixes
+-- in their internal Echo keys. EWL matching must use the safe player-facing
+-- name and must never pass the raw key to the client's lowercasing helpers.
+do
+    EchoWishlist = {
+        catalog = {
+            { id = 120, spellId = 120, name = "Mind Expansion", quality = 2, classMask = 256 },
+            { id = 121, spellId = 121, name = "Iron Constitution", quality = 1, classMask = 256 },
+        },
+    }
+
+    local build = EbonBuilds.Build.NewObject({
+        title = "Control-byte EWL regression",
+        class = "WARLOCK",
+        lockedEchoes = {},
+        echoWeights = {
+            ["Mind Expansion\0" .. "1"] = { [0] = 7 },
+            ["Iron Constitution\0" .. "2"] = { [0] = 5 },
+        },
+        settings = EbonBuilds.Build.DefaultSettings(),
+    })
+
+    local realLower = string.lower
+    string.lower = function(value)
+        value = tostring(value or "")
+        for index = 1, #value do
+            local byte = value:byte(index)
+            if byte and (byte < 32 or byte == 127) then
+                error("unsafe control byte passed to string.lower")
+            end
+        end
+        return realLower(value)
+    end
+
+    local ok, ewl, err, info = pcall(function()
+        local generated, generationError, generationInfo = EbonBuilds.EWL.Generate(build)
+        return generated, generationError, generationInfo
+    end)
+    string.lower = realLower
+
+    check(ok, "EWL export never lowercases raw control-byte Echo keys")
+    equal(err, nil, "control-byte EWL generation succeeds")
+    equal(ewl, "EWL1:WARLOCK:120:0,121:0", "control-byte variants resolve through visible catalog names")
+    equal(info and info.unresolved and #info.unresolved or -1, 0, "control-byte Echo keys are not reported as unresolved")
+end
+
 -- Regression for the reported Death Knight export. The build contained the
 -- 200745 rank alias, but EchoWishlist retains 200744 for that family. Saved
 -- rows are sorted by EWL metadata rather than locked-slot order.

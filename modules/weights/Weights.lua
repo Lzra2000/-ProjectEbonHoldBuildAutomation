@@ -35,6 +35,22 @@ function W.StripQualitySuffix(name)
     return name
 end
 
+-- Some Project Ebonhold database comments append an invisible control-byte
+-- discriminator to otherwise identical player-facing Echo names. Keep that
+-- suffix in storage keys so distinct variants do not collapse, but never pass
+-- it to FontStrings, search, or WoW's locale string helpers.
+function W.VisibleName(name)
+    name = tostring(name or "")
+    for index = 1, #name do
+        local byte = name:byte(index)
+        if byte and (byte < 32 or byte == 127) then
+            name = name:sub(1, index - 1)
+            break
+        end
+    end
+    return name:gsub("^%s+", ""):gsub("%s+$", "")
+end
+
 -- Returns the canonical weight key for a spellId: the DB comment (suffix
 -- stripped) when present, otherwise the stripped spell name as fallback.
 function W.CanonicalName(spellId)

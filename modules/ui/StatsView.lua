@@ -537,11 +537,30 @@ local function EarlySampleLabel(samples)
     return "Awaiting data", nil
 end
 
+local function VisibleEchoName(name)
+    if EbonBuilds.Weights and EbonBuilds.Weights.VisibleName then
+        return EbonBuilds.Weights.VisibleName(name)
+    end
+    local value = tostring(name or "")
+    for index = 1, #value do
+        local byte = value:byte(index)
+        if byte and (byte < 32 or byte == 127) then
+            value = value:sub(1, index - 1)
+            break
+        end
+    end
+    return value
+end
+
+local function LowerVisibleEchoName(name)
+    return string.lower(VisibleEchoName(name))
+end
+
 local function NormalizeEchoName(name)
     if EbonBuilds.BuildOverview and EbonBuilds.BuildOverview._NormalizeEchoName then
         return EbonBuilds.BuildOverview._NormalizeEchoName(name)
     end
-    local stripped = EbonBuilds.Weights.StripQualitySuffix(name or "")
+    local stripped = EbonBuilds.Weights.StripQualitySuffix(VisibleEchoName(name))
     return string.lower(stripped or "")
 end
 
@@ -601,14 +620,17 @@ local function BuildEchoRows(build, manualSuggestions, performanceStats, appeara
 
     for name, values in pairs(build.echoWeights or {}) do
         if EbonBuilds.Weights.HasNonZero(values) then
-            local entry = catalog[name]
+            local displayName = VisibleEchoName(name)
+            local entry = catalog[name] or catalog[displayName]
             local quality, weight, score = BestRankData(build, name, entry)
-            local appearance = appearanceStats and appearanceStats[name]
-            local performance = performanceStats and performanceStats[name]
-            local pickCount = picks[name] or 0
-            local recommendation = trainingByName[name]
+            local appearance = appearanceStats and (appearanceStats[name] or appearanceStats[displayName])
+            local performance = performanceStats and (performanceStats[name] or performanceStats[displayName])
+            local pickCount = picks[name] or picks[displayName] or 0
+            local recommendation = trainingByName[name] or trainingByName[displayName]
             rows[#rows + 1] = {
-                name = name,
+                name = displayName ~= "" and displayName or "Unknown Echo",
+                internalName = name,
+                sortName = LowerVisibleEchoName(displayName),
                 quality = quality,
                 weight = weight,
                 score = score,
@@ -704,7 +726,7 @@ local function BuildRecommendations(build, manualSuggestions)
         local qualityLabel = quality ~= nil and ((EbonBuilds.Quality.LABELS or {})[quality] or tostring(quality)) or nil
         AddRecommendation(out, {
             kind = suggested > current and "RAISE PRIORITY" or "LOWER PRIORITY",
-            target = suggestion.name .. (qualityLabel and (" · " .. qualityLabel) or ""),
+            target = VisibleEchoName(suggestion.name) .. (qualityLabel and (" · " .. qualityLabel) or ""),
             currentValue = current,
             suggestedValue = suggested,
             valueFormat = "number",
@@ -743,7 +765,7 @@ local function BuildRecommendations(build, manualSuggestions)
             end
             AddRecommendation(out, {
                 kind = suggested > current and "RAISE PRIORITY" or "LOWER PRIORITY",
-                target = suggestion.name or "Echo priority",
+                target = VisibleEchoName(suggestion.name) ~= "" and VisibleEchoName(suggestion.name) or "Echo priority",
                 currentValue = current,
                 suggestedValue = suggested,
                 valueFormat = "number",
@@ -990,7 +1012,8 @@ local function TopEntry(counts)
     for name, count in pairs(counts or {}) do
         if not bestCount or (tonumber(count) or 0) > bestCount then bestName, bestCount = name, tonumber(count) or 0 end
     end
-    return bestName and string.format("%s (%d)", bestName, bestCount) or "—"
+    local visible = bestName and VisibleEchoName(bestName) or nil
+    return visible and visible ~= "" and string.format("%s (%d)", visible, bestCount) or "—"
 end
 
 local function RefreshEarlyEpicCards()
@@ -1075,7 +1098,7 @@ local function RefreshSummary()
 end
 
 local function EchoSortValue(row, key)
-    if key == "name" then return string.lower(tostring(row.name or "")) end
+    if key == "name" then return row.sortName or LowerVisibleEchoName(row.name) end
     if key == "weight" then return tonumber(row.weight) end
     if key == "score" then return tonumber(row.score) end
     if key == "appearance" then return tonumber(row.appearancePct) end
@@ -1104,8 +1127,8 @@ local function CompareEchoRows(a, b, key, desc)
 
     -- table.sort is not stable in Lua 5.1. Deterministic tie breakers stop
     -- equal-value rows from visibly jumping between refreshes.
-    local an = string.lower(tostring(a.name or ""))
-    local bn = string.lower(tostring(b.name or ""))
+    local an = a.sortName or LowerVisibleEchoName(a.name)
+    local bn = b.sortName or LowerVisibleEchoName(b.name)
     if an ~= bn then return an < bn end
 
     local aq, bq = tonumber(a.quality) or 0, tonumber(b.quality) or 0
@@ -1586,7 +1609,7 @@ local function InspectRecommendation(recommendation)
     if not recommendation then return end
     if recommendation.section == "echo" and recommendation.echoName and EbonBuilds.SessionHistory and EbonBuilds.SessionHistory.OpenWithFilters then
         EbonBuilds.SessionHistory.OpenWithFilters({
-            echoName = recommendation.echoName,
+            echoName = VisibleEchoName(recommendation.echoName),
             source = recommendation.source == "Manual Training" and "manual" or nil,
             importantOnly = true,
         })

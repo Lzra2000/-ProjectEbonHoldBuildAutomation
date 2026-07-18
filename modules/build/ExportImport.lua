@@ -77,8 +77,22 @@ local function JSONEncode(value)
 		if value == math.huge or value == -math.huge then return "null" end
 		return tostring(value)
 	elseif t == "string" then
-		local escaped = value:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t")
-		return '"' .. escaped .. '"'
+		-- JSON requires every U+0000..U+001F control byte to be escaped.
+		-- Preserve hidden Echo-variant suffixes using valid \u00XX escapes.
+		local parts = {}
+		for index = 1, #value do
+			local byte = value:byte(index)
+			if byte == 34 then parts[#parts + 1] = '\\"'
+			elseif byte == 92 then parts[#parts + 1] = "\\\\"
+			elseif byte == 8 then parts[#parts + 1] = "\\b"
+			elseif byte == 9 then parts[#parts + 1] = "\\t"
+			elseif byte == 10 then parts[#parts + 1] = "\\n"
+			elseif byte == 12 then parts[#parts + 1] = "\\f"
+			elseif byte == 13 then parts[#parts + 1] = "\\r"
+			elseif byte < 32 then parts[#parts + 1] = string.format("\\u%04X", byte)
+			else parts[#parts + 1] = string.char(byte) end
+		end
+		return '"' .. table.concat(parts) .. '"'
 	elseif t == "table" then
 		local parts = {}
 		if IsArray(value) then
@@ -111,6 +125,22 @@ local function SkipWhitespace(s, pos)
 	return pos
 end
 
+local function CodepointToUTF8(code)
+	if not code then return "" end
+	if code <= 0x7F then
+		return string.char(code)
+	elseif code <= 0x7FF then
+		return string.char(0xC0 + math.floor(code / 0x40), 0x80 + (code % 0x40))
+	elseif code <= 0xFFFF then
+		return string.char(
+			0xE0 + math.floor(code / 0x1000),
+			0x80 + (math.floor(code / 0x40) % 0x40),
+			0x80 + (code % 0x40)
+		)
+	end
+	return ""
+end
+
 local function ParseValue(s, pos)
 	pos = SkipWhitespace(s, pos)
 	if pos > #s then return nil, pos end
@@ -131,11 +161,22 @@ local function ParseValue(s, pos)
 			elseif cc == 92 then -- backslash
 				pos = pos + 1
 				local ec = s:byte(pos)
-				if ec == 110 then out[#out + 1] = "\n"
+				if ec == 98 then out[#out + 1] = string.char(8)
+				elseif ec == 102 then out[#out + 1] = string.char(12)
+				elseif ec == 110 then out[#out + 1] = "\n"
 				elseif ec == 114 then out[#out + 1] = "\r"
 				elseif ec == 116 then out[#out + 1] = "\t"
 				elseif ec == 92 then out[#out + 1] = "\\"
 				elseif ec == 34 then out[#out + 1] = '"'
+				elseif ec == 117 then
+					local hex = s:sub(pos + 1, pos + 4)
+					local code = hex:match("^%x%x%x%x$") and tonumber(hex, 16) or nil
+					if code then
+						out[#out + 1] = CodepointToUTF8(code)
+						pos = pos + 4
+					else
+						out[#out + 1] = "u"
+					end
 				else out[#out + 1] = s:sub(pos, pos) end
 			else
 				out[#out + 1] = s:sub(pos, pos)

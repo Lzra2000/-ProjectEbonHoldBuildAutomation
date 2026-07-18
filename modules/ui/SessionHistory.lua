@@ -58,6 +58,35 @@ local pendingFilters
 local pendingDeleteSessionId
 local pendingClearSessionIds
 
+local function VisibleEchoName(name)
+    if EbonBuilds.Weights and EbonBuilds.Weights.VisibleName then
+        return EbonBuilds.Weights.VisibleName(name)
+    end
+    local value = tostring(name or "")
+    for index = 1, #value do
+        local byte = value:byte(index)
+        if byte and (byte < 32 or byte == 127) then
+            value = value:sub(1, index - 1)
+            break
+        end
+    end
+    return value
+end
+
+local function SearchSafeLower(value)
+    local source = tostring(value or "")
+    local out = {}
+    for index = 1, #source do
+        local byte = source:byte(index)
+        if byte and byte >= 32 and byte ~= 127 then
+            out[#out + 1] = string.char(byte)
+        else
+            out[#out + 1] = " "
+        end
+    end
+    return string.lower(table.concat(out))
+end
+
 ------------------------------------------------------------------------
 -- Data helpers
 ------------------------------------------------------------------------
@@ -273,7 +302,7 @@ local function SearchableText(entry)
         fields[#fields + 1] = tostring(choice.spellId or "")
         if choice.families then fields[#fields + 1] = tostring(choice.families) end
     end
-    return string.lower(table.concat(fields, " "))
+    return SearchSafeLower(table.concat(fields, " "))
 end
 
 local function EntryMatches(entry)
@@ -282,7 +311,7 @@ local function EntryMatches(entry)
     if sourceFilter ~= "All" and DecisionSource(entry) ~= sourceFilter then return false end
     if importantOnly and not IsImportant(entry) then return false end
     if searchText == "" then return true end
-    return SearchableText(entry):find(string.lower(searchText), 1, true) ~= nil
+    return SearchableText(entry):find(SearchSafeLower(searchText), 1, true) ~= nil
 end
 
 local function SortValue(wrapper, column)
@@ -291,7 +320,7 @@ local function SortValue(wrapper, column)
     if column == "action" then return string.lower(NormalizeAction(entry.action)) end
     if column == "subject" then
         local name = DecisionLabel(entry)
-        return string.lower(tostring(name or ""))
+        return SearchSafeLower(VisibleEchoName(name))
     end
     return wrapper.index or 0
 end
@@ -1520,7 +1549,7 @@ function H.OpenWithFilters(filters)
     local requested = filters or {}
     if EbonBuilds.BuildOverview and EbonBuilds.BuildOverview.OpenLogbook then EbonBuilds.BuildOverview.OpenLogbook() end
     pendingFilters = requested
-    searchText = string.lower(requested.echoName or "")
+    searchText = SearchSafeLower(VisibleEchoName(requested.echoName))
     actionFilter = requested.action or "All"
     if requested.source then
         sourceFilter = requested.source:lower():find("manual") and "Manual" or "Automatic"

@@ -25,7 +25,7 @@ local function CreateTitleBar(frame)
 
     local version = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     version:SetPoint("LEFT", title, "RIGHT", 8, -1)
-    version:SetText("v" .. tostring((GetAddOnMetadata and GetAddOnMetadata("EbonBuilds", "Version")) or EbonBuilds.VERSION or "3.0"))
+    version:SetText("v" .. tostring((GetAddOnMetadata and GetAddOnMetadata("EbonBuilds", "Version")) or EbonBuilds.VERSION or "2.6"))
     version:SetTextColor(unpack(EbonBuilds.Theme.TEXT_MUTED))
 
     pageLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -131,11 +131,10 @@ local function BuildSettingsPopup()
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetWidth(370)
-    -- Generous fixed height: this is a bounded set of controls (unlike the
-    -- FAQ's ever-growing changelog), so a comfortably oversized scroll
-    -- child costs nothing -- the scrollbar simply won't move if content is
-    -- shorter than it.
-    scrollChild:SetHeight(700)
+    -- Start near the current content size. OnShow recalculates this from the
+    -- final control positions so the dialog does not present a large empty
+    -- scroll range when all settings already fit in the viewport.
+    scrollChild:SetHeight(320)
     scrollFrame:SetScrollChild(scrollChild)
 
     local settingsScrollBar = EbonBuilds.Theme.CreateScrollBar(popup)
@@ -167,7 +166,14 @@ local function BuildSettingsPopup()
     -- never make two blocks overlap.
     local function AddSlider(labelText, flavorText, yAnchor, yOffset, minV, maxV, value)
         local label = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        label:SetPoint("TOPLEFT", yAnchor, "BOTTOMLEFT", 0, yOffset)
+        if yAnchor == scrollChild then
+            -- The first control belongs at the visible top of the scroll child.
+            -- Anchoring it to scrollChild's BOTTOMLEFT placed the entire settings
+            -- form below the viewport, leaving a blank black dialog.
+            label:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, yOffset)
+        else
+            label:SetPoint("TOPLEFT", yAnchor, "BOTTOMLEFT", 0, yOffset)
+        end
 
         local anchorForSlider = label
         local flavor
@@ -254,6 +260,18 @@ local function BuildSettingsPopup()
         "Colored dot on bag items missing an affix: red for a new line, purple for a rank you're missing on one you already have. Same as /ebb bagdots.",
         autoSellBottom, -10)
 
+    local function RefreshSettingsContentHeight()
+        local childTop = scrollChild:GetTop()
+        local contentBottom = bagDotsBottom:GetBottom()
+        local viewportHeight = scrollFrame:GetHeight() or 0
+        if childTop and contentBottom then
+            scrollChild:SetHeight(math.max(viewportHeight, childTop - contentBottom + 14))
+        else
+            scrollChild:SetHeight(math.max(viewportHeight, 320))
+        end
+        RefreshSettingsScrollRange()
+    end
+
     -- Buttons (outside the scrollframe, always visible)
     local saveBtn = EbonBuilds.Theme.CreateButton(popup)
     saveBtn:SetSize(80, 22)
@@ -299,6 +317,7 @@ local function BuildSettingsPopup()
         toastSlider:SetValue(gs.toastDuration or 3)
         autoSellCB:SetChecked(EbonBuilds.AutoSell and EbonBuilds.AutoSell.IsEnabled())
         bagDotsCB:SetChecked(EbonBuilds.BagAffixDots and EbonBuilds.BagAffixDots.IsEnabled())
+        RefreshSettingsContentHeight()
         settingsScrollBar:SetValue(0)
     end)
 
