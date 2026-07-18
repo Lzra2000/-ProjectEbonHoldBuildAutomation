@@ -843,6 +843,32 @@ do
     check(byFamily.Caster and byFamily.Caster.suggestedBonus < byFamily.Caster.currentBonus,
         "lower-value pure-Caster tier is suggested downward")
 
+    -- SuggestQualityBonusAdjustment had no test at all before this, and was
+    -- missing its final `return suggestions` -- every real call (once
+    -- enough tracked samples exist to pass the earlier guard clauses) threw
+    -- "attempt to get length of a nil value" at the call site instead of
+    -- returning results. Reuses the family fixture but spreads quality
+    -- tiers instead of families so real per-tier suggestions get generated.
+    EbonBuilds.EchoTableRows.BuildBestByName = function()
+        local t = {}
+        for i = 1, 5 do t["Rare" .. i] = { quality = 2, families = { "Tank" }, classMask = 128, spellId = 9300 + i } end
+        for i = 1, 5 do t["Uncommon" .. i] = { quality = 1, families = { "Tank" }, classMask = 128, spellId = 9400 + i } end
+        return t
+    end
+    build.echoWeights = {}
+    for i = 1, 5 do build.echoWeights["Rare" .. i] = 100 end
+    for i = 1, 5 do build.echoWeights["Uncommon" .. i] = 100 end
+    EbonBuilds.EchoPerformance.Clear()
+    EbonBuildsCharDB.echoPerformance = {}
+    for i = 1, 5 do EbonBuildsCharDB.echoPerformance["Rare" .. i] = { sum = (2000 + i * 5) * 10, count = 10 } end
+    for i = 1, 5 do EbonBuildsCharDB.echoPerformance["Uncommon" .. i] = { sum = (1000 + i * 5) * 10, count = 10 } end
+    EbonBuildsCharDB.echoPerformanceCommunity = {}
+
+    local okQuality, qualitySuggestions = pcall(EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment, build)
+    check(okQuality, "SuggestQualityBonusAdjustment does not error: " .. tostring(qualitySuggestions))
+    check(okQuality and type(qualitySuggestions) == "table", "SuggestQualityBonusAdjustment returns a table, not nil")
+    check(okQuality and #qualitySuggestions == 2, "Quality Bonus flags exactly the two quality tiers")
+
     EbonBuilds.EchoTableRows.BuildBestByName = originalCatalog
 end
 

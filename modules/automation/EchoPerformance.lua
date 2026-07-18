@@ -619,6 +619,7 @@ function EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment(build)
             end
         end
     end
+    return suggestions
 end
 
 ------------------------------------------------------------------------

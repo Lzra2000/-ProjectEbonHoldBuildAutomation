@@ -253,6 +253,15 @@ This is deliberately approximate, not a controlled measurement: echoes stack tog
 
 ## Changelog
 
+### 3.11 (2026-07-18) -- fix: AI report crashed for anyone with real DPS-tracking data
+
+Root cause, confirmed from an actual in-game error report: `EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment` was missing its final `return suggestions` -- it built the table, then fell off the end of the function and returned nil instead. `GenerateAIText` then did `#bonusSuggestions` on that nil and crashed with "attempt to get length of a nil value". Its sibling function, `SuggestFamilyBonusAdjustment` a few lines down, has the identical structure and does return correctly -- this was a copy-paste omission isolated to the one function.
+
+This only triggered once Echo Performance tracking had enough real samples to get past the function's earlier guard clauses (the reporter had 2000 samples), which is also why nothing in testing caught it before: `SuggestFamilyBonusAdjustment` had a regression test, `SuggestQualityBonusAdjustment` never did.
+
+- `modules/automation/EchoPerformance.lua`: added the missing `return suggestions`.
+- New test reproduces the exact crash against the unfixed code first (confirmed it fails with the same "attempt to get length of a nil value" the report showed), then verifies the fix returns real per-tier suggestions.
+
 ### 3.10 (2026-07-18) -- fix: /ebb errors stayed empty no matter what actually failed
 
 Root cause found for the "AI report does nothing and /ebb errors is empty" report: `EbonBuilds.ErrorLog.Protect`, the wrapper that catches a handler's error and records it, was only ever used in two places in the whole addon (both in `AutoSell.lua`). Every UI button, including this one, ran its `OnClick` completely unwrapped -- so a real Lua error there never reached EbonBuilds' own log at all. It would only ever show up via WoW's own built-in Lua error display, which is off by default. That combination -- something visibly not working, with nothing in `/ebb errors` -- was never actually proof that nothing was failing.
