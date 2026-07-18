@@ -11,6 +11,7 @@ local ROW_HEIGHT    = EbonBuilds.EchoTableRows.ROW_HEIGHT
 local COL_ICON      = EbonBuilds.EchoTableRows.COL_ICON
 local COL_QUALITY   = EbonBuilds.EchoTableRows.COL_QUALITY
 local COL_PROTECT   = EbonBuilds.EchoTableRows.COL_PROTECT
+local COL_POLICY    = EbonBuilds.EchoTableRows.COL_POLICY
 local RANK_COL_W    = EbonBuilds.EchoTableRows.RANK_COL_WIDTH
 local RANK_TOTAL    = EbonBuilds.EchoTableRows.RANK_TOTAL
 local QUALITY_ORDER = EbonBuilds.Quality.ORDER or {}
@@ -53,6 +54,7 @@ local headerButtons = {}
 local sortState = { key = "name", desc = false }
 local UpdateScrollRange, RefreshRows
 local resortFrame, resortPending = nil, false
+local policyRefreshFrame, policyRefreshPending = nil, false
 
 
 local function ScoreForRank(weights, settings, entry, quality)
@@ -283,9 +285,13 @@ local function CreateHeaders(parent)
     protectHdr:SetWidth(COL_PROTECT)
     protectHdr:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(RIGHT_MARGIN + RANK_TOTAL), -3)
 
+    local policyHdr = CreateStaticHeader(parent, "Policy")
+    policyHdr:SetWidth(COL_POLICY)
+    policyHdr:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(RIGHT_MARGIN + RANK_TOTAL + COL_PROTECT), -3)
+
     local qualityHdr = CreateHeaderButton(parent, "quality", "Quality", true)
     qualityHdr:SetWidth(COL_QUALITY)
-    qualityHdr:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(RIGHT_MARGIN + RANK_TOTAL + COL_PROTECT), -3)
+    qualityHdr:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -(RIGHT_MARGIN + RANK_TOTAL + COL_PROTECT + COL_POLICY), -3)
 
     for orderIndex, quality in ipairs(QUALITY_ORDER) do
         local key = "rank:" .. quality
@@ -297,7 +303,7 @@ local function CreateHeaders(parent)
     end
 
     local nameHdr = CreateHeaderButton(parent, "name", "Echo", false)
-    nameHdr:SetPoint("TOPLEFT", parent, "TOPLEFT", COL_ICON + 2, -3)
+    nameHdr:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -3)
     nameHdr:SetPoint("TOPRIGHT", qualityHdr, "TOPLEFT", -2, 0)
 
     UpdateHeaderVisuals()
@@ -326,6 +332,7 @@ end
 RefreshRows = function()
     local scrollOffset = math.floor(scrollBar:GetValue() / ROW_HEIGHT + 0.5)
     local visibleCount = GetVisibleCount()
+    local selectedNames = EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.SelectedNames() or {}
     for poolIdx = 1, visibleCount do
         if not rowPool[poolIdx] then
             rowPool[poolIdx] = EbonBuilds.EchoTableRows.CreateRow(scrollChild, poolIdx)
@@ -333,7 +340,7 @@ RefreshRows = function()
         end
         local entry = filteredList[scrollOffset + poolIdx]
         if entry then
-            EbonBuilds.EchoTableRows.Populate(rowPool[poolIdx], -(poolIdx - 1) * ROW_HEIGHT, entry)
+            EbonBuilds.EchoTableRows.Populate(rowPool[poolIdx], -(poolIdx - 1) * ROW_HEIGHT, entry, selectedNames)
         else
             rowPool[poolIdx]:Hide()
         end
@@ -395,6 +402,52 @@ function EbonBuilds.EchoTable.NotifyWeightChanged()
     if not scrollFrame or not SortDependsOnScore() then return end
     resortPending = true
     EnsureResortFrame():Show()
+end
+
+local function EnsurePolicyRefreshFrame()
+    if policyRefreshFrame then return policyRefreshFrame end
+    policyRefreshFrame = CreateFrame("Frame")
+    policyRefreshFrame:Hide()
+    policyRefreshFrame:SetScript("OnUpdate", function(self)
+        self:Hide()
+        if not policyRefreshPending then return end
+        policyRefreshPending = false
+        EbonBuilds.EchoTable.RefreshCurrentView(false)
+    end)
+    return policyRefreshFrame
+end
+
+function EbonBuilds.EchoTable.NotifyPolicyChanged()
+    if not scrollFrame then return end
+    policyRefreshPending = true
+    EnsurePolicyRefreshFrame():Show()
+end
+
+function EbonBuilds.EchoTable.ApplyPolicyToFiltered(policy)
+    local api = EbonBuilds.EchoPolicy
+    if not api or not api.IsValid(policy) then return 0 end
+    local settings = EbonBuilds.Scoring.GetEffectiveSettings()
+    local count = 0
+    local changed = false
+    for _, entry in ipairs(filteredList or {}) do
+        if api.Get(settings, entry.name) ~= policy then
+            api.Set(settings, entry.name, policy)
+            count = count + 1
+            changed = true
+        end
+        if api.IsBanishPolicy(policy) then
+            settings.echoWhitelist = settings.echoWhitelist or {}
+            if settings.echoWhitelist[entry.name] then
+                settings.echoWhitelist[entry.name] = nil
+                changed = true
+            end
+        end
+    end
+    if changed and EbonBuilds.BuildForm and EbonBuilds.BuildForm.PersistEditingSettings then
+        EbonBuilds.BuildForm.PersistEditingSettings()
+    end
+    if changed then EbonBuilds.EchoTable.NotifyPolicyChanged() end
+    return count
 end
 
 function EbonBuilds.EchoTable.RefreshCurrentView(resetScroll)

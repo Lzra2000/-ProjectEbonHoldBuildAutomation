@@ -382,6 +382,9 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
             baseWeight    = baseWeight,
             modifierDelta = (s.score or 0) - baseWeight,
             families      = s.data and s.data.families or nil,
+            policy        = s.policy,
+            policyEffect  = s.policyEffect,
+            policySelected = s.policySelected,
         }
     end
 
@@ -398,6 +401,14 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
     }
 
     local decision = DecisionMetadata(action, settings, build, source)
+    local policyTarget = choices[targetIndex or 0]
+    if policyTarget and policyTarget.policyEffect == "banish" and tostring(action or ""):find("^Banish") then
+        decision.reasonCode = "ECHO_POLICY_BANISH"
+        decision.policy = policyTarget.policy
+        decision.threshold = nil
+    elseif policyTarget and policyTarget.policy and policyTarget.policy ~= "normal" then
+        decision.policy = policyTarget.policy
+    end
     local sortedScores = {}
     for _, choice in ipairs(choices) do sortedScores[#sortedScores + 1] = tonumber(choice.score) or 0 end
     table.sort(sortedScores, function(a, b) return a > b end)

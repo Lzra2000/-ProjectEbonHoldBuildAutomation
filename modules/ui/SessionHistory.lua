@@ -176,6 +176,7 @@ local REASON_TEXT = {
     TWO_OFFERS_ABOVE_FREEZE_THRESHOLD = "Two offers exceeded the freeze threshold",
     HIGHEST_FINAL_SCORE = "Highest eligible final score",
     MANUAL_CHOICE = "Player made this choice manually",
+    ECHO_POLICY_BANISH = "A conditional Echo policy required this banish",
 }
 
 local function IsImportant(entry)

@@ -78,12 +78,13 @@ EbonBuilds.DebugLog = {
     AddF = function() end,
 }
 EbonBuilds.Toast = { ShowAutomationResult = function() end, Show = function() end }
-EbonBuilds.Session = { LogAction = function() end }
+EbonBuilds.Session = { LogAction = function() end, GetActiveSession = function() return EbonBuilds.Session._activeSession end }
 
 -- Load only the modules needed by these tests.
 dofile("modules/data/Quality.lua")
 dofile("modules/weights/Weights.lua")
 dofile("modules/build/Build.lua")
+dofile("modules/build/EchoPolicy.lua")
 dofile("modules/build/Scoring.lua")
 dofile("modules/build/ExportImport.lua")
 dofile("modules/build/EWL.lua")
@@ -114,6 +115,7 @@ do
 
     local legacy = EbonBuilds.Build.DefaultSettings()
     equal(legacy.rerollMode, "sum", "legacy/default migration behavior remains Classic")
+    check(type(legacy.echoPolicies) == "table", "default settings include conditional Echo policies")
 end
 
 EbonBuilds.EchoTableRows = {
@@ -523,10 +525,102 @@ do
     check(scored[1].isProtected, "existing family whitelist behavior is preserved")
 end
 
+-- Conditional Echo policy resolution is deterministic and canonicalized.
+do
+    local P = EbonBuilds.EchoPolicy
+    equal(P.Resolve(P.NORMAL, false), "normal", "Normal policy uses standard rules")
+    equal(P.Resolve(P.BANISH_ON_SIGHT, false), "banish", "Banish on Sight activates before first selection")
+    equal(P.Resolve(P.BANISH_ON_SIGHT, true), "normal", "Banish on Sight deactivates after first selection")
+    equal(P.Resolve(P.BANISH_AFTER_PICK, false), "normal", "Banish After Pick waits for first selection")
+    equal(P.Resolve(P.BANISH_AFTER_PICK, true), "banish", "Banish After Pick activates after selection")
+    equal(P.Resolve(P.IGNORE_AFTER_PICK, true), "exclude", "Ignore After Pick excludes selected Echoes")
+    equal(P.Resolve(P.NEVER_PICK, false), "exclude", "Never Pick is always a hard exclusion")
+
+    local settings = EbonBuilds.Build.DefaultSettings()
+    settings.echoWhitelist["Scorching Wounds"] = true
+    settings.echoPolicies["Scorching Wounds - Common"] = P.BANISH_ON_SIGHT
+    local build = { settings = settings, echoWeights = {} }
+    EbonBuilds.Build.NormalizeData(build)
+    equal(P.Get(build.settings, "Scorching Wounds"), P.BANISH_ON_SIGHT, "policy keys canonicalize across quality suffixes")
+    check(not build.settings.echoWhitelist["Scorching Wounds"], "specific banish policy clears conflicting explicit protection")
+end
+
+-- Current-run selection state is recovered from both session logs and granted perks.
+do
+    ProjectEbonhold.PerkService.GetGrantedPerks = function() return { ["Arcane Bond"] = 1 } end
+    EbonBuilds.Session._activeSession = {
+        logs = {
+            { action = "Select", targetIndex = 1, choices = { { index = 1, spellId = 100 } } },
+        },
+    }
+    local selected = EbonBuilds.EchoPolicy.SelectedNames()
+    check(selected["Scorching Wounds"], "selected Echo is recovered from the active Logbook session")
+    check(selected["Arcane Bond"], "selected Echo is recovered from granted-perk state")
+    EbonBuilds.Session._activeSession = nil
+    ProjectEbonhold.PerkService.GetGrantedPerks = function() return {} end
+end
+
+-- Hard exclusion policies are never violated by the selection fallback.
+do
+    local P = EbonBuilds.EchoPolicy
+    local settings = EbonBuilds.Build.DefaultSettings()
+    P.Set(settings, "Scorching Wounds", P.NEVER_PICK)
+    local scored = {
+        { spellId = 100, data = ProjectEbonhold.PerkDatabase[100], score = 100, index = 1 },
+        { spellId = 101, data = ProjectEbonhold.PerkDatabase[101], score = 10, index = 2 },
+    }
+    EbonBuilds.Automation._AnnotateScored(scored, settings, {}, {})
+    check(scored[1].policyBlocked and scored[1].policyEffect == "exclude", "Never Pick annotates the offer as blocked")
+    ProjectEbonhold._selected = nil
+    local ok = EbonBuilds.Automation._TrySelect(scored, settings, { stats = {} })
+    check(ok, "selection still succeeds when another eligible Echo exists")
+    equal(ProjectEbonhold._selected, 101, "Never Pick prevents selecting the higher-scoring blocked Echo")
+
+    P.Set(settings, "Arcane Bond", P.NEVER_PICK)
+    EbonBuilds.Automation._AnnotateScored(scored, settings, {}, {})
+    ProjectEbonhold._selected = nil
+    local blocked, _, reason = EbonBuilds.Automation._TrySelect(scored, settings, { stats = {} })
+    check(not blocked and reason == "policy_blocked", "all policy-blocked offers pause instead of violating the build")
+    equal(ProjectEbonhold._selected, nil, "no blocked Echo is selected as a fallback")
+end
+
+-- Mandatory policy banishes precede score thresholds and selection.
+do
+    local P = EbonBuilds.EchoPolicy
+    local settings = EbonBuilds.Build.DefaultSettings()
+    settings.autoBanishPct = 0
+    settings.autoRerollPct = 0
+    settings.autoFreezePct = 200
+    P.Set(settings, "Scorching Wounds", P.BANISH_ON_SIGHT)
+    local build = EbonBuilds.Build.NewObject({
+        title = "Policy automation", class = "MAGE",
+        echoWeights = { ["Scorching Wounds"] = { [0] = 100 }, ["Arcane Bond"] = { [2] = 10 } },
+        settings = settings, automationEnabled = true,
+    })
+    EbonBuildsDB.builds[build.id] = build
+    EbonBuildsCharDB.activeBuildId = build.id
+    ProjectEbonhold._choices = { { spellId = 100, quality = 0 }, { spellId = 101, quality = 2 } }
+    EbonholdPlayerRunData = { remainingBanishes = 1, totalRerolls = 0, usedRerolls = 0, totalFreezes = 0, usedFreezes = 0 }
+    ProjectEbonhold._banished = nil
+    ProjectEbonhold._selected = nil
+    check(EbonBuilds.Automation.Evaluate(), "Banish on Sight performs a mandatory policy action")
+    equal(ProjectEbonhold._banished, 0, "policy target is banished even though it has the highest score")
+    equal(ProjectEbonhold._selected, nil, "policy banish happens before selection")
+
+    build.settings.echoPolicies = {}
+    P.Set(build.settings, "Scorching Wounds", P.BANISH_AFTER_PICK)
+    ProjectEbonhold.PerkService.GetGrantedPerks = function() return { ["Scorching Wounds"] = 1 } end
+    ProjectEbonhold._banished = nil
+    check(EbonBuilds.Automation.Evaluate(), "Banish After Pick activates from current-run selection state")
+    equal(ProjectEbonhold._banished, 0, "Banish After Pick targets the previously selected Echo")
+    ProjectEbonhold.PerkService.GetGrantedPerks = function() return {} end
+end
+
 -- Export/import round-trip preserves negative and rank-specific values plus whitelist state.
 do
     local settings = EbonBuilds.Build.DefaultSettings()
     settings.echoWhitelist["Scorching Wounds"] = true
+    EbonBuilds.EchoPolicy.Set(settings, "Arcane Bond", EbonBuilds.EchoPolicy.IGNORE_AFTER_PICK)
     local build = EbonBuilds.Build.NewObject({
         title = "Round Trip",
         class = "MAGE",
@@ -542,6 +636,7 @@ do
     equal(decoded.echoWeights["Scorching Wounds"][1], 5, "Uncommon value survives export/import")
     equal(decoded.echoWeights["Scorching Wounds"][2], 30, "Rare value survives export/import")
     check(decoded.settings.echoWhitelist["Scorching Wounds"], "whitelist survives export/import")
+    equal(EbonBuilds.EchoPolicy.Get(decoded.settings, "Arcane Bond"), EbonBuilds.EchoPolicy.IGNORE_AFTER_PICK, "conditional policy survives export/import")
 end
 
 

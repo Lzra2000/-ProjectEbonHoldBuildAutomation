@@ -7,6 +7,7 @@
 
 core/Init.lua
 modules/build/Build.lua
+modules/build/EchoPolicy.lua
 modules/talents/Talents.lua
 modules/data/Quality.lua
 core/TomeAtlas.lua

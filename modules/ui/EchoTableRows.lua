@@ -13,10 +13,14 @@ local activeSortKey = "name"
 local RIGHT_MARGIN = 4
 
 Rows.COL_ICON       = 40
-Rows.COL_QUALITY    = 72
-Rows.COL_PROTECT    = 92
-Rows.RANK_COL_WIDTH = 62
-Rows.ROW_HEIGHT     = 54
+-- Keep the fixed action/value columns compact so the Echo column has enough
+-- room for readable names. Long names wrap to two lines instead of being
+-- shortened with an ellipsis.
+Rows.COL_QUALITY    = 70
+Rows.COL_PROTECT    = 84
+Rows.COL_POLICY     = 104
+Rows.RANK_COL_WIDTH = 56
+Rows.ROW_HEIGHT     = 60
 Rows.RANK_TOTAL     = #QUALITY_ORDER * Rows.RANK_COL_WIDTH
 
 function Rows.SetActiveSortKey(key)
@@ -154,15 +158,24 @@ local function HighestQuality(entry)
     return entry and entry.quality or 0
 end
 
-local function MaxWeight(entry)
-    local maxVal
+local function MaxTotalScore(entry)
+    local settings = GetSettings()
+    local maxScore
+    local any = false
     for _, quality in ipairs(QUALITY_ORDER) do
         if entry.qualities and entry.qualities[quality] then
-            local v = EbonBuilds.Weights.Get(entry.name, quality) or 0
-            if maxVal == nil or v > maxVal then maxVal = v end
+            local weight = EbonBuilds.Weights.Get(entry.name, quality) or 0
+            local score = EbonBuilds.Scoring.ScorePerQuality(entry, weight, settings, quality)
+            if maxScore == nil or score > maxScore then maxScore = score end
+            any = true
         end
     end
-    return maxVal or 0
+    if not any then
+        local quality = entry.quality or 0
+        local weight = EbonBuilds.Weights.Get(entry.name, quality) or 0
+        maxScore = EbonBuilds.Scoring.ScorePerQuality(entry, weight, settings, quality)
+    end
+    return maxScore or 0
 end
 
 local function QualityLabel(quality)
@@ -170,14 +183,14 @@ local function QualityLabel(quality)
 end
 local function UpdateProtectionVisual(row, entry, protected)
     row.protectToggle:SetChecked(protected)
-    local maxWeight = MaxWeight(entry)
+    local maxScore = MaxTotalScore(entry)
     if protected then
-        row.statusLabel:SetText(string.format("Protected · Max %d", maxWeight))
+        row.statusLabel:SetText(string.format("Protected · Max %d", maxScore))
         row.statusLabel:SetTextColor(unpack(EbonBuilds.Theme.SUCCESS))
         row.protectAccent:Show()
         row._baseBg:SetVertexColor(0.07, 0.11, 0.08, row._stripeEven and 0.28 or 0.20)
     else
-        row.statusLabel:SetText(string.format("Max %d", maxWeight))
+        row.statusLabel:SetText(string.format("Max %d", maxScore))
         row.statusLabel:SetTextColor(unpack(EbonBuilds.Theme.TEXT_MUTED))
         row.protectAccent:Hide()
         local alpha = row._stripeEven and 0.22 or 0.12
@@ -251,14 +264,109 @@ Rows.WireIconTooltip = WireIconTooltip
 local function CreateQualityBadge(row)
     local frame = CreateFrame("Frame", nil, row)
     frame:SetSize(Rows.COL_QUALITY - 10, 22)
-    frame:SetPoint("RIGHT", row, "RIGHT", -(RIGHT_MARGIN + Rows.RANK_TOTAL + Rows.COL_PROTECT + 5), 2)
+    frame:SetPoint("RIGHT", row, "RIGHT", -(RIGHT_MARGIN + Rows.RANK_TOTAL + Rows.COL_PROTECT + Rows.COL_POLICY + 5), 2)
     EbonBuilds.Theme.ApplyInput(frame)
 
     local label = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("CENTER")
+    label:SetPoint("LEFT", frame, "LEFT", 3, 0)
+    label:SetPoint("RIGHT", frame, "RIGHT", -3, 0)
     label:SetJustifyH("CENTER")
+    label:SetWordWrap(false)
     frame.label = label
     return frame
+end
+
+local function PolicyDefinition(policy)
+    local api = EbonBuilds.EchoPolicy
+    return api and api.Definition(policy) or { label = "Normal", shortLabel = "Normal", color = { 0.82, 0.82, 0.86 }, description = "Standard automation rules." }
+end
+
+local function UpdatePolicyVisual(row, entry, selectedNames)
+    if not row.policyDropdown or not entry then return end
+    local api = EbonBuilds.EchoPolicy
+    local settings = GetSettings()
+    local policy = api and api.Get(settings, entry.name) or "normal"
+    local selected = api and api.IsSelected(entry.name, selectedNames) or false
+    local definition = PolicyDefinition(policy)
+    row.policyDropdown:SetText(definition.shortLabel or definition.label)
+    if row.policyDropdown._label then row.policyDropdown._label:SetTextColor(unpack(definition.color or EbonBuilds.Theme.TEXT_PRIMARY)) end
+    if row.policyDropdown._container then
+        local c = definition.color or EbonBuilds.Theme.BORDER_DIM
+        row.policyDropdown._container:SetBackdropBorderColor(c[1], c[2], c[3], policy == "normal" and 0.45 or 0.90)
+    end
+    row.policyDropdown._policy = policy
+    row.policyDropdown._selectedOnce = selected
+end
+
+local function CreatePolicyDropdown(row)
+    local dropdown = EbonBuilds.Theme.CreateDropdown(row, Rows.COL_POLICY - 8, "Normal", { menuWidth = 270, rowHeight = 30 })
+    dropdown:SetPoint("RIGHT", row, "RIGHT", -(RIGHT_MARGIN + Rows.RANK_TOTAL + Rows.COL_PROTECT + 4), 2)
+
+    dropdown:SetMenuBuilder(function()
+        local api = EbonBuilds.EchoPolicy
+        local entry = row._entry
+        if not api or not entry then return {} end
+        local settings = GetSettings()
+        local current = api.Get(settings, entry.name)
+        local selected = api.IsSelected(entry.name)
+        local items = {}
+        for _, policy in ipairs(api.ORDER or {}) do
+            local policyKey = policy
+            local definition = api.Definition(policyKey)
+            items[#items + 1] = {
+                text = definition.label,
+                checked = current == policyKey,
+                color = definition.color,
+                tooltipTitle = definition.group .. " - " .. definition.label,
+                tooltipBody = definition.description .. "\n\nCurrent effect: " .. api.EffectText(policyKey, selected),
+                func = function()
+                    local liveEntry = row._entry
+                    if not liveEntry then return end
+                    local liveSettings = GetSettings()
+                    api.Set(liveSettings, liveEntry.name, policyKey)
+                    if api.IsBanishPolicy(policyKey) then
+                        liveSettings.echoWhitelist = liveSettings.echoWhitelist or {}
+                        liveSettings.echoWhitelist[liveEntry.name] = nil
+                    end
+                    PersistSettings()
+                    UpdateProtectionVisual(row, liveEntry, IsWhitelisted(liveEntry.name))
+                    UpdatePolicyVisual(row, liveEntry)
+                    if EbonBuilds.EchoTable and EbonBuilds.EchoTable.NotifyPolicyChanged then
+                        EbonBuilds.EchoTable.NotifyPolicyChanged()
+                    end
+                end,
+            }
+        end
+        return items
+    end)
+
+    if dropdown._button and dropdown._button.HookScript then
+        dropdown._button:HookScript("OnEnter", function(self)
+            local entry = row._entry
+            local api = EbonBuilds.EchoPolicy
+            if not entry or not api then return end
+            local policy = api.Get(GetSettings(), entry.name)
+            local selected = api.IsSelected(entry.name)
+            local definition = api.Definition(policy)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(definition.label, 1, 0.82, 0)
+            GameTooltip:AddLine(definition.description, 0.82, 0.82, 0.86, true)
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine(api.EffectText(policy, selected), unpack(definition.color))
+            GameTooltip:AddLine("Changes remain staged until Save.", 0.55, 0.58, 0.64, true)
+            GameTooltip:Show()
+        end)
+        dropdown._button:HookScript("OnLeave", function()
+            GameTooltip:Hide()
+            if row._entry then UpdatePolicyVisual(row, row._entry) end
+        end)
+    end
+    if dropdown._menu and dropdown._menu.HookScript then
+        dropdown._menu:HookScript("OnHide", function()
+            if row._entry then UpdatePolicyVisual(row, row._entry) end
+        end)
+    end
+    return dropdown
 end
 
 local function CreateProtectToggle(row)
@@ -290,10 +398,17 @@ local function CreateProtectToggle(row)
         if newValue then
             settings.echoWhitelist[entry.name] = true
             RemoveBanConflicts(settings, entry)
+            if EbonBuilds.EchoPolicy then
+                local policy = EbonBuilds.EchoPolicy.Get(settings, entry.name)
+                if EbonBuilds.EchoPolicy.IsBanishPolicy(policy) then
+                    EbonBuilds.EchoPolicy.Set(settings, entry.name, EbonBuilds.EchoPolicy.NORMAL)
+                end
+            end
         else
             settings.echoWhitelist[entry.name] = nil
         end
         UpdateProtectionVisual(row, entry, newValue)
+        UpdatePolicyVisual(row, entry)
         PersistSettings()
         UpdateScores(row, entry)
         if EbonBuilds.Toast and EbonBuilds.Toast.Show then
@@ -575,16 +690,21 @@ function Rows.CreateRow(parent, index)
     WireIconTooltip(row.iconFrame)
 
     row.nameLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    row.nameLabel:SetPoint("TOPLEFT", row.iconFrame, "TOPRIGHT", 8, -7)
-    row.nameLabel:SetPoint("RIGHT", row, "RIGHT", -(RIGHT_MARGIN + Rows.RANK_TOTAL + Rows.COL_PROTECT + Rows.COL_QUALITY + 8), 0)
+    row.nameLabel:SetPoint("TOPLEFT", row.iconFrame, "TOPRIGHT", 8, -5)
+    row.nameLabel:SetPoint("RIGHT", row, "RIGHT", -(RIGHT_MARGIN + Rows.RANK_TOTAL + Rows.COL_PROTECT + Rows.COL_POLICY + Rows.COL_QUALITY + 8), 0)
+    row.nameLabel:SetHeight(30)
     row.nameLabel:SetJustifyH("LEFT")
+    row.nameLabel:SetJustifyV("TOP")
+    if row.nameLabel.SetWordWrap then row.nameLabel:SetWordWrap(true) end
+    if row.nameLabel.SetNonSpaceWrap then row.nameLabel:SetNonSpaceWrap(false) end
 
     row.statusLabel = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    row.statusLabel:SetPoint("TOPLEFT", row.nameLabel, "BOTTOMLEFT", 0, -2)
+    row.statusLabel:SetPoint("BOTTOMLEFT", row.iconFrame, "BOTTOMRIGHT", 8, 6)
     row.statusLabel:SetPoint("RIGHT", row.nameLabel, "RIGHT", 0, 0)
     row.statusLabel:SetJustifyH("LEFT")
 
     row.qualityBadge = CreateQualityBadge(row)
+    row.policyDropdown = CreatePolicyDropdown(row)
     row.protectToggle = CreateProtectToggle(row)
     row.rankCells = {}
     for indexInOrder, quality in ipairs(QUALITY_ORDER) do
@@ -595,8 +715,9 @@ function Rows.CreateRow(parent, index)
     return row
 end
 
-function Rows.Populate(row, yOffset, entry)
+function Rows.Populate(row, yOffset, entry, selectedNames)
     RevertInvalidBeforeRecycle(row, entry)
+    if row._entry ~= entry and row.policyDropdown and row.policyDropdown.CloseMenu then row.policyDropdown:CloseMenu() end
 
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 0, yOffset)
@@ -615,6 +736,7 @@ function Rows.Populate(row, yOffset, entry)
         row.qualityBadge:SetBackdropBorderColor(rgb[1], rgb[2], rgb[3], activeSortKey == "quality" and 1 or 0.60)
     end
     UpdateProtectionVisual(row, entry, IsWhitelisted(entry.name))
+    UpdatePolicyVisual(row, entry, selectedNames)
 
     for _, quality in ipairs(QUALITY_ORDER) do
         local cell = row.rankCells[quality]
@@ -642,3 +764,5 @@ function Rows.Populate(row, yOffset, entry)
     UpdateScores(row, entry)
     row:Show()
 end
+
+Rows.UpdatePolicyVisual = UpdatePolicyVisual

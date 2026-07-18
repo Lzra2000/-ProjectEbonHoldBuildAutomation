@@ -155,6 +155,10 @@ local uiContracts = {
     { "Filters.LearnedOnly", EbonBuilds.Filters and EbonBuilds.Filters.LearnedOnly },
     { "EchoTable.ValidateAndCommitAll", EbonBuilds.EchoTable and EbonBuilds.EchoTable.ValidateAndCommitAll },
     { "EchoTable.NotifyWeightChanged", EbonBuilds.EchoTable and EbonBuilds.EchoTable.NotifyWeightChanged },
+    { "EchoTable.NotifyPolicyChanged", EbonBuilds.EchoTable and EbonBuilds.EchoTable.NotifyPolicyChanged },
+    { "EchoTable.ApplyPolicyToFiltered", EbonBuilds.EchoTable and EbonBuilds.EchoTable.ApplyPolicyToFiltered },
+    { "EchoPolicy.Resolve", EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.Resolve },
+    { "EchoPolicy.SelectedNames", EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.SelectedNames },
     { "BonusView.ValidateAndCommitAll", EbonBuilds.BonusView and EbonBuilds.BonusView.ValidateAndCommitAll },
     { "BuildTabs.ShowTab", EbonBuilds.BuildTabs and EbonBuilds.BuildTabs.ShowTab },
     { "BuildTabs.MarkDirty", EbonBuilds.BuildTabs and EbonBuilds.BuildTabs.MarkDirty },
@@ -204,6 +208,104 @@ do
     end
 end
 print("Verified SessionHistory builders stay below the Lua 5.1 upvalue limit.")
+
+-- Conditional Echo policies must remain visible in the Echo table and must
+-- be enforced as hard automation rules rather than score-only suggestions.
+do
+    local requiredSources = {
+        { "EbonBuilds.toc", "modules/build/EchoPolicy.lua" },
+        { "modules/ui/EchoTableRows.lua", "Rows.COL_POLICY     = 104" },
+        { "modules/ui/EchoTableRows.lua", "CreatePolicyDropdown(row)" },
+        { "modules/ui/EchoTable.lua", 'CreateStaticHeader(parent, "Policy")' },
+        { "modules/ui/Filters.lua", "CreatePolicyDropdown(bar)" },
+        { "modules/ui/Filters.lua", "CreateBulkPolicyDropdown(bar)" },
+        { "modules/automation/Automation.lua", "not s.policyBlocked" },
+        { "modules/automation/Automation.lua", 'return false, nil, "policy_blocked"' },
+        { "modules/session/Session.lua", 'decision.reasonCode = "ECHO_POLICY_BANISH"' },
+    }
+    for _, definition in ipairs(requiredSources) do
+        local file = assert(io.open(definition[1], "r"))
+        local source = file:read("*a")
+        file:close()
+        if not source:find(definition[2], 1, true) then
+            io.stderr:write("ECHO POLICY UI FAIL: missing " .. definition[2] .. " in " .. definition[1] .. "\n")
+            os.exit(1)
+        end
+    end
+end
+print("Verified conditional Echo policy controls and hard automation enforcement.")
+
+-- The policy controls must not force Echo names into an unreadably narrow,
+-- single-line column. Keep the fixed columns compact and reserve two lines for
+-- the complete visible Echo name.
+do
+    local file = assert(io.open("modules/ui/EchoTableRows.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    local required = {
+        "Rows.COL_QUALITY    = 70",
+        "Rows.COL_PROTECT    = 84",
+        "Rows.COL_POLICY     = 104",
+        "Rows.RANK_COL_WIDTH = 56",
+        "Rows.ROW_HEIGHT     = 60",
+        "row.nameLabel:SetHeight(30)",
+        "row.nameLabel:SetWordWrap(true)",
+        "row.nameLabel:SetNonSpaceWrap(false)",
+        "label:SetPoint(\"LEFT\", frame, \"LEFT\", 3, 0)",
+        "label:SetPoint(\"RIGHT\", frame, \"RIGHT\", -3, 0)",
+    }
+    for _, fragment in ipairs(required) do
+        if not source:find(fragment, 1, true) then
+            io.stderr:write("ECHO NAME LAYOUT FAIL: missing " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+end
+print("Verified long Echo names receive a compact, two-line table column.")
+
+-- The compact Max value beneath each Echo name must represent the same final
+-- total score shown in the rank columns, not merely the largest raw weight.
+do
+    local file = assert(io.open("modules/ui/EchoTableRows.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    local required = {
+        "local function MaxTotalScore(entry)",
+        "EbonBuilds.Scoring.ScorePerQuality(entry, weight, settings, quality)",
+        'row.statusLabel:SetText(string.format("Max %d", maxScore))',
+        'row.statusLabel:SetText(string.format("Protected · Max %d", maxScore))',
+    }
+    for _, fragment in ipairs(required) do
+        if not source:find(fragment, 1, true) then
+            io.stderr:write("ECHO MAX SCORE FAIL: missing " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+    if source:find("local function MaxWeight(entry)", 1, true) then
+        io.stderr:write("ECHO MAX SCORE FAIL: status still derives from raw weight\n")
+        os.exit(1)
+    end
+end
+print("Verified Echo row Max values use final total score rather than raw weight.")
+
+-- The Echo sort control represents the complete Echo column, including the
+-- icon gutter, and must remain inside the shared table header bounds.
+do
+    local file = assert(io.open("modules/ui/EchoTable.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    local required = {
+        'nameHdr:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -3)',
+        'nameHdr:SetPoint("TOPRIGHT", qualityHdr, "TOPLEFT", -2, 0)',
+    }
+    for _, fragment in ipairs(required) do
+        if not source:find(fragment, 1, true) then
+            io.stderr:write("ECHO HEADER LAYOUT FAIL: missing " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+end
+print("Verified the Echo name sort control fills the complete header column.")
 
 -- The run selector must remain a bounded virtualized browser. A generic
 -- dropdown creates one button per session and can cover the entire screen.

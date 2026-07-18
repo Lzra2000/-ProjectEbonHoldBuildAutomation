@@ -32,6 +32,7 @@ local function DefaultSettings()
         noveltyMode      = false,
         echoBanList      = {},
         echoWhitelist    = {},
+        echoPolicies     = {},
         echoBanAllMode   = "highestScore",
     }
 end
@@ -124,6 +125,9 @@ local function NormalizeProtection(build)
         end
     end
     settings.echoBanList = cleanBanList
+    if EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.Normalize then
+        EbonBuilds.EchoPolicy.Normalize(settings)
+    end
 end
 
 function EbonBuilds.Build.NormalizeData(build)

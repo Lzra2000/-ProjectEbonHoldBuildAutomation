@@ -27,6 +27,7 @@ local origPerkUIShow    = nil
 local freezeRoundActive    = false  -- true after freeze batch, cleared on select
 local locallyFrozenIndices = {}     -- indices frozen this round, for penalty tracking
 local cachedPeak           = nil    -- locked at first evaluation of the run
+local lastNoActionReason    = nil
 
 ------------------------------------------------------------------------
 -- Internal helpers
@@ -45,6 +46,7 @@ local function StartEvalTimer()
                 local isTraining = build and EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.IsEnabled(build)
                 if EbonBuilds.Automation.Evaluate() then
                     pendingChoices = nil
+                    lastNoActionReason = nil
                     return
                 end
                 -- Automation couldn't act, show the native perk UI. Only
@@ -62,11 +64,12 @@ local function StartEvalTimer()
                             EbonBuilds.Toast.Show("Automation paused: Manual Training is ON for this build (its toggle on the build overview turns it off)")
                         end
                     elseif wasActive then
-                        EbonBuilds.Toast.Show("Automation: no rule matched, choose manually")
+                        EbonBuilds.Toast.Show(lastNoActionReason or "Automation: no rule matched, choose manually")
                     end
                     origPerkUIShow(pendingChoices)
                 end
                 pendingChoices = nil
+                lastNoActionReason = nil
             end
         end)
     end
@@ -265,30 +268,38 @@ end
 -- Action attempts (called in priority order)
 ------------------------------------------------------------------------
 
+local function IsActionable(s)
+    return s and not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] and not s.policyBlocked
+end
+
 local function TrySelect(scored, settings, build)
-    local nonBanned, all = {}, {}
+    local nonBanned, eligible = {}, {}
     for _, s in ipairs(scored) do
-        -- An echo frozen THIS round must not be selected now -- the entire
-        -- point of spending the freeze charge is to take something else on
-        -- this screen and collect the frozen one later. Without this filter
-        -- a frozen echo that is (tied-)best gets picked immediately and the
-        -- charge is wasted.
-        if not locallyFrozenIndices[s.index] then
-            all[#all + 1] = s
+        -- Conditional policies are hard selection rules. Unlike the legacy
+        -- ban list, they are never violated merely because every card happens
+        -- to be blocked on the current board.
+        if not locallyFrozenIndices[s.index] and not s.policyBlocked then
+            eligible[#eligible + 1] = s
             if not EbonBuilds.Scoring.IsBanned(s.spellId, settings) then
                 nonBanned[#nonBanned + 1] = s
             end
         end
     end
-    -- Fallback: if literally everything on screen is locally frozen (should
-    -- not happen -- we freeze at most one per eval), allow them after all.
-    if #all == 0 then
+    -- Preserve the old freeze safety fallback only for locally frozen cards;
+    -- policy-blocked cards remain excluded.
+    if #eligible == 0 then
+        local anyPolicyBlocked = false
         for _, s in ipairs(scored) do
-            all[#all + 1] = s
-            if not EbonBuilds.Scoring.IsBanned(s.spellId, settings) then nonBanned[#nonBanned + 1] = s end
+            if s.policyBlocked then
+                anyPolicyBlocked = true
+            else
+                eligible[#eligible + 1] = s
+                if not EbonBuilds.Scoring.IsBanned(s.spellId, settings) then nonBanned[#nonBanned + 1] = s end
+            end
         end
+        if anyPolicyBlocked and #eligible == 0 then return false, nil, "policy_blocked" end
     end
-    local candidates = #nonBanned > 0 and nonBanned or all
+    local candidates = #nonBanned > 0 and nonBanned or eligible
     if #candidates == 0 then return false, nil end
 
     table.sort(candidates, function(a, b) return a.score > b.score end)
@@ -305,12 +316,19 @@ local function TrySelect(scored, settings, build)
     return true, pick
 end
 
-local function AnnotateScored(scored, settings, lockedList)
+local function AnnotateScored(scored, settings, lockedList, selectedNames)
     local familyWhitelist = settings.banishFamilyWhitelist or {}
+    local policyApi = EbonBuilds.EchoPolicy
     for _, s in ipairs(scored) do
         s.isWhitelisted = EbonBuilds.Scoring.IsWhitelisted(s.spellId, settings)
         s.isBanned      = EbonBuilds.Scoring.IsBanned(s.spellId, settings)
         s.isProtected   = s.isWhitelisted or IsFamilyProtected(s.data, familyWhitelist)
+        if policyApi then
+            s.policy = policyApi.Get(settings, s.spellId)
+            s.policySelected = policyApi.IsSelected(s.spellId, selectedNames)
+            s.policyEffect = policyApi.Resolve(s.policy, s.policySelected)
+            s.policyBlocked = s.policyEffect == "banish" or s.policyEffect == "exclude"
+        end
         s.isLocked      = false
         for _, lockedId in ipairs(lockedList) do
             if lockedId and lockedId == s.spellId then
@@ -346,6 +364,7 @@ function EbonBuilds.Automation.Evaluate()
     evalInProgress = true
 
     local function body()
+        lastNoActionReason = nil
         local build = EbonBuilds.Build.GetActive()
         if not build then return false end
 
@@ -400,7 +419,8 @@ function EbonBuilds.Automation.Evaluate()
             EbonBuilds.Calibration.MaybeAutoTune()
         end
 
-        AnnotateScored(scored, settings, lockedList)
+        local selectedNames = EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.SelectedNames() or {}
+        AnnotateScored(scored, settings, lockedList, selectedNames)
 
         if EbonBuilds.DebugLog.IsEnabled() then
             local banishRemainingDbg = (runData and runData.remainingBanishes) or 0
@@ -454,13 +474,16 @@ function EbonBuilds.Automation.Evaluate()
                     s.isFrozen and " FROZEN" or "",
                     s.isCarried and " CARRIED" or "",
                     locallyFrozenIndices[s.index] and " localFrozen" or "")
+                if s.policy and s.policy ~= "normal" then
+                    EbonBuilds.DebugLog.AddF("      policy=%s selected=%s effect=%s", s.policy, tostring(s.policySelected), tostring(s.policyEffect))
+                end
             end
         end
 
         -- PRE-CHECK: if any offered echo matches a locked echo slot, select it
         for _, s in ipairs(scored) do
             for _, lockedId in ipairs(lockedList) do
-                if lockedId and lockedId == s.spellId then
+                if lockedId and lockedId == s.spellId and not s.policyBlocked then
                     ProjectEbonhold.PerkService.SelectPerk(s.spellId)
                     RecordPick(build, s)
                     EbonBuilds.DebugLog.AddF("-> SELECT locked-match [%d] %s", s.index, s.name)
@@ -476,9 +499,27 @@ function EbonBuilds.Automation.Evaluate()
         if runData and (runData.remainingBanishes or 0) > 0 then
             table.sort(scored, function(a, b) return a.score < b.score end)
 
+            -- Explicit conditional policy actions take precedence over the
+            -- legacy ban list and score threshold. A per-Echo policy is more
+            -- specific than family protection, so it is allowed to spend the
+            -- banish even when that family is otherwise protected.
+            for _, s in ipairs(scored) do
+                if IsActionable(s) == false and s.policyEffect == "banish"
+                    and not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] then
+                    local ok = ProjectEbonhold.PerkService.BanishPerk(s.index - 1)
+                    if ok then
+                        RecordBanish(build, s)
+                        table.sort(scored, function(a, b) return a.index < b.index end)
+                        EbonBuilds.DebugLog.AddF("-> BANISH policy [%d] %s (%s)", s.index, s.name, tostring(s.policy))
+                        LogAndToast(scored, "Banish", s.index)
+                        return true
+                    end
+                end
+            end
+
             -- Ban-list echoes first (these have minimum priority)
             for _, s in ipairs(scored) do
-                if not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] and s.isBanned then
+                if IsActionable(s) and s.isBanned then
                     if not s.isProtected then
                         local ok = ProjectEbonhold.PerkService.BanishPerk(s.index - 1)
                         if ok then
@@ -507,7 +548,7 @@ function EbonBuilds.Automation.Evaluate()
                 threshold = math.floor(peakScore * settings.autoBanishPct / 100 * banishPacing)
             end
             for _, s in ipairs(scored) do
-                if not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] and s.score < threshold then
+                if IsActionable(s) and s.score < threshold then
                     if not s.isProtected then
                         local ok = ProjectEbonhold.PerkService.BanishPerk(s.index - 1)
                         if ok then
@@ -543,7 +584,7 @@ function EbonBuilds.Automation.Evaluate()
                 local ev = EbonBuilds.Automation.GetRerollEV()
                 local best = 0
                 for _, s in ipairs(scored) do
-                    if not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] then
+                    if IsActionable(s) then
                         if s.score > best then best = s.score end
                     end
                 end
@@ -589,7 +630,7 @@ function EbonBuilds.Automation.Evaluate()
                 local guardThreshold = math.floor(peakScore * guardPct / 100 * guardPacing)
                 local blockedByGuard = false
                 for _, s in ipairs(scored) do
-                    if s.score >= guardThreshold then
+                    if IsActionable(s) and s.score >= guardThreshold then
                         blockedByGuard = true
                         EbonBuilds.DebugLog.AddF("reroll blocked by guard: [%d] %s %.0f >= %d (pacing %.2f)", s.index, s.name, s.score or 0, guardThreshold, guardPacing)
                         break
@@ -597,7 +638,7 @@ function EbonBuilds.Automation.Evaluate()
                 end
                 if not blockedByGuard then
                     local sum = 0
-                    for _, s in ipairs(scored) do sum = sum + s.score end
+                    for _, s in ipairs(scored) do if IsActionable(s) then sum = sum + s.score end end
                     -- Same charge pacing concept as Smart mode: get pickier
                     -- as reroll charges run low, so it can't burn through
                     -- everything early on borderline offers.
@@ -659,7 +700,7 @@ function EbonBuilds.Automation.Evaluate()
             -- are already frozen (server), carried, or locally frozen this round.
             local aboveChoices = {}
             for _, s in ipairs(scored) do
-                if not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] and s.score > threshold then
+                if IsActionable(s) and s.score > threshold then
                     aboveChoices[#aboveChoices + 1] = s
                 end
             end
@@ -699,14 +740,19 @@ function EbonBuilds.Automation.Evaluate()
         -- NOTE: locallyFrozenIndices must still be intact here so TrySelect
         -- can exclude the echo frozen this round. It gets cleared after the
         -- pick (a select ends this choice screen).
-        local ok, pick = TrySelect(scored, settings, build)
+        local ok, pick, failureReason = TrySelect(scored, settings, build)
         locallyFrozenIndices = {}
         freezeRoundActive = false
         if ok and pick then
             EbonBuilds.DebugLog.AddF("-> SELECT [%d] %s (score %.0f)", pick.index, pick.name, pick.score or 0)
             LogAndToast(scored, "Select", pick.index)
         elseif not ok then
-            EbonBuilds.DebugLog.Add("-> NO ACTION (select failed or nothing eligible)")
+            if failureReason == "policy_blocked" then
+                lastNoActionReason = "Autopilot paused: all current offers are blocked by Echo policies"
+                EbonBuilds.DebugLog.Add("-> NO ACTION (all offers blocked by Echo policies)")
+            else
+                EbonBuilds.DebugLog.Add("-> NO ACTION (select failed or nothing eligible)")
+            end
         end
         return ok
     end

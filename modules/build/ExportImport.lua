@@ -630,6 +630,32 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
         add("")
     end
 
+    if EbonBuilds.EchoPolicy then
+        local policyGroups = {}
+        for _, policy in ipairs(EbonBuilds.EchoPolicy.ORDER or {}) do policyGroups[policy] = {} end
+        for name, policy in pairs(s.echoPolicies or {}) do
+            if policyGroups[policy] then
+                local visibleName = EbonBuilds.Weights and EbonBuilds.Weights.VisibleName and EbonBuilds.Weights.VisibleName(name) or name
+                policyGroups[policy][#policyGroups[policy] + 1] = visibleName
+            end
+        end
+        local anyPolicy = false
+        for _, policy in ipairs(EbonBuilds.EchoPolicy.ORDER or {}) do
+            if policy ~= EbonBuilds.EchoPolicy.NORMAL and #policyGroups[policy] > 0 then anyPolicy = true end
+        end
+        if anyPolicy then
+            add("--- Conditional Echo policies ---")
+            for _, policy in ipairs(EbonBuilds.EchoPolicy.ORDER or {}) do
+                local names = policyGroups[policy]
+                if policy ~= EbonBuilds.EchoPolicy.NORMAL and #names > 0 then
+                    table.sort(names)
+                    add("%s: %s", EbonBuilds.EchoPolicy.Definition(policy).label, table.concat(names, ", "))
+                end
+            end
+            add("")
+        end
+    end
+
     -- Class-eligible echoes: EVERY echo available to this class (not just
     -- ones with a configured weight), each with its actual effect
     -- description -- reuses EchoTableRows.BuildBestByName, the exact same
