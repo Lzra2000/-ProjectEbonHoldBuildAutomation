@@ -500,20 +500,41 @@ do
 end
 print("Verified readable Decision Inspector resource changes and remaining charges.")
 
--- The first control in each Settings category panel must be anchored at
--- the panel's visible top. Anchoring to BOTTOMLEFT (the old scrollChild
--- pattern's mistake) makes the panel appear blank.
+-- The global settings popup must never depend on post-3.3.5 SetShown,
+-- must stage edits until Save, and must expose a visible error fallback rather
+-- than leaving the user with an empty panel when one category fails.
 do
     local file = assert(io.open("modules/ui/MainWindow.lua", "r"))
     local source = file:read("*a")
     file:close()
-    if not source:find('if yAnchor == parent then', 1, true)
-        or not source:find('label:SetPoint("TOPLEFT", parent, "TOPLEFT"', 1, true) then
-        io.stderr:write("SETTINGS POPUP FAIL: first setting is not anchored to the visible top of its category panel\n")
+    local required = {
+        'popup:SetSize(640, 520)',
+        'popup:SetClampedToScreen(true)',
+        'local function ReadSavedDraft()',
+        'local function CountDirtyFields()',
+        'local function ShowSettingsErrorState(err)',
+        'local ok, err = pcall(builder, panel)',
+        'Theme.BindScrollWheel(settingsScroll, settingsScrollBar, 32, scrollChild)',
+        'closeBtn:SetScript("OnClick", CancelAndHide)',
+        'EbonBuildsGlobalSettingsPopup',
+        'No unsaved changes',
+    }
+    for _, fragment in ipairs(required) do
+        if not source:find(fragment, 1, true) then
+            io.stderr:write("SETTINGS POPUP FAIL: missing " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+    if source:find('panel:SetShown', 1, true) then
+        io.stderr:write("SETTINGS POPUP FAIL: settings still relies on SetShown instead of 3.3.5-safe Show/Hide\n")
+        os.exit(1)
+    end
+    if source:find('EbonBuilds.Locale.SetLocale(entry.code)', 1, true) then
+        io.stderr:write("SETTINGS POPUP FAIL: language selection is still applied before Save\n")
         os.exit(1)
     end
 end
-print("Verified global Settings controls begin inside the visible viewport.")
+print("Verified staged, defensive, 3.3.5-safe global Settings rendering.")
 
 -- EWL export is available from the build overview and the Settings popup.
 do
@@ -586,48 +607,57 @@ do
 end
 print("Verified every removed /ebb subcommand has a Settings popup replacement, and none remain in the dispatcher.")
 
--- Settings popup category tabs: five categories switch panel visibility
--- and tab selection together, and Save reads every checkbox's state
--- directly (not gated behind "only if that category is currently shown"),
--- so switching tabs can never silently discard a change made on another
--- one before Save is clicked.
+-- The redesigned Settings popup has five vertical categories. Switching pages
+-- uses WoW 3.3.5-safe Show/Hide calls, while every edited control writes into a
+-- shared draft that Save commits regardless of which category is visible.
 do
     local file = assert(io.open("modules/ui/MainWindow.lua", "r"))
     local source = file:read("*a")
     file:close()
 
+    local categoriesStart = source:find("local SETTINGS_CATEGORIES = {", 1, true)
+    local categoriesEnd = categoriesStart and source:find("\n}\n\nlocal function BuildSettingsPopup", categoriesStart, true)
+    local categoriesSource = categoriesStart and categoriesEnd and source:sub(categoriesStart, categoriesEnd) or ""
+    local expectedCategories = { "general", "automation", "interface", "tools", "build" }
     local categoryCount = 0
-    for _ in source:gmatch('{ key = "%a+",%s*label = "[^"]+" }') do
+    for _ in categoriesSource:gmatch('key%s*=%s*"[^"]+"') do
         categoryCount = categoryCount + 1
     end
-    if categoryCount ~= 5 then
+    if categoryCount ~= #expectedCategories then
         io.stderr:write("SETTINGS CATEGORY FAIL: expected 5 categories, found " .. categoryCount .. "\n")
         os.exit(1)
     end
+    for _, key in ipairs(expectedCategories) do
+        if not categoriesSource:find('key = "' .. key .. '"', 1, true) then
+            io.stderr:write("SETTINGS CATEGORY FAIL: missing category " .. key .. "\n")
+            os.exit(1)
+        end
+    end
 
-    if not source:find("panel:SetShown(i == index)", 1, true)
-        or not source:find("EbonBuilds.Theme.SetTabSelected(btn, i == index)", 1, true) then
-        io.stderr:write("SETTINGS CATEGORY FAIL: ShowCategory does not toggle both panel visibility and tab selection\n")
+    if not source:find('if definition.key == key then panel:Show() else panel:Hide() end', 1, true)
+        or not source:find('EbonBuilds.Theme.SetTabSelected(button, definition.key == key)', 1, true)
+        or source:find('panel:SetShown(', 1, true) then
+        io.stderr:write("SETTINGS CATEGORY FAIL: ShowCategory is not using 3.3.5-safe panel visibility and navigation selection\n")
         os.exit(1)
     end
 
-    -- Save must read autoSellCB/bagDotsCB/debugCB/clickTraceCB directly,
-    -- not through any category-visibility check -- a hidden panel's
-    -- checkbox still holds its real GetChecked() state in WoW's widget
-    -- system even while SetShown(false), so gating Save on the active tab
-    -- would be both wrong and unnecessary.
-    local saveStart = source:find('saveBtn:SetScript%("OnClick"')
-    local saveBody = saveStart and source:sub(saveStart, saveStart + 1200)
-    if not saveBody
-        or not saveBody:find("autoSellCB:GetChecked()", 1, true)
-        or not saveBody:find("bagDotsCB:GetChecked()", 1, true)
-        or not saveBody:find("debugCB:GetChecked()", 1, true)
-        or not saveBody:find("clickTraceCB:GetChecked()", 1, true) then
-        io.stderr:write("SETTINGS CATEGORY FAIL: Save does not read all four toggle checkboxes\n")
-        os.exit(1)
+    local requiredDraftFlow = {
+        'if draft then draft[field] = self:GetChecked() and true or false end',
+        'local function ApplyDraft()',
+        'EbonBuilds.AutoSell.SetEnabled(draft.autoSell)',
+        'EbonBuilds.BagAffixDots.SetEnabled(draft.bagDots)',
+        'EbonBuilds.DebugLog.SetEnabled(draft.debugLog)',
+        'EbonBuilds.ClickTrace.SetEnabled(draft.clickTrace)',
+        'saveBtn:SetScript("OnClick", ApplyDraft)',
+    }
+    for _, fragment in ipairs(requiredDraftFlow) do
+        if not source:find(fragment, 1, true) then
+            io.stderr:write("SETTINGS CATEGORY FAIL: staged Save flow is missing " .. fragment .. "\n")
+            os.exit(1)
+        end
     end
 end
-print("Verified the Settings popup's category tabs switch panels and tab selection together, and Save reads every category's state regardless of which tab is active.")
+print("Verified the Settings popup's five categories use safe visibility and preserve staged changes across navigation.")
 
 -- Missing-tab default view and weighted-priority regression contracts.
 do
