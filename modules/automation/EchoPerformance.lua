@@ -758,6 +758,13 @@ local function OnTick(self, dt)
 end
 
 function EbonBuilds.EchoPerformance.Init()
+    -- Default DPS/appearance tracking to ON. Checked with == nil rather
+    -- than `or true`, so a character that explicitly turned it off (false)
+    -- stays off -- only a character that has never touched the setting
+    -- gets the new default. Safe to call more than once (e.g. from tests).
+    if EbonBuildsCharDB.echoPerformanceEnabled == nil then
+        EbonBuildsCharDB.echoPerformanceEnabled = true
+    end
     if tickerFrame then return end
     tickerFrame = CreateFrame("Frame")
     tickerFrame:SetScript("OnUpdate", OnTick)

@@ -253,6 +253,15 @@ This is deliberately approximate, not a controlled measurement: echoes stack tog
 
 ## Changelog
 
+### 3.13 (2026-07-19) -- DPS/appearance tracking (Echo Performance) is on by default
+
+A character that has never touched the setting now gets it enabled automatically, instead of requiring an opt-in. A character who explicitly turned it off keeps that choice -- only ever applies to a character that has never set it either way.
+
+Worth knowing: enabling this also means your own tracked DPS-per-Echo data gets included in the periodic sync broadcast to your guild and current sync channel (same as it always did for anyone with tracking on) -- this default change means that now happens automatically instead of only for people who'd opted in. Turn it off any time with `/ebb tuning` (or `/ebb advisor`).
+
+- `modules/automation/EchoPerformance.lua`: `Init()` now defaults `echoPerformanceEnabled` to `true` for a character seeing the setting for the first time (checked with `== nil`, not `or true`, so an explicit `false` is never overridden).
+- New test covers all three starting states: never set, explicitly off, explicitly on.
+
 ### 3.12 (2026-07-19) -- Multilanguage system
 
 Added an in-game translation system, matching the six languages this README is already available in.

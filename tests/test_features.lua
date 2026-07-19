@@ -1159,6 +1159,35 @@ do
     end
 end
 
+-- Echo Performance (DPS/appearance tracking) now defaults to on for a
+-- character that has never touched the setting, without silently
+-- re-enabling it for someone who explicitly turned it off. Tests the exact
+-- nil-check EchoPerformance.Init() uses, not a duplicated copy of it, by
+-- calling Init() itself against three starting states.
+do
+    local originalCreateFrame = CreateFrame
+    CreateFrame = function()
+        return setmetatable({}, { __index = function() return function() end end })
+    end
+
+    EbonBuildsCharDB.echoPerformanceEnabled = nil
+    EbonBuilds.EchoPerformance.Init()
+    check(EbonBuilds.EchoPerformance.IsEnabled() == true,
+        "a character who never touched the setting gets it enabled by default")
+
+    EbonBuildsCharDB.echoPerformanceEnabled = false
+    EbonBuilds.EchoPerformance.Init()
+    check(EbonBuilds.EchoPerformance.IsEnabled() == false,
+        "a character who explicitly disabled tracking stays disabled after the default is applied")
+
+    EbonBuildsCharDB.echoPerformanceEnabled = true
+    EbonBuilds.EchoPerformance.Init()
+    check(EbonBuilds.EchoPerformance.IsEnabled() == true,
+        "a character who explicitly enabled tracking stays enabled")
+
+    CreateFrame = originalCreateFrame
+end
+
 if failures > 0 then
     io.stderr:write(string.format("%d test(s) failed.\n", failures))
     os.exit(1)
