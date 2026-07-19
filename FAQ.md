@@ -253,6 +253,17 @@ This is deliberately approximate, not a controlled measurement: echoes stack tog
 
 ## Changelog
 
+### 3.21 (2026-07-19) -- Gear upgrade hints on item tooltips
+
+The GearScore API that 3.20's orphan review deliberately kept ("a coherent gear-upgrade API waiting to be wired up") is now wired up.
+
+- Item tooltips get one extra line saying whether the hovered item scores as an upgrade for the **active build's** class and spec -- the build is the source of truth, not your current talents, so drops are judged for the spec you're building toward. Reads either "upgrade (+N vs equipped)", "upgrade (slot is empty)", or "not an upgrade (-N vs equipped)".
+- Dual-slot items (rings, trinkets, one-hand weapons) compare against the weakest currently-equipped candidate slot -- the one the new item would sensibly replace. An empty candidate slot always counts as an upgrade.
+- Scoring is GearScore's existing model: weighted stats per class/spec plus an item-level baseline. The weights are documented as directional defaults, not min-maxed truth.
+- On by default for a character that has never touched the setting (same never-override-an-explicit-off pattern as DPS tracking's 3.13 default); toggle lives in Settings under Automation. Off, the hook costs one boolean read per hover.
+- Tooltip handlers are error-isolated: a failure lands in the Error log instead of breaking hovering for the session (3.10's lesson, applied from day one here).
+- New `EbonBuilds.GearScore.UpgradeInfo` does the slot resolution and comparison; `INVTYPE_SLOTS` maps every WotLK equip location. Tests cover the dual-slot weakest-candidate rule, the empty-slot rule, non-equippable items yielding no verdict, the default-on contract, and the tooltip line itself against a stub -- including that the feature off leaves tooltips untouched.
+
 ### 3.20 (2026-07-19) -- Acting on what 3.19's tooling found
 
 Follow-up to the two findings the new scripts surfaced.

@@ -1196,6 +1196,96 @@ do
     CreateFrame = originalCreateFrame
 end
 
+-- Gear upgrade detection (GearScore.UpgradeInfo) and its tooltip wiring
+-- (GearTooltip) -- the previously-uncalled GearScore API, now live.
+do
+    dofile("modules/gear/GearScore.lua")
+    dofile("modules/gear/GearTooltip.lua")
+
+    -- Injected getters: item "links" are plain ids into these tables.
+    local stats = {
+        newRing   = { ITEM_MOD_INTELLECT_SHORT = 40 },
+        goodRing  = { ITEM_MOD_INTELLECT_SHORT = 60 },
+        weakRing  = { ITEM_MOD_INTELLECT_SHORT = 10 },
+        bigSword  = { ITEM_MOD_STRENGTH_SHORT = 50 },
+    }
+    local ilvls = { newRing = 100, goodRing = 100, weakRing = 100, bigSword = 100 }
+    local equipLocs = { newRing = "INVTYPE_FINGER", goodRing = "INVTYPE_FINGER",
+                        weakRing = "INVTYPE_FINGER", bigSword = "INVTYPE_2HWEAPON" }
+    local function getStats(link) return stats[link] end
+    local function getInfo(link)
+        return link, link, 3, ilvls[link], 1, "Armor", "Misc", 1, equipLocs[link]
+    end
+
+    local specKey = EbonBuilds.GearScore.SpecKey("MAGE", 3)
+    check(EbonBuilds.GearScore.HasWeights(specKey), "MAGE spec 3 resolves to a weight table")
+
+    -- Dual-slot: new ring beats the WEAKER of two equipped rings -> upgrade.
+    local equipped = { [11] = "goodRing", [12] = "weakRing" }
+    local function getInv(slotId) return equipped[slotId] end
+    local info = EbonBuilds.GearScore.UpgradeInfo("newRing", specKey, getStats, getInfo, getInv)
+    check(info and info.isUpgrade == true, "ring beating the weaker equipped ring counts as an upgrade")
+
+    -- Same ring against two BETTER rings -> not an upgrade.
+    equipped = { [11] = "goodRing", [12] = "goodRing" }
+    info = EbonBuilds.GearScore.UpgradeInfo("newRing", specKey, getStats, getInfo, getInv)
+    check(info and info.isUpgrade == false, "ring weaker than both equipped rings is not an upgrade")
+    check(info and info.delta < 0, "delta is negative for a downgrade")
+
+    -- Empty candidate slot -> always an upgrade.
+    equipped = { [11] = "goodRing" }
+    info = EbonBuilds.GearScore.UpgradeInfo("newRing", specKey, getStats, getInfo, getInv)
+    check(info and info.isUpgrade == true and info.slotEmpty == true,
+        "an empty candidate slot makes any equippable item an upgrade")
+
+    -- Non-equippable / unknown equip location -> nil, not a guess.
+    equipLocs.newRing = nil
+    check(EbonBuilds.GearScore.UpgradeInfo("newRing", specKey, getStats, getInfo, getInv) == nil,
+        "an item with no equip location yields nil rather than a verdict")
+    equipLocs.newRing = "INVTYPE_FINGER"
+
+    -- GearTooltip default-on: same three-state contract as EchoPerformance.
+    local origCreateFrame = CreateFrame
+    CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
+    EbonBuildsCharDB.gearTooltipEnabled = nil
+    EbonBuilds.GearTooltip.Init()
+    check(EbonBuilds.GearTooltip.IsEnabled() == true, "gear tooltip defaults on for a never-set character")
+    EbonBuildsCharDB.gearTooltipEnabled = false
+    EbonBuilds.GearTooltip.Init()
+    check(EbonBuilds.GearTooltip.IsEnabled() == false, "an explicit off is never overridden by the default")
+    CreateFrame = origCreateFrame
+
+    -- The augmentation itself, against a stub tooltip: right line for an
+    -- upgrade, and a clean no-op when the feature is off.
+    EbonBuildsCharDB.gearTooltipEnabled = true
+    local activeBuild = { class = "MAGE", spec = 3 }
+    local origGetActive = EbonBuilds.Build.GetActive
+    EbonBuilds.Build.GetActive = function() return activeBuild end
+    local origGetItemInfo, origGetItemStats, origGetInvLink = GetItemInfo, GetItemStats, GetInventoryItemLink
+    GetItemInfo = getInfo
+    GetItemStats = getStats
+    equipped = { [11] = "goodRing", [12] = "weakRing" }
+    GetInventoryItemLink = function(_, slotId) return equipped[slotId] end
+
+    local lines = {}
+    local tooltipStub = {
+        GetItem = function() return "newRing", "newRing" end,
+        AddLine = function(_, text) lines[#lines + 1] = text end,
+        Show = function() end,
+    }
+    EbonBuilds.GearTooltip._AugmentForTests(tooltipStub)
+    check(#lines == 1 and lines[1]:find("upgrade", 1, true) ~= nil and not lines[1]:find("not an upgrade", 1, true),
+        "tooltip gains exactly one line, and it says upgrade for a real upgrade")
+
+    lines = {}
+    EbonBuildsCharDB.gearTooltipEnabled = false
+    EbonBuilds.GearTooltip._AugmentForTests(tooltipStub)
+    check(#lines == 0, "with the feature off the tooltip is left untouched")
+
+    EbonBuilds.Build.GetActive = origGetActive
+    GetItemInfo, GetItemStats, GetInventoryItemLink = origGetItemInfo, origGetItemStats, origGetInvLink
+end
+
 if failures > 0 then
     io.stderr:write(string.format("%d test(s) failed.\n", failures))
     os.exit(1)

@@ -185,3 +185,66 @@ function EbonBuilds.GearScore.ScoreEquipped(specKey, getStats, getInfo, getInvLi
     end
     return { total = total, count = count, bySlot = bySlot }
 end
+
+------------------------------------------------------------------------
+-- Upgrade lookup for tooltips
+------------------------------------------------------------------------
+
+-- Where an item CAN be equipped: the game's INVTYPE_* equip-location
+-- string -> candidate inventory slot ids. Dual-slot entries (rings,
+-- trinkets, weapons) list both; the comparison below then runs against
+-- the WEAKEST currently-equipped candidate, because that's the one the
+-- new item would sensibly replace.
+local INVTYPE_SLOTS = {
+    INVTYPE_HEAD = { 1 },  INVTYPE_NECK = { 2 },  INVTYPE_SHOULDER = { 3 },
+    INVTYPE_BODY = { 4 },  INVTYPE_CHEST = { 5 }, INVTYPE_ROBE = { 5 },
+    INVTYPE_WAIST = { 6 }, INVTYPE_LEGS = { 7 },  INVTYPE_FEET = { 8 },
+    INVTYPE_WRIST = { 9 }, INVTYPE_HAND = { 10 },
+    INVTYPE_FINGER = { 11, 12 }, INVTYPE_TRINKET = { 13, 14 },
+    INVTYPE_CLOAK = { 15 },
+    INVTYPE_WEAPON = { 16, 17 }, INVTYPE_2HWEAPON = { 16 },
+    INVTYPE_WEAPONMAINHAND = { 16 }, INVTYPE_WEAPONOFFHAND = { 17 },
+    INVTYPE_SHIELD = { 17 }, INVTYPE_HOLDABLE = { 17 },
+    INVTYPE_RANGED = { 18 }, INVTYPE_RANGEDRIGHT = { 18 },
+    INVTYPE_THROWN = { 18 }, INVTYPE_RELIC = { 18 },
+}
+EbonBuilds.GearScore.INVTYPE_SLOTS = INVTYPE_SLOTS
+
+-- One call answering "is this an upgrade for me": resolves the item's
+-- equip location, scores it against the weakest currently-equipped
+-- candidate slot, and returns nil (not equippable / no weights / no
+-- link) or { isUpgrade, delta, newScore, currentScore, slotEmpty }.
+-- delta is newScore - currentScore; slotEmpty means at least one
+-- candidate slot has nothing in it (anything is an upgrade then).
+function EbonBuilds.GearScore.UpgradeInfo(itemLink, specKey, getStats, getInfo, getInvLink)
+    if not itemLink or not specKey or not EbonBuilds.GearScore.HasWeights(specKey) then return nil end
+    getInfo = getInfo or GetItemInfo
+    getInvLink = getInvLink or function(slotId) return GetInventoryItemLink("player", slotId) end
+
+    local equipLoc = select(9, getInfo(itemLink))
+    local slots = equipLoc and INVTYPE_SLOTS[equipLoc]
+    if not slots then return nil end
+
+    local newScore = EbonBuilds.GearScore.ScoreItem(itemLink, specKey, getStats, getInfo)
+
+    local worstScore, slotEmpty = nil, false
+    for _, slotId in ipairs(slots) do
+        local link = getInvLink(slotId)
+        if not link then
+            slotEmpty = true
+            worstScore = 0
+            break
+        end
+        local s = EbonBuilds.GearScore.ScoreItem(link, specKey, getStats, getInfo)
+        if worstScore == nil or s < worstScore then worstScore = s end
+    end
+
+    local delta = newScore - (worstScore or 0)
+    return {
+        isUpgrade = slotEmpty or delta > 0,
+        delta = delta,
+        newScore = newScore,
+        currentScore = worstScore or 0,
+        slotEmpty = slotEmpty,
+    }
+end

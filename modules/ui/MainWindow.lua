@@ -197,6 +197,7 @@ local function BuildSettingsPopup(ownerFrame)
             bagDots = Bool(source.bagDots),
             debugLog = Bool(source.debugLog),
             clickTrace = Bool(source.clickTrace),
+            gearTooltip = Bool(source.gearTooltip),
             locale = source.locale or "enUS",
         }
     end
@@ -210,6 +211,7 @@ local function BuildSettingsPopup(ownerFrame)
             bagDots = ReadModuleToggle(EbonBuilds.BagAffixDots),
             debugLog = ReadModuleToggle(EbonBuilds.DebugLog),
             clickTrace = ReadModuleToggle(EbonBuilds.ClickTrace),
+            gearTooltip = ReadModuleToggle(EbonBuilds.GearTooltip),
             locale = (EbonBuilds.Locale and EbonBuilds.Locale.GetActiveLocale and EbonBuilds.Locale.GetActiveLocale()) or gs.localeOverride or "enUS",
         }
     end
@@ -227,6 +229,7 @@ local function BuildSettingsPopup(ownerFrame)
         if Bool(draft.bagDots) ~= Bool(baseline.bagDots) then count = count + 1 end
         if Bool(draft.debugLog) ~= Bool(baseline.debugLog) then count = count + 1 end
         if Bool(draft.clickTrace) ~= Bool(baseline.clickTrace) then count = count + 1 end
+        if Bool(draft.gearTooltip) ~= Bool(baseline.gearTooltip) then count = count + 1 end
         if tostring(draft.locale or "") ~= tostring(baseline.locale or "") then count = count + 1 end
         return count
     end
@@ -368,6 +371,7 @@ local function BuildSettingsPopup(ownerFrame)
         if controls.bagDotsCB then controls.bagDotsCB:SetChecked(draft.bagDots) end
         if controls.debugCB then controls.debugCB:SetChecked(draft.debugLog) end
         if controls.clickTraceCB then controls.clickTraceCB:SetChecked(draft.clickTrace) end
+        if controls.gearTooltipCB then controls.gearTooltipCB:SetChecked(draft.gearTooltip) end
         RefreshLocaleButtons()
         loadingDraft = false
         RefreshDirtyState()
@@ -557,7 +561,7 @@ local function BuildSettingsPopup(ownerFrame)
             -110, 0.5, 8.0, "toastDuration")
     end)
 
-    BuildCategory("automation", 292, function(panel)
+    BuildCategory("automation", 366, function(panel)
         AddSectionTitle(panel, "CONVENIENCE & DIAGNOSTICS", -2)
         controls.autoSellCB = AddCheckbox(panel,
             "Auto-sell junk at vendors",
@@ -575,6 +579,10 @@ local function BuildSettingsPopup(ownerFrame)
             "Log every button click",
             "Records interface clicks for troubleshooting actions that appear to do nothing.",
             -228, "clickTrace")
+        controls.gearTooltipCB = AddCheckbox(panel,
+            "Gear upgrade hints on tooltips",
+            "Adds a line to item tooltips saying whether the item scores as an upgrade for the active build's spec.",
+            -296, "gearTooltip")
     end)
 
     BuildCategory("interface", 180, function(panel)
@@ -757,6 +765,7 @@ local function BuildSettingsPopup(ownerFrame)
         if EbonBuilds.BagAffixDots and EbonBuilds.BagAffixDots.SetEnabled then EbonBuilds.BagAffixDots.SetEnabled(draft.bagDots) end
         if EbonBuilds.DebugLog and EbonBuilds.DebugLog.SetEnabled then EbonBuilds.DebugLog.SetEnabled(draft.debugLog) end
         if EbonBuilds.ClickTrace and EbonBuilds.ClickTrace.SetEnabled then EbonBuilds.ClickTrace.SetEnabled(draft.clickTrace) end
+        if EbonBuilds.GearTooltip and EbonBuilds.GearTooltip.SetEnabled then EbonBuilds.GearTooltip.SetEnabled(draft.gearTooltip) end
         local localeChanged = baseline and draft.locale ~= baseline.locale
         if localeChanged and EbonBuilds.Locale and EbonBuilds.Locale.SetLocale then
             EbonBuilds.Locale.SetLocale(draft.locale)

@@ -22,6 +22,7 @@ core/AffixServer.lua
 modules/affix/Affix.lua
 modules/affix/AffixItemScan.lua
 modules/gear/GearScore.lua
+modules/gear/GearTooltip.lua
 modules/data/SpecData.lua
 modules/weights/Weights.lua
 modules/ui/Theme.lua
