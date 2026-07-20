@@ -4,13 +4,14 @@
 
 EbonBuilds.FAQContent = { PAGES = {
 {
-    title = "What's new: 3.41 (2026-07-20) -- Handler protection: BuildWizardPriorityStep.lua",
+    title = "What's new: 3.42 (2026-07-20) -- Handler protection: MainWindow.lua",
     lines = {
         "",
-        "- modules/ui/BuildWizardPriorityStep.lua -- 5 frames now opt into",
-        "EbonBuilds.Debug.ProtectScript at creation (dismiss overlay,",
-        "grouped-priority popup, per-row inspect and evidence buttons, search box).",
-        "- Remaining files, largest first: MainWindow, BuildWizard, Calibration,",
+        "- modules/ui/MainWindow.lua -- 6 frames now opt into",
+        "EbonBuilds.Debug.ProtectScript at creation (header drag region, global",
+        "settings popup and its drag header, card slider, toolbar icon button, and",
+        "the main addon window frame itself).",
+        "- Remaining files, largest first: BuildWizard, Calibration,",
         "TomeAtlasView, CharacterView, and others.",
     },
 },
