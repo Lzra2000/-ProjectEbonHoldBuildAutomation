@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 3.44 — also available in-game via Settings (gear icon) under Windows & Tools.*
+*This file is updated with every release. Latest version: 3.45 — also available in-game via Settings (gear icon) under Windows & Tools.*
 
 ---
 
