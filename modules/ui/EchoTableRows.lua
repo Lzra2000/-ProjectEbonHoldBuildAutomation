@@ -645,6 +645,9 @@ local function CreateRankCell(row, quality, orderIndex)
     EbonBuilds.Theme.ApplyInput(container)
 
     local box = CreateFrame("EditBox", nil, container)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(box, "EchoTableRows.WeightBox")
+    end
     box:SetSize(containerWidth - 4, 18)
     box:SetPoint("CENTER")
     box:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
@@ -732,6 +735,9 @@ end
 
 function Rows.CreateRow(parent, index)
     local row = CreateFrame("Frame", nil, parent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(row, "EchoTableRows.Row")
+    end
     row:SetHeight(Rows.ROW_HEIGHT)
     row:SetPoint("LEFT", parent, "LEFT", 0, 0)
     row:SetPoint("RIGHT", parent, "RIGHT", 0, 0)

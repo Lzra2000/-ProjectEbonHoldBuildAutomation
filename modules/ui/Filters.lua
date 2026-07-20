@@ -186,6 +186,9 @@ local function CreateSearchBox(bar)
     EbonBuilds.Theme.ApplyInput(container)
 
     local edit = CreateFrame("EditBox", nil, container)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(edit, "Filters.SearchBox")
+    end
     edit:SetPoint("TOPLEFT", container, "TOPLEFT", 7, -3)
     edit:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -24, 3)
     edit:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
@@ -201,6 +204,9 @@ local function CreateSearchBox(bar)
     searchPlaceholder = placeholder
 
     local clear = CreateFrame("Button", nil, container)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(clear, "Filters.ClearSearch")
+    end
     clear:SetSize(20, 20)
     clear:SetPoint("RIGHT", container, "RIGHT", -2, 0)
     local x = clear:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -562,6 +568,9 @@ end
 
 function EbonBuilds.Filters.Init(parent)
     local bar = CreateFrame("Frame", nil, parent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(bar, "Filters.Bar")
+    end
     bar:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, -48)
     bar:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, -48)
     bar:SetHeight(80)
@@ -592,6 +601,9 @@ function EbonBuilds.Filters.Init(parent)
     resultLabel:SetText("0 echoes")
 
     resultHitFrame = CreateFrame("Frame", nil, bar)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(resultHitFrame, "Filters.ResultHitFrame")
+    end
     resultHitFrame:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, -28)
     resultHitFrame:SetSize(174, 24)
     resultHitFrame:EnableMouse(true)
