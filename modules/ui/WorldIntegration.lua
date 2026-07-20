@@ -21,10 +21,11 @@ local function AugmentUnitTooltip(tooltip)
     if not name or name == UnitName("player") then return end
     local info = EbonBuilds.Sync and EbonBuilds.Sync.GetPeerInfo and EbonBuilds.Sync.GetPeerInfo(name)
     if not info then return end
+    local teal = EbonBuilds.Theme.PRESENCE_TEAL
     if info.version then
-        tooltip:AddLine("EbonBuilds " .. info.version, 0.36, 0.77, 0.64)
+        tooltip:AddLine("EbonBuilds " .. info.version, teal[1], teal[2], teal[3])
     else
-        tooltip:AddLine("EbonBuilds user", 0.36, 0.77, 0.64)
+        tooltip:AddLine("EbonBuilds user", teal[1], teal[2], teal[3])
     end
     tooltip:Show()
 end
@@ -40,21 +41,26 @@ local function EnsureMapPanel()
     if mapPanel then return end
     local Theme = EbonBuilds.Theme
     mapPanel = CreateFrame("Frame", "EbonBuildsMapTomes", WorldMapFrame)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(mapPanel, "WorldIntegration.MapPanel")
+    end
     mapPanel:SetFrameStrata("FULLSCREEN")
     mapPanel:SetSize(240, 60)
     mapPanel:SetPoint("TOPRIGHT", WorldMapDetailFrame or WorldMapFrame, "TOPRIGHT", -8, -8)
-    if Theme and Theme.ApplyPanel then Theme.ApplyPanel(mapPanel) else
-        mapPanel:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background" })
-        mapPanel:SetBackdropColor(0, 0, 0, 0.75)
-    end
+    -- Theme.lua is always loaded well before this file in EbonBuilds.toc,
+    -- so Theme is never actually unavailable here -- no fallback needed.
+    Theme.ApplyPanel(mapPanel)
     local title = mapPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", mapPanel, "TOPLEFT", 8, -6)
     title:SetText("Tomes in this zone")
+    title:SetTextColor(unpack(Theme.ACCENT_GOLD))
     mapPanel.title = title
+    Theme.AddHeaderRule(mapPanel, title, 224)
     mapLines = mapPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    mapLines:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    mapLines:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     mapLines:SetJustifyH("LEFT")
     mapLines:SetWidth(224)
+    mapLines:SetTextColor(unpack(Theme.TEXT_PRIMARY))
     mapPanel:Hide()
 end
 
@@ -195,7 +201,7 @@ local function ShowContinentOverlays()
             legend = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             legend:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -10, 10)
         end
-        legend:SetText("|cff59d9a0Colored zones:|r tome drops known (zoom in for the list)")
+        legend:SetText("|cff" .. EbonBuilds.Theme.PRESENCE_TEAL_HEX .. "Colored zones:|r tome drops known (zoom in for the list)")
         legend:Show()
     elseif legend then
         legend:Hide()
@@ -234,7 +240,13 @@ end
 
 function EbonBuilds.WorldIntegration.Init()
     -- Tooltip hook, error-isolated like GearTooltip's.
+    -- Error-isolated like every other event/tooltip hook in the addon --
+    -- core/Debug.lua's Protect() replaces what used to be a bespoke pcall
+    -- wrapper duplicated in this file (this module predates Debug.lua).
     local function Safe(fn)
+        if EbonBuilds.Debug and EbonBuilds.Debug.Protect then
+            return EbonBuilds.Debug.Protect("WorldIntegration", fn)
+        end
         return function(...)
             local ok, err = pcall(fn, ...)
             if not ok and EbonBuilds.ErrorLog and EbonBuilds.ErrorLog.Protect then

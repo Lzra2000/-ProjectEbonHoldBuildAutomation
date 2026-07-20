@@ -264,6 +264,14 @@ The gear score is directional build guidance, not a best-in-slot verdict. Uncach
 
 ## Changelog
 
+### 3.52 (2026-07-20) -- Map overlay: matched to the rest of the UI, a few things fixed along the way
+
+- **One accent color instead of two.** The world map's "Colored zones" legend used a hand-typed hex (`59d9a0`) that had quietly drifted from the teal already used consistently everywhere else EbonBuilds identifies itself in a tooltip (peer-version lines, gear-upgrade hints) -- now a single `Theme.PRESENCE_TEAL` constant backs all of it.
+- **The zone-tomes panel now matches the rest of the addon**: gold section-style title with the same thin divider rule other panels use, instead of plain white default text; body text explicitly uses the addon's primary text color instead of an unstyled default.
+- **Dead fallback code removed**: the panel's background styling had an `if Theme then ... else raw backdrop` branch left over from before Theme.lua's load order was settled -- Theme always loads first, so this never actually ran; removed rather than left as confusing dead weight.
+- **Bespoke error-wrapping replaced** with `core/Debug.lua`'s `Protect()` -- this file had its own small pcall wrapper predating that module; now uses the same one everything else does.
+- The map panel frame itself now also opts into `EbonBuilds.Debug.ProtectScript`, closing the last unprotected frame in this file.
+
 ### 3.51 (2026-07-20) -- Custom minimap icon; media/ now actually ships
 
 The minimap button referenced a custom icon path (`media/minimap_icon`) that never existed -- dead code since it was added, silently falling back to a generic Blizzard gear icon (`INV_Misc_Gear_01`) every session.

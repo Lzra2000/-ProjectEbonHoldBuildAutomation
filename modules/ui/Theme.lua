@@ -29,6 +29,14 @@ T.FOCUS        = { 1.00, 0.82, 0.00, 1.00 }
 T.SELECTED_BG  = { 0.20, 0.17, 0.07, 1.00 }
 T.SUCCESS      = { 0.30, 0.86, 0.38, 1.00 }
 T.WARNING      = { 1.00, 0.66, 0.16, 1.00 }
+-- "This is EbonBuilds talking" accent -- used on tooltip lines that
+-- identify the addon itself (peer-version lines, gear-upgrade hints, map
+-- legend). Was hand-typed as {0.36, 0.77, 0.64} in WorldIntegration.lua
+-- and GearTooltip.lua, and had separately drifted to a different hex
+-- (59d9a0) on the map legend's |cff escape -- one constant now, with a
+-- matching hex string for |cff-style inline coloring.
+T.PRESENCE_TEAL     = { 0.36, 0.77, 0.64, 1.00 }
+T.PRESENCE_TEAL_HEX = "5cc4a3"
 T.DANGER       = { 1.00, 0.26, 0.26, 1.00 }
 T.TEXT_PRIMARY = { 0.96, 0.96, 0.98, 1.00 }
 T.TEXT_MUTED   = { 0.66, 0.68, 0.74, 1.00 }

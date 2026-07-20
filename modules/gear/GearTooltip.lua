@@ -49,10 +49,11 @@ local function AugmentTooltip(tooltip)
     local info = EbonBuilds.GearScore.UpgradeInfo(itemLink, specKey)
     if not info then return end  -- not equippable, or no weights for this spec
 
+    local teal = EbonBuilds.Theme.PRESENCE_TEAL
     if info.slotEmpty then
-        tooltip:AddLine("EbonBuilds: upgrade (slot is empty)", 0.36, 0.77, 0.64)
+        tooltip:AddLine("EbonBuilds: upgrade (slot is empty)", teal[1], teal[2], teal[3])
     elseif info.isUpgrade then
-        tooltip:AddLine(string.format("EbonBuilds: upgrade (+%.0f vs equipped)", info.delta), 0.36, 0.77, 0.64)
+        tooltip:AddLine(string.format("EbonBuilds: upgrade (+%.0f vs equipped)", info.delta), teal[1], teal[2], teal[3])
     else
         tooltip:AddLine(string.format("EbonBuilds: not an upgrade (%.0f vs equipped)", info.delta), 0.62, 0.62, 0.66)
     end
