@@ -160,35 +160,34 @@ local function NormalizeProtection(build)
     if type(settings.echoWhitelist) ~= "table" then settings.echoWhitelist = {} end
     if type(settings.echoBanList) ~= "table" then settings.echoBanList = {} end
 
-    -- Keep only explicit true values under canonical echo-name keys. Imported
-    -- suffix-bearing names and numeric spell-id keys are repaired defensively.
-    local cleanWhitelist = {}
+    local cleanWhitelist, unresolvedWhitelist = {}, {}
     for key, enabled in pairs(settings.echoWhitelist) do
         local isEnabled = enabled == true or enabled == 1 or enabled == "1" or enabled == "true"
         if isEnabled then
-            local name
-            if type(key) == "number" or (type(key) == "string" and key:match("^%d+$")) then
-                name = EbonBuilds.Weights and EbonBuilds.Weights.CanonicalName(tonumber(key))
-            elseif type(key) == "string" then
-                name = EbonBuilds.Weights and EbonBuilds.Weights.StripQualitySuffix(key) or key
+            local refKey
+            local text = tostring(key or "")
+            if text:match("^[gs]:%d+$") then
+                refKey = text
+            elseif type(key) == "number" or text:match("^%d+$") then
+                refKey = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetRefForSpell(tonumber(key))
+            elseif EbonBuilds.EchoCatalog then
+                local refs = EbonBuilds.EchoCatalog.FindLegacyRefs
+                    and EbonBuilds.EchoCatalog.FindLegacyRefs(text)
+                    or EbonBuilds.EchoCatalog.FindRefs(text)
+                if #refs == 1 then refKey = refs[1]
+                elseif #refs > 1 then unresolvedWhitelist[text] = true end
             end
-            if name then name = name:gsub("^%s+", ""):gsub("%s+$", "") end
-            if name and name ~= "" then cleanWhitelist[name] = true end
+            if refKey and EbonBuilds.EchoCatalog.GetByRef(refKey) then cleanWhitelist[refKey] = true end
         end
     end
     settings.echoWhitelist = cleanWhitelist
+    settings.unresolvedEchoWhitelist = next(unresolvedWhitelist) and unresolvedWhitelist or nil
 
-    -- Whitelist wins over imported or legacy ban-list conflicts. This also
-    -- protects every quality tier of a whitelisted echo family. Numeric-string
-    -- spell IDs are canonicalized at the same time so every consumer can use
-    -- the normal numeric database lookup path.
     local cleanBanList = {}
     for spellId, label in pairs(settings.echoBanList) do
         local numericId = tonumber(spellId) or spellId
-        local canonical = EbonBuilds.Weights and EbonBuilds.Weights.CanonicalName(numericId)
-        if not (canonical and cleanWhitelist[canonical]) then
-            cleanBanList[numericId] = label
-        end
+        local refKey = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetRefForSpell(numericId)
+        if not (refKey and cleanWhitelist[refKey]) then cleanBanList[numericId] = label end
     end
     settings.echoBanList = cleanBanList
     if EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.Normalize then
@@ -670,7 +669,7 @@ function EbonBuilds.Build.NewObject(data)
         echoWeightsByRef = CloneTable(data.echoWeightsByRef or {}),
         echoRefs         = CloneTable(data.echoRefs or {}),
         unresolvedEchoWeights = CloneTable(data.unresolvedEchoWeights),
-        echoSchema       = tonumber(data.echoSchema) or (data.echoWeightsByRef and 2 or nil),
+        echoSchema       = tonumber(data.echoSchema) or (data.echoWeightsByRef and 3 or nil),
         echoCatalogFingerprint = data.echoCatalogFingerprint,
         settings        = CloneTable(data.settings or DefaultSettings()),
         version         = 1,
@@ -737,7 +736,7 @@ function EbonBuilds.Build.Create(data)
         or EbonBuilds.Runtime.pendingRefWeights or build.echoWeightsByRef
     build.echoWeightsByRef = EbonBuilds.Weights.NormalizeRefWeights(sourceRefWeights or {})
     if next(build.echoWeightsByRef) then
-        build.echoSchema = 2
+        build.echoSchema = 3
         build.echoCatalogFingerprint = data.echoCatalogFingerprint
             or (EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetFingerprint())
     end
@@ -808,7 +807,7 @@ function EbonBuilds.Build.UpdateFromPublic(localBuild, publicBuild)
         localBuild.echoWeightsByRef = EbonBuilds.Weights.CloneRefWeights(publicBuild.echoWeightsByRef)
         localBuild.echoRefs = CloneTable(publicBuild.echoRefs or {})
         localBuild.unresolvedEchoWeights = CloneTable(publicBuild.unresolvedEchoWeights)
-        localBuild.echoSchema = publicBuild.echoSchema or 2
+        localBuild.echoSchema = publicBuild.echoSchema or 3
         localBuild.echoCatalogFingerprint = publicBuild.echoCatalogFingerprint
     end
     if publicBuild.copiedFrom then
@@ -849,7 +848,7 @@ function EbonBuilds.Build.Save(id, data)
     if data.echoWeights then build.echoWeights = EbonBuilds.Weights.CloneWeights(data.echoWeights) end
     if data.echoWeightsByRef then
         build.echoWeightsByRef = EbonBuilds.Weights.CloneRefWeights(data.echoWeightsByRef)
-        build.echoSchema = data.echoSchema or 2
+        build.echoSchema = data.echoSchema or 3
         build.echoCatalogFingerprint = data.echoCatalogFingerprint
             or (EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetFingerprint())
     end

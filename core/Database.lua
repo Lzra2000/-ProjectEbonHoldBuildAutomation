@@ -5,7 +5,7 @@ EbonBuilds.Database = {}
 EbonBuilds.Runtime = EbonBuilds.Runtime or {}
 
 local Database = EbonBuilds.Database
-local ACCOUNT_SCHEMA = 1
+local ACCOUNT_SCHEMA = 2
 local CHARACTER_SCHEMA = 1
 local MAX_RAW_PER_CHARACTER = 30
 local MAX_RAW_ACCOUNT = 120
@@ -42,6 +42,9 @@ function Database.Init()
     EbonBuildsDB.remoteBuilds = EbonBuildsDB.remoteBuilds or {}
     EbonBuildsDB.sessions = EbonBuildsDB.sessions or {}
     EbonBuildsDB.buildAggregates = EbonBuildsDB.buildAggregates or {}
+    EbonBuildsDB.echoEligibility = EbonBuildsDB.echoEligibility or { schema = 1, scopes = {} }
+    EbonBuildsDB.echoEligibility.schema = 1
+    EbonBuildsDB.echoEligibility.scopes = EbonBuildsDB.echoEligibility.scopes or {}
     EbonBuildsDB.ui = EbonBuildsDB.ui or {
         layoutPreset = "standard",
         scalePreset = 1,

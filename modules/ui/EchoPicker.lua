@@ -90,8 +90,11 @@ local function StrictEntries(classToken)
                 searchBlob = entry.searchBlob,
                 disambiguator = entry.disambiguator,
                 semantics = entry.semantics,
-                classMask = entry.classMask,
                 groupId = entry.groupId,
+                availabilityReason = entry.availabilityReason,
+                discrepancyFlags = entry.discrepancyFlags,
+                quarantinedAliases = entry.quarantinedAliases,
+                canonicalName = entry.canonicalName,
             }
         end
     end
@@ -187,8 +190,24 @@ local function CreateRow(parent)
             GameTooltip:AddLine(entry.displayName or "Echo", 1, 0.82, 0)
             local description = EbonBuilds.EchoCatalog.GetDescription(entry.spellId, 500, 1)
             if description and description ~= "" then GameTooltip:AddLine(description, 1, 1, 1, true) end
+        else
+            local title = _G.GameTooltipTextLeft1
+            if title and entry.displayName then title:SetText(entry.displayName) end
         end
         if entry.disambiguator then GameTooltip:AddLine(entry.disambiguator, 0.65, 0.78, 1, true) end
+        if entry.availabilityReason == "REVIEWED_ALLOW" then
+            GameTooltip:AddLine("Class metadata corrected by a verified eligibility fact.",
+                Theme.WARNING[1], Theme.WARNING[2], Theme.WARNING[3], true)
+        elseif entry.availabilityReason == "OBSERVED_OFFER"
+            or entry.availabilityReason == "OBSERVED_REPLACEMENT"
+            or entry.availabilityReason == "CONFIRMED_SELECTION" then
+            GameTooltip:AddLine("Observed usable in live Project Ebonhold gameplay.",
+                Theme.SUCCESS[1], Theme.SUCCESS[2], Theme.SUCCESS[3], true)
+        end
+        if entry.quarantinedAliases and #entry.quarantinedAliases > 0 then
+            GameTooltip:AddLine("Runtime name conflict corrected; canonical Echo identity is shown.",
+                Theme.WARNING[1], Theme.WARNING[2], Theme.WARNING[3], true)
+        end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Available to " .. ClassLabel(activeClass) .. ". Click to select.", 0.75, 0.75, 0.8, true)
         GameTooltip:Show()

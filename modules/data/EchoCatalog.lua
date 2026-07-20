@@ -14,10 +14,17 @@ local CLASS_BITS = {
     DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024,
 }
 
+Catalog.STATE_UNINITIALIZED = 0
+Catalog.STATE_BUNDLED_READY = 1
+Catalog.STATE_RUNTIME_RECONCILING = 2
+Catalog.STATE_RUNTIME_VERIFIED = 3
+Catalog.STATE_RUNTIME_FAILED = 4
+
 local bySpellId, byRef, sortedDefinitions = {}, {}, {}
 local sourceNameIndex, aliasIndex = {}, {}
 local descriptionCache = {}
 local initialized, ready, reconciling, runtimeVerified = false, false, false, false
+local catalogState = Catalog.STATE_UNINITIALIZED
 local revision = 0
 local runtimeFingerprint = "unverified"
 local runtimeDatabaseRef, runtimeAddonVersion, runtimeModVersion, runtimePerkCount
@@ -147,7 +154,7 @@ local function DefinitionFor(refKey, groupId, sourceName, descriptionHash)
             sourceName = Identity.VisibleName(sourceName),
             name = Identity.VisibleName(sourceName),
             descriptionHash = tonumber(descriptionHash) or 0,
-            aliases = {}, aliasSet = {},
+            aliases = {}, aliasSet = {}, rawAliases = {}, rawAliasSet = {},
             variants = {}, variantsBySpellId = {},
             qualities = {}, spellIds = {}, familySet = {},
             classMask = 0,
@@ -166,9 +173,11 @@ local function AddAlias(definition, alias)
     if alias == "" then return end
     local normalized = Identity.NormalizeSearch(alias)
     if normalized == "" then return end
-    if not definition.aliasSet[normalized] then
-        definition.aliasSet[normalized] = true
-        definition.aliases[#definition.aliases + 1] = alias
+    definition.rawAliases = definition.rawAliases or {}
+    definition.rawAliasSet = definition.rawAliasSet or {}
+    if not definition.rawAliasSet[normalized] then
+        definition.rawAliasSet[normalized] = true
+        definition.rawAliases[#definition.rawAliases + 1] = alias
     end
 end
 
@@ -201,6 +210,8 @@ local function AddVariant(record, sourceKind)
         record.descriptionHash or (bundledGroup and bundledGroup[2]))
     definition.familySet = definition.familySet or {}
     definition.aliasSet = definition.aliasSet or {}
+    definition.rawAliases = definition.rawAliases or {}
+    definition.rawAliasSet = definition.rawAliasSet or {}
     local localizedName = ChooseLocalizedName(spellId, sourceName)
     local runtimeMask = tonumber(record.classMask) or 0
     local staticMask = tonumber(record.staticClassMask) or runtimeMask
@@ -274,21 +285,9 @@ local function FinalizeIndexes()
         for family in pairs(definition.familySet or {}) do families[#families + 1] = family end
         table.sort(families)
         definition.families = families
+        definition.canonicalName = definition.sourceName
         definition.name = definition.sourceName
         definition.icon = definition.icon or QUESTION_ICON
-        definition.searchBlob = ""
-        local blobParts = {}
-        local function Blob(value)
-            value = Identity.NormalizeSearch(value)
-            if value ~= "" then blobParts[#blobParts + 1] = value end
-        end
-        Blob(definition.sourceName)
-        for _, alias in ipairs(definition.aliases or {}) do Blob(alias) end
-        definition.searchBlob = table.concat(blobParts, "\31")
-        AddIndex(sourceNameIndex, Identity.NormalizeSearch(definition.sourceName), definition.refKey)
-        for _, alias in ipairs(definition.aliases or {}) do
-            AddIndex(aliasIndex, Identity.NormalizeSearch(alias), definition.refKey)
-        end
         sortedDefinitions[#sortedDefinitions + 1] = definition
     end
     table.sort(sortedDefinitions, function(a, b)
@@ -296,6 +295,33 @@ local function FinalizeIndexes()
         if an ~= bn then return an < bn end
         return tostring(a.refKey) < tostring(b.refKey)
     end)
+
+    if EbonBuilds.EchoIdentityResolver and EbonBuilds.EchoIdentityResolver.Finalize then
+        EbonBuilds.EchoIdentityResolver.Finalize(sortedDefinitions)
+    else
+        for _, definition in ipairs(sortedDefinitions) do
+            definition.displayName = definition.sourceName
+            definition.aliases = definition.rawAliases or {}
+        end
+    end
+
+    for _, definition in ipairs(sortedDefinitions) do
+        local blobParts = {}
+        local function Blob(value)
+            value = Identity.NormalizeSearch(value)
+            if value ~= "" then blobParts[#blobParts + 1] = value end
+        end
+        Blob(definition.displayName)
+        Blob(definition.sourceName)
+        Blob(definition.refKey)
+        for _, alias in ipairs(definition.aliases or {}) do Blob(alias) end
+        for _, variant in ipairs(definition.variants or {}) do Blob(variant.spellId) end
+        definition.searchBlob = table.concat(blobParts, "\31")
+        AddIndex(sourceNameIndex, Identity.NormalizeSearch(definition.sourceName), definition.refKey)
+        for _, alias in ipairs(definition.aliases or {}) do
+            AddIndex(aliasIndex, Identity.NormalizeSearch(alias), definition.refKey)
+        end
+    end
 end
 
 local function ResetCatalog()
@@ -319,6 +345,7 @@ local function BuildBundled(bumpRevision)
     FinalizeIndexes()
     if bumpRevision ~= false then revision = revision + 1 end
     ready = true
+    catalogState = Catalog.STATE_BUNDLED_READY
 end
 
 local function HashText(hash, value)
@@ -345,6 +372,7 @@ local function StartRuntimeReconcile(reason)
         diagnostics.runtimeUnavailable = true
         reconciling = false
         reconcileFailed = true
+        catalogState = Catalog.STATE_RUNTIME_FAILED
         if EbonBuilds.EventHub then
             EbonBuilds.EventHub.Bump("ECHO_RECONCILIATION_FAILED", revision, "RUNTIME_DATABASE_UNAVAILABLE")
         end
@@ -368,6 +396,8 @@ local function StartRuntimeReconcile(reason)
     }
     runtimeDatabaseRef = database
     reconciling = true
+    runtimeVerified = false
+    catalogState = Catalog.STATE_RUNTIME_RECONCILING
     diagnostics.runtimeUnavailable = nil
 
     local function Slice()
@@ -422,10 +452,12 @@ local function StartRuntimeReconcile(reason)
         reconcileFailed = false
         runtimeVerified = true
         ready, reconciling, reconcileState = true, false, nil
+        catalogState = Catalog.STATE_RUNTIME_VERIFIED
         if EbonBuilds.EchoProjection and EbonBuilds.EchoProjection.Invalidate then
             EbonBuilds.EchoProjection.Invalidate()
         end
         if EbonBuilds.EventHub then
+            EbonBuilds.EventHub.Bump("ECHO_IDENTITY_CHANGED", EbonBuilds.EchoIdentityResolver and EbonBuilds.EchoIdentityResolver.GetRevision() or revision)
             EbonBuilds.EventHub.Bump("ECHO_CATALOG_CHANGED", revision, runtimeFingerprint, #state.ids)
             EbonBuilds.EventHub.Bump("ECHO_DIAGNOSTICS_CHANGED", revision)
         end
@@ -457,11 +489,19 @@ function Catalog.Invalidate(reason)
 end
 
 function Catalog.IsReady() return ready end
-function Catalog.IsReconciling() return reconciling end
+function Catalog.GetState() return catalogState end
+function Catalog.IsBundledReady() return catalogState >= Catalog.STATE_BUNDLED_READY end
+function Catalog.IsRuntimeVerified() return catalogState == Catalog.STATE_RUNTIME_VERIFIED end
+function Catalog.IsReconciling() return catalogState == Catalog.STATE_RUNTIME_RECONCILING end
 function Catalog.GetRevision() if not initialized then Catalog.Init() end; return revision end
 function Catalog.GetFingerprint() return runtimeFingerprint ~= "unverified" and runtimeFingerprint or Static.SOURCE_FINGERPRINT end
 function Catalog.GetBundledFingerprint() return Static.SOURCE_FINGERPRINT end
-function Catalog.GetDiagnostics() return diagnostics end
+function Catalog.GetDiagnostics()
+    diagnostics.identityConflicts = EbonBuilds.EchoIdentityResolver
+        and EbonBuilds.EchoIdentityResolver.GetDiagnostics() or nil
+    diagnostics.catalogState = catalogState
+    return diagnostics
+end
 
 function Catalog.GetBySpellId(spellId)
     if not initialized then Catalog.Init() end
@@ -487,12 +527,23 @@ end
 
 function Catalog.FindRefs(name)
     if not initialized then Catalog.Init() end
+    if EbonBuilds.EchoIdentityResolver and EbonBuilds.EchoIdentityResolver.FindRefs then
+        return EbonBuilds.EchoIdentityResolver.FindRefs(name)
+    end
     local normalized = Identity.NormalizeSearch(name)
     if normalized == "" then return {} end
     local combined = {}
     for refKey in pairs(sourceNameIndex[normalized] or {}) do combined[refKey] = true end
     for refKey in pairs(aliasIndex[normalized] or {}) do combined[refKey] = true end
     return RefsFromBucket(combined)
+end
+
+function Catalog.FindLegacyRefs(name)
+    if not initialized then Catalog.Init() end
+    if EbonBuilds.EchoIdentityResolver and EbonBuilds.EchoIdentityResolver.FindLegacyRefs then
+        return EbonBuilds.EchoIdentityResolver.FindLegacyRefs(name)
+    end
+    return Catalog.FindRefs(name)
 end
 
 function Catalog.GetByNameAll(name)
@@ -510,47 +561,40 @@ function Catalog.GetByName(name)
 end
 
 local function IsVariantAvailable(variant, classToken)
+    if EbonBuilds.EchoEligibilityResolver then
+        local availability = EbonBuilds.EchoEligibilityResolver.ResolveVariant(variant, classToken)
+        return EbonBuilds.EchoEligibilityResolver.IsAvailableState(availability)
+    end
     local bitValue = CLASS_BITS[tostring(classToken or ""):upper()]
     local mask = tonumber(variant and variant.classMask) or 0
-    if not bitValue or mask == 0 then return false end
-    return bit.band(mask, bitValue) ~= 0
+    return bitValue and mask ~= 0 and bit.band(mask, bitValue) ~= 0 or false
 end
 
 function Catalog.GetAvailability(variantOrSpellId, classToken)
     local variant = type(variantOrSpellId) == "table" and variantOrSpellId or Catalog.GetBySpellId(variantOrSpellId)
+    if EbonBuilds.EchoEligibilityResolver then
+        return EbonBuilds.EchoEligibilityResolver.ResolveVariant(variant, classToken)
+    end
     if not variant then return Identity.UNKNOWN end
     local bitValue = CLASS_BITS[tostring(classToken or ""):upper()]
-    if not bitValue then return Identity.UNKNOWN end
     local mask = tonumber(variant.classMask) or 0
-    if mask == 0 then return Identity.UNKNOWN end
-    -- After a successful live reconciliation, a bundled record absent from
-    -- the runtime database is not verified availability. Keep it in the
-    -- Unverified diagnostic projection instead of presenting it as selectable.
-    if runtimeVerified and variant.runtimePresent ~= true and variant.sourceKind == "BUNDLED" then
-        return Identity.UNKNOWN
-    end
-    if variant.availabilityConflict then
-        return bit.band(mask, bitValue) ~= 0 and Identity.CONFLICTED or Identity.UNAVAILABLE
-    end
+    if not bitValue or mask == 0 then return Identity.UNKNOWN end
     return bit.band(mask, bitValue) ~= 0 and Identity.AVAILABLE or Identity.UNAVAILABLE
 end
 
 function Catalog.GetBestByRef(refKey, classToken, preferredId)
+    if classToken and EbonBuilds.EchoProjection and EbonBuilds.EchoProjection.GetBestVariant then
+        return EbonBuilds.EchoProjection.GetBestVariant(classToken, refKey, preferredId)
+    end
     local definition = Catalog.GetByRef(refKey)
     if not definition then return nil, 0, nil, nil end
     preferredId = tonumber(preferredId)
     if preferredId then
         local preferred = definition.variantsBySpellId[preferredId]
-        if preferred and (not classToken or IsVariantAvailable(preferred, classToken)) then
-            return preferred.spellId, preferred.quality, definition, preferred
-        end
+        if preferred then return preferred.spellId, preferred.quality, definition, preferred end
     end
-    for _, variant in ipairs(definition.variants or {}) do
-        if not classToken or IsVariantAvailable(variant, classToken) then
-            return variant.spellId, variant.quality, definition, variant
-        end
-    end
-    return nil, 0, definition, nil
+    local variant = definition.variants and definition.variants[1]
+    return variant and variant.spellId or nil, variant and variant.quality or 0, definition, variant
 end
 
 function Catalog.GetBest(nameOrRef, classToken, preferredId)

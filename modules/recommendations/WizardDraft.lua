@@ -81,7 +81,9 @@ local function ResolveItem(classToken, item)
         if entry and variant then return entry, variant end
     end
     local name = item.name or item.sourceName or item.comment
-    local spellId, _, definition, variant = EbonBuilds.EchoCatalog.GetBest(name, classToken, preferredId)
+    local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindLegacyRefs(name) or {}
+    if #refs ~= 1 then return nil end
+    local spellId, _, definition, variant = EbonBuilds.EchoProjection.GetBestVariant(classToken, refs[1], preferredId)
     if not spellId or not definition or not variant then return nil end
     local entry = ProjectionEntry(classToken, definition.refKey)
     return entry, variant
@@ -90,7 +92,7 @@ end
 local function ResolveKey(draft, value)
     value = tostring(value or "")
     if draft.echoes[value] then return value end
-    local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindRefs(value) or {}
+    local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindLegacyRefs(value) or {}
     local found
     for _, refKey in ipairs(refs) do
         if draft.echoes[refKey] then
@@ -464,16 +466,22 @@ function Draft.ResolvePrimaryFamily(draft)
     return EbonBuilds.WizardPresets and EbonBuilds.WizardPresets.ResolvePrimaryFamily(draft.class, draft.spec) or nil
 end
 
-function Draft.MatchesClass(classToken, classMask)
-    local bitValue = EbonBuilds.ProjectAPI and EbonBuilds.ProjectAPI.ClassMask(classToken)
-    local mask = tonumber(classMask) or 0
-    return bitValue ~= nil and mask ~= 0 and bit.band(mask, bitValue) ~= 0
+function Draft.IsEntryAvailable(classToken, value)
+    if type(value) == "table" then
+        if value.spellId then return EbonBuilds.EchoProjection.ResolveSpell(classToken, value.spellId) ~= nil end
+        if value.refKey then return EbonBuilds.EchoProjection.GetEntry(classToken, value.refKey) ~= nil end
+    end
+    local spellId = tonumber(value)
+    return spellId and EbonBuilds.EchoProjection.ResolveSpell(classToken, spellId) ~= nil or false
 end
 function Draft.FilterEntriesForClass(entries, classToken)
     local filtered = {}
-    for _, entry in ipairs(entries or {}) do if Draft.MatchesClass(classToken, entry.classMask) then filtered[#filtered + 1] = entry end end
+    for _, entry in ipairs(entries or {}) do
+        if Draft.IsEntryAvailable(classToken, entry) then filtered[#filtered + 1] = entry end
+    end
     return filtered
 end
+
 
 function Draft.Settings(draft)
     local settings = (EbonBuilds.Build.NewBuildSettings and EbonBuilds.Build.NewBuildSettings()) or EbonBuilds.Build.DefaultSettings()
@@ -637,7 +645,7 @@ function Draft.CreateBuildData(draft, title)
         echoWeights = legacyWeights,
         echoWeightsByRef = refWeights,
         echoRefs = refs,
-        echoSchema = 2,
+        echoSchema = 3,
         echoCatalogFingerprint = draft.catalogFingerprint or (EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetFingerprint()),
         settings = settings, isPublic = false, startPaused = true,
         wizardMeta = {

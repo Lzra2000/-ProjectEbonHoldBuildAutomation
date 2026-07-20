@@ -1233,7 +1233,6 @@ local function OnProjectionInvalidated()
 end
 
 if EbonBuilds.EventHub and EbonBuilds.EventHub.On then
-    EbonBuilds.EventHub.On("ECHO_CATALOG_CHANGED", OnProjectionInvalidated)
-    EbonBuilds.EventHub.On("EVIDENCE_REVISION_CHANGED", OnProjectionInvalidated)
+    EbonBuilds.EventHub.On("ECHO_PROJECTION_CHANGED", OnProjectionInvalidated)
     EbonBuilds.EventHub.On("LOCALE_CHANGED", OnProjectionInvalidated)
 end

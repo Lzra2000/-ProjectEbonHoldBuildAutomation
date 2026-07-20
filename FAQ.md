@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 3.52 — also available in-game via Settings (gear icon) under Windows & Tools.*
+*This file is updated with every release. Latest version: 3.53 — also available in-game via Settings (gear icon) under Windows & Tools.*
 
 ---
 
@@ -263,6 +263,14 @@ The build editor's **Character** tab has three focused views:
 The gear score is directional build guidance, not a best-in-slot verdict. Uncached saved items remain pending instead of being counted as zero or replaced with current equipment. **Adopt current snapshot** copies current gear, the complete talent-tree presentation/allocation, and glyphs into the editor draft only when the current character and edited build have the same class; a mismatch disables the action and explains why. Save commits the staged snapshot and Cancel discards it. Older rank-only snapshots are expanded automatically from the built-in 3.3.5a talent catalog, restoring their native names, icons, full trees, backgrounds, and prerequisite lines without changing the stored build.
 
 ## Changelog
+
+### 3.53 (2026-07-21) -- Unified Echo identity and exact class eligibility
+
+- **Overtime Conversion eligibility corrected centrally.** Mage and every supported class except Paladin can use spell `200756`; the generic correction-fact pipeline validates the expected identity and source mask before applying the reviewed correction.
+- **Crimson Reprisal and Blood Mirror remain separate Echoes.** Crimson Reprisal (`200246`, `g:10`) uses its canonical identity even though the runtime spell name collides with Blood Mirror (`201388`, `g:296`). Their weights, policies, locks, search results, recommendations, and exports are independent.
+- **Every Echo consumer now uses one exact-variant projection.** Wizard, editor, weights, missing lists, scoring, automation, EWL, import/export, recommendations, and community validation no longer apply their own class-mask or name fallback logic.
+- **Saved configuration is non-destructive.** Echo schema 3 preserves valid references regardless of temporary availability, restores prior `CROSS_CLASS_REFERENCE` entries, and quarantines ambiguous legacy name-only data instead of guessing.
+- **Future false-negative server masks can self-correct locally.** Validated offers, replacements, successful selections, and live discovery evidence widen only the exact spell/class pair observed; full projection and pooled UI refreshes remain deferred outside combat.
 
 ### 3.52 (2026-07-20) -- Map overlay: matched to the rest of the UI, a few things fixed along the way
 

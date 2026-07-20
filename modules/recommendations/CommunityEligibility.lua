@@ -50,14 +50,14 @@ local function StrongestWeight(entry)
     return strongest
 end
 
-local function EnsureSignal(map, refKey)
+local function EnsureSignal(map, refKey, classToken)
     refKey = tostring(refKey or "")
     if not refKey:match("^[gs]:%d+$") then return nil end
     local signal = map[refKey]
     if not signal then
-        local definition = EbonBuilds.EchoCatalog.GetByRef(refKey)
+        local definition = EbonBuilds.EchoProjection and EbonBuilds.EchoProjection.GetEntry(classToken, refKey)
         if not definition then return nil end
-        signal = { refKey = refKey, name = definition.sourceName, weight = 0 }
+        signal = { refKey = refKey, name = definition.displayName or definition.canonicalName or definition.sourceName, weight = 0 }
         map[refKey] = signal
     end
     return signal
@@ -85,7 +85,7 @@ function Eligibility.BuildRecord(build)
     if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
 
     for refKey, entry in pairs(build.echoWeightsByRef or {}) do
-        local signal = EnsureSignal(signals, refKey)
+        local signal = EnsureSignal(signals, refKey, build.class)
         if signal then
             signal.weight = StrongestWeight(entry)
             signal.present, signal.positive, signal.negative = signal.weight ~= 0, signal.weight > 0, signal.weight < 0
@@ -96,7 +96,7 @@ function Eligibility.BuildRecord(build)
     for rawName, entry in pairs(build.echoWeights or {}) do
         local refKey = ResolveLegacy(build, rawName)
         if refKey then
-            local signal = EnsureSignal(signals, refKey)
+            local signal = EnsureSignal(signals, refKey, build.class)
             if signal and signal.weight == 0 then
                 signal.weight = StrongestWeight(entry)
                 signal.present, signal.positive, signal.negative = signal.weight ~= 0, signal.weight > 0, signal.weight < 0
@@ -106,7 +106,7 @@ function Eligibility.BuildRecord(build)
 
     for _, spellId in pairs(build.lockedEchoes or {}) do
         local entry, variant = EbonBuilds.EchoProjection.ResolveSpell(build.class, spellId)
-        local signal = entry and EnsureSignal(signals, entry.refKey)
+        local signal = entry and EnsureSignal(signals, entry.refKey, build.class)
         if signal and variant then
             signal.present, signal.positive, signal.locked = true, true, true
             signal.lockedSpellId = tonumber(spellId)
@@ -117,14 +117,14 @@ function Eligibility.BuildRecord(build)
     for name, enabled in pairs(settings.echoWhitelist or {}) do
         if enabled == true or enabled == 1 then
             local refKey = ResolveLegacy(build, name)
-            local signal = refKey and EnsureSignal(signals, refKey)
+            local signal = refKey and EnsureSignal(signals, refKey, build.class)
             if signal then signal.present, signal.positive, signal.protected = true, true, true end
         end
     end
     for name, policy in pairs(settings.echoPolicies or {}) do
         if policy ~= "normal" then
             local refKey = ResolveLegacy(build, name)
-            local signal = refKey and EnsureSignal(signals, refKey)
+            local signal = refKey and EnsureSignal(signals, refKey, build.class)
             if signal then
                 signal.present = true
                 if policy == "never_pick" or policy == "banish_on_sight" or policy == "banish_after_pick" then signal.negative = true end
@@ -133,7 +133,7 @@ function Eligibility.BuildRecord(build)
     end
     for spellId in pairs(settings.echoBanList or {}) do
         local refKey = ResolveLegacy(build, spellId)
-        local signal = refKey and EnsureSignal(signals, refKey)
+        local signal = refKey and EnsureSignal(signals, refKey, build.class)
         if signal then signal.present, signal.negative = true, true end
     end
 

@@ -134,47 +134,54 @@ local function GetRunData()
 end
 
 local function ScoreChoice(choice, settings)
-    local spellId = choice.spellId
-    local name = GetSpellInfo(spellId)
-    if not name then return nil end
-    local data = ProjectEbonhold.PerkDatabase[spellId]
-    if not data then return nil end
+    local spellId = tonumber(choice and choice.spellId)
+    if not spellId then return nil end
+    local build = EbonBuilds.Build.GetActive()
+    if not build or not EbonBuilds.EchoProjection then return nil end
+    local definition, variant = EbonBuilds.EchoProjection.ResolveOfferedSpell(build.class, spellId)
+    if not definition or not variant then return nil end
+
+    local raw = ProjectEbonhold.PerkDatabase and ProjectEbonhold.PerkDatabase[spellId] or nil
+    local name = definition.displayName or definition.canonicalName or definition.sourceName or tostring(spellId)
+    local quality = tonumber(choice.quality) or tonumber(variant.quality) or 0
     local entry = {
-        spellId   = spellId,
-        name      = name,
-        quality   = choice.quality,
-        families  = data.families,
-        classMask = data.classMask,
+        refKey = definition.refKey,
+        spellId = spellId,
+        name = name,
+        quality = quality,
+        families = variant.families or definition.families,
     }
-    -- Weights are keyed by the DB comment (e.g. "Warrior - Voidsteel
-    -- Bulwark"), NOT the spell name -- for class-specific echoes those
-    -- differ, and a spell-name lookup silently returned 0.
-    local weight = EbonBuilds.Weights.GetForSpell(EbonBuilds.Build.GetActive(), spellId, choice.quality) or 0
-    -- Novelty only applies if the player has never picked this echo (by name,
-    -- across all quality tiers). Once picked, all qualities lose the bonus.
-    local granted = ProjectEbonhold.PerkService.GetGrantedPerks()
-    local isNovel = not granted or not granted[name]
+    local weight = EbonBuilds.Weights.GetForSpell(build, spellId, quality) or 0
+
+    -- Exact-spell evidence avoids merging same-name Echoes such as Crimson
+    -- Reprisal and Blood Mirror. Fall back to ProjectEbonhold's name map only
+    -- for older server builds that have not synchronized discovery data.
+    local evidenceFlags = EbonBuilds.EchoEligibilityEvidence
+        and EbonBuilds.EchoEligibilityEvidence.GetFlags(build.class, spellId) or 0
+    local discoveredFlag = EbonBuilds.EchoEligibilityEvidence
+        and EbonBuilds.EchoEligibilityEvidence.FLAG_DISCOVERED or 0
+    local grantedFlag = EbonBuilds.EchoEligibilityEvidence
+        and EbonBuilds.EchoEligibilityEvidence.FLAG_GRANTED or 0
+    local isNovel = bit.band(evidenceFlags, bit.bor(discoveredFlag, grantedFlag)) == 0
+    if isNovel and ProjectEbonhold.PerkService and ProjectEbonhold.PerkService.GetGrantedPerks then
+        local granted = ProjectEbonhold.PerkService.GetGrantedPerks()
+        local runtimeName = GetSpellInfo(spellId)
+        if granted and (granted[name] or (runtimeName and granted[runtimeName])) then isNovel = false end
+    end
+
     local score
     if isNovel then
         score = EbonBuilds.Scoring.Score(entry, weight, settings)
     else
-        score = EbonBuilds.Scoring.ScorePerQuality(entry, weight, settings, entry.quality)
+        score = EbonBuilds.Scoring.ScorePerQuality(entry, weight, settings, quality)
     end
-    -- Freeze penalty: frozen and carried echoes get a score reduction so they
-    -- are deprioritized in subsequent evaluations until eventually picked.
     if (choice.isFrozen or choice.isCarried) and settings.freezePenaltyPct and settings.freezePenaltyPct > 0 then
         score = score * (1 - settings.freezePenaltyPct / 100)
     end
     return {
-        index     = 0,
-        spellId   = spellId,
-        name      = name,
-        quality   = choice.quality,
-        score     = score,
-        entry     = entry,
-        data      = data,
-        isFrozen  = choice.isFrozen,
-        isCarried = choice.isCarried,
+        index = 0, spellId = spellId, name = name, quality = quality,
+        score = score, entry = entry, data = raw or variant,
+        isFrozen = choice.isFrozen, isCarried = choice.isCarried,
     }
 end
 
@@ -194,19 +201,21 @@ local function IsFamilyProtected(data, whitelist)
 end
 
 local function ScoreLockedEcho(lockedId, settings)
-    local name = GetSpellInfo(lockedId)
-    if not name then return 0 end
-    local data = ProjectEbonhold.PerkDatabase[lockedId]
-    if not data then return 0 end
+    lockedId = tonumber(lockedId)
+    local build = EbonBuilds.Build.GetActive()
+    if not lockedId or not build or not EbonBuilds.EchoProjection then return 0 end
+    local definition, variant = EbonBuilds.EchoProjection.ResolveSpell(build.class, lockedId)
+    if not definition or not variant then return 0 end
+    local quality = tonumber(variant.quality) or 0
     local entry = {
-        spellId   = lockedId,
-        name      = name,
-        quality   = data.quality or 0,
-        families  = data.families,
-        classMask = data.classMask,
+        refKey = definition.refKey,
+        spellId = lockedId,
+        name = definition.displayName or definition.canonicalName or definition.sourceName,
+        quality = quality,
+        families = variant.families or definition.families,
     }
-    local w = EbonBuilds.Weights.GetForSpell(EbonBuilds.Build.GetActive(), lockedId, data.quality or 0) or 0
-    return EbonBuilds.Scoring.Score(entry, w, settings)
+    local weight = EbonBuilds.Weights.GetForSpell(build, lockedId, quality) or 0
+    return EbonBuilds.Scoring.Score(entry, weight, settings)
 end
 
 local function UpdateStat(build, key)
@@ -758,6 +767,10 @@ function EbonBuilds.Automation.Init()
     -- the perk window to disappear without any action being taken.
     origPerkUIShow = PerkUI.Show
     PerkUI.Show = function(choices)
+        if EbonBuilds.EchoEligibilityEvidence then
+            EbonBuilds.EchoEligibilityEvidence.ObserveChoiceBoard(
+                choices, EbonBuilds.EchoEligibilityEvidence.FLAG_OFFERED)
+        end
         pendingChoices = choices
         -- Stats: every genuinely new choice screen counts its offered echoes.
         local build = EbonBuilds.Build.GetActive()
@@ -776,7 +789,10 @@ function EbonBuilds.Automation.Init()
     -- Post-hook UpdateSinglePerk: called after a banish replacement animates
     -- the card. Start a fresh timer so automation can chain actions (e.g.
     -- banish the replacement if it is also below threshold).
-    hooksecurefunc(PerkUI, "UpdateSinglePerk", function()
+    hooksecurefunc(PerkUI, "UpdateSinglePerk", function(perkIndex, perkData)
+        if EbonBuilds.EchoEligibilityEvidence then
+            EbonBuilds.EchoEligibilityEvidence.ObserveReplacement(perkIndex, perkData)
+        end
         StartEvalTimer()
     end)
 

@@ -315,14 +315,9 @@ end
 
 local function ResolveRefByName(name, classToken)
     if not EbonBuilds.EchoCatalog then return nil, "CATALOG_UNAVAILABLE" end
-    local refs = EbonBuilds.EchoCatalog.FindRefs(name)
-    if classToken and EbonBuilds.EchoProjection then
-        local filtered = {}
-        for _, refKey in ipairs(refs or {}) do
-            if EbonBuilds.EchoProjection.GetEntry(classToken, refKey) then filtered[#filtered + 1] = refKey end
-        end
-        refs = filtered
-    end
+    local refs = EbonBuilds.EchoCatalog.FindLegacyRefs
+        and EbonBuilds.EchoCatalog.FindLegacyRefs(name)
+        or EbonBuilds.EchoCatalog.FindRefs(name)
     if #refs == 1 then return refs[1] end
     if #refs > 1 then return nil, "AMBIGUOUS_ALIAS", refs end
     return nil, "MISSING_ALIAS"
@@ -435,16 +430,12 @@ end
 local function CurrentReference(refKey)
     local definition = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(refKey)
     if not definition then return nil end
-    return { definition.spellId, definition.sourceName, definition.descriptionHash or 0 }
-end
-
-local function IsRefUsableForClass(refKey, classToken)
-    if not EbonBuilds.EchoProjection or not classToken then return true end
-    local entry = EbonBuilds.EchoProjection.GetEntry(classToken, refKey)
-    if not entry then return false end
-    local availability = entry.availability
-    return availability == EbonBuilds.EchoIdentity.AVAILABLE
-        or availability == EbonBuilds.EchoIdentity.CONFLICTED
+    return {
+        definition.spellId,
+        definition.canonicalName or definition.sourceName,
+        definition.descriptionHash or 0,
+        definition.identitySignature or 0,
+    }
 end
 
 local function CopyUnresolved(source)
@@ -463,23 +454,14 @@ local function CopyUnresolved(source)
     return out
 end
 
-local function AddMigrated(targetWeights, targetRefs, unresolved, targetRef, sourceKey, weights, reason, classToken)
-    if targetRef and not IsRefUsableForClass(targetRef, classToken) then
-        unresolved[#unresolved + 1] = {
-            refKey = sourceKey,
-            reason = "CROSS_CLASS_REFERENCE",
-            candidates = { targetRef },
-            weights = W.NormalizeEntry(weights),
-        }
-        return
-    end
+local function AddMigrated(targetWeights, targetRefs, unresolved, targetRef, sourceKey, weights, reason)
     if not targetRef then
         unresolved[#unresolved + 1] = {
             refKey = sourceKey,
             reason = reason or "UNRESOLVED_REFERENCE",
             weights = W.NormalizeEntry(weights),
         }
-        return
+        return false
     end
     local existing = targetWeights[targetRef]
     if existing and not EntriesEqual(existing, weights) then
@@ -489,63 +471,89 @@ local function AddMigrated(targetWeights, targetRefs, unresolved, targetRef, sou
             candidates = { targetRef },
             weights = W.NormalizeEntry(weights),
         }
-        return
+        return false
     end
     targetWeights[targetRef] = W.NormalizeEntry(weights)
     targetRefs[targetRef] = CurrentReference(targetRef)
+    return true
+end
+
+local function RecoverUnresolved(source, targetWeights, targetRefs, unresolved)
+    for _, item in ipairs(type(source) == "table" and source or {}) do
+        if type(item) == "table" and item.reason == "CROSS_CLASS_REFERENCE" then
+            local candidate = type(item.candidates) == "table" and item.candidates[1] or item.refKey
+            candidate = tostring(candidate or "")
+            if candidate:match("^[gs]:%d+$") and EbonBuilds.EchoCatalog.GetByRef(candidate) then
+                AddMigrated(targetWeights, targetRefs, unresolved, candidate,
+                    item.refKey or item.legacyName, item.weights, nil)
+            else
+                unresolved[#unresolved + 1] = {
+                    legacyName = item.legacyName,
+                    refKey = item.refKey,
+                    reason = "CATALOG_REFERENCE_MISSING",
+                    candidates = item.candidates,
+                    weights = W.NormalizeEntry(item.weights),
+                }
+            end
+        elseif type(item) == "table" then
+            unresolved[#unresolved + 1] = {
+                legacyName = item.legacyName,
+                refKey = item.refKey,
+                reason = item.reason,
+                candidates = item.candidates,
+                weights = W.NormalizeEntry(item.weights),
+            }
+        end
+    end
 end
 
 local function ReconcileSchemaTwo(build, currentFingerprint)
     local sourceWeights = W.NormalizeRefWeights(build.echoWeightsByRef or {})
     local sourceRefs = type(build.echoRefs) == "table" and build.echoRefs or {}
-    local migrated, refs = {}, {}
-    local unresolved = CopyUnresolved(build.unresolvedEchoWeights)
+    local migrated, refs, unresolved = {}, {}, {}
 
     for oldRef, weights in pairs(sourceWeights) do
         local stored = sourceRefs[oldRef]
         local storedSpellId = type(stored) == "table" and tonumber(stored[1]) or nil
         local storedName = type(stored) == "table" and stored[2] or nil
         local storedHash = type(stored) == "table" and tonumber(stored[3]) or 0
+        local storedSignature = type(stored) == "table" and tonumber(stored[4]) or 0
         local current = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(oldRef)
         local exact = storedSpellId and EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId(storedSpellId)
         local targetRef, reason
 
         if exact then
-            -- Exact spell identity wins. This safely follows a spell when a
-            -- server revision moves it to a different group key.
             targetRef = exact.refKey
         elseif current and stored then
             local sameName = EbonBuilds.EchoIdentity and
-                EbonBuilds.EchoIdentity.NormalizeSearch(current.sourceName) ==
+                EbonBuilds.EchoIdentity.NormalizeSearch(current.canonicalName or current.sourceName) ==
                 EbonBuilds.EchoIdentity.NormalizeSearch(storedName)
-            local sameSignature = storedHash == 0 or tonumber(current.descriptionHash) == 0
+            local sameHash = storedHash == 0 or tonumber(current.descriptionHash) == 0
                 or storedHash == tonumber(current.descriptionHash)
-            if sameName and sameSignature then targetRef = oldRef
+            local sameSignature = storedSignature == 0 or tonumber(current.identitySignature) == 0
+                or storedSignature == tonumber(current.identitySignature)
+            if sameName and sameHash and sameSignature then targetRef = oldRef
             else reason = "CATALOG_IDENTITY_MISMATCH" end
         elseif storedName then
-            local resolved, resolveReason, candidates = ResolveRefByName(storedName, build.class)
+            local resolved, resolveReason, candidates = ResolveRefByName(storedName)
             if resolved then targetRef = resolved
             else
-                reason = resolveReason or "CATALOG_REFERENCE_MISSING"
                 unresolved[#unresolved + 1] = {
                     refKey = oldRef,
                     legacyName = storedName,
-                    reason = reason,
+                    reason = resolveReason or "CATALOG_REFERENCE_MISSING",
                     candidates = candidates,
                     weights = W.NormalizeEntry(weights),
                 }
             end
         elseif current then
-            -- A revision-local group without its compact reference tuple
-            -- cannot be proven stable across fingerprints. Quarantine it
-            -- rather than silently assigning its weight to a reused group ID.
             reason = "MISSING_REFERENCE_METADATA"
         else
             reason = "CATALOG_REFERENCE_MISSING"
         end
 
         if targetRef then
-            AddMigrated(migrated, refs, unresolved, targetRef, oldRef, weights, nil, build.class)
+            AddMigrated(migrated, refs, unresolved, targetRef, oldRef, weights, nil)
         elseif not storedName or reason == "CATALOG_IDENTITY_MISMATCH" or reason == "MISSING_REFERENCE_METADATA" then
             unresolved[#unresolved + 1] = {
                 refKey = oldRef,
@@ -556,36 +564,35 @@ local function ReconcileSchemaTwo(build, currentFingerprint)
         end
     end
 
+    RecoverUnresolved(build.unresolvedEchoWeights, migrated, refs, unresolved)
     build.echoWeightsByRef = migrated
     build.echoRefs = refs
     build.unresolvedEchoWeights = #unresolved > 0 and unresolved or nil
     build.echoCatalogFingerprint = currentFingerprint
-    build.echoSchema = 2
+    build.echoSchema = 3
     return true
 end
 
-local function ValidateCurrentSchemaTwo(build, currentFingerprint)
-    local migrated, refs = {}, {}
-    local unresolved = CopyUnresolved(build.unresolvedEchoWeights)
+local function ValidateCurrentSchemaThree(build, currentFingerprint)
+    local migrated, refs, unresolved = {}, {}, {}
     for refKey, weights in pairs(W.NormalizeRefWeights(build.echoWeightsByRef or {})) do
-        if EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(refKey)
-            and IsRefUsableForClass(refKey, build.class) then
+        if EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(refKey) then
             migrated[refKey] = W.NormalizeEntry(weights)
             refs[refKey] = CurrentReference(refKey) or (type(build.echoRefs) == "table" and build.echoRefs[refKey])
         else
             unresolved[#unresolved + 1] = {
                 refKey = refKey,
-                reason = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(refKey)
-                    and "CROSS_CLASS_REFERENCE" or "CATALOG_REFERENCE_MISSING",
+                reason = "CATALOG_REFERENCE_MISSING",
                 weights = W.NormalizeEntry(weights),
             }
         end
     end
+    RecoverUnresolved(build.unresolvedEchoWeights, migrated, refs, unresolved)
     build.echoWeightsByRef = migrated
     build.echoRefs = refs
     build.unresolvedEchoWeights = #unresolved > 0 and unresolved or nil
     build.echoCatalogFingerprint = currentFingerprint or build.echoCatalogFingerprint
-    build.echoSchema = 2
+    build.echoSchema = 3
     return true
 end
 
@@ -593,10 +600,13 @@ function W.MigrateBuild(build)
     if type(build) ~= "table" then return false, "INVALID_BUILD" end
     local currentFingerprint = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetFingerprint() or nil
 
-    if tonumber(build.echoSchema) == 2 and type(build.echoWeightsByRef) == "table" then
+    if tonumber(build.echoSchema) == 3 and type(build.echoWeightsByRef) == "table" then
         if not currentFingerprint or build.echoCatalogFingerprint == currentFingerprint then
-            return ValidateCurrentSchemaTwo(build, currentFingerprint)
+            return ValidateCurrentSchemaThree(build, currentFingerprint)
         end
+        return ReconcileSchemaTwo(build, currentFingerprint)
+    end
+    if tonumber(build.echoSchema) == 2 and type(build.echoWeightsByRef) == "table" then
         return ReconcileSchemaTwo(build, currentFingerprint)
     end
 
@@ -634,7 +644,7 @@ function W.MigrateBuild(build)
     build.echoRefs = refs
     build.unresolvedEchoWeights = #unresolved > 0 and unresolved or nil
     build.echoCatalogFingerprint = currentFingerprint
-    build.echoSchema = 2
+    build.echoSchema = 3
     return true
 end
 

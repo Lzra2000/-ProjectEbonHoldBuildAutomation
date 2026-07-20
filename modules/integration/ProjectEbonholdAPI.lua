@@ -15,6 +15,29 @@ local function Service()
     return ProjectEbonhold and ProjectEbonhold.PerkService
 end
 
+
+function API.GetPlayerClassToken()
+    local _, classToken = UnitClass("player")
+    return classToken and tostring(classToken):upper() or nil
+end
+
+function API.GetCurrentChoice()
+    local service = Service()
+    if not service or type(service.GetCurrentChoice) ~= "function" then return nil end
+    local ok, result = pcall(service.GetCurrentChoice)
+    return ok and type(result) == "table" and result or nil
+end
+
+function API.GetDiscoveryState()
+    local service = Service()
+    if not service or type(service.GetDiscoveredEchoes) ~= "function" then return nil, false end
+    local ok, result = pcall(service.GetDiscoveredEchoes)
+    if not ok or type(result) ~= "table" then return nil, false end
+    local live = ProjectEbonhold and ProjectEbonhold.Perks
+        and type(ProjectEbonhold.Perks.discoveredEchoes) == "table"
+    return result, live and true or false
+end
+
 function API.GetAddonVersion()
     return tonumber(ProjectEbonhold and ProjectEbonhold.addonVersion)
 end
@@ -53,12 +76,13 @@ function API.ClassMask(classToken)
 end
 
 function API.IsPerkAvailableForClass(spellId, classToken)
-    local classMask = API.ClassMask(classToken)
-    if not classMask then return false end
-    if ProjectEbonhold and type(ProjectEbonhold.IsPerkAvailableForClass) == "function" then
-        local ok, available = pcall(ProjectEbonhold.IsPerkAvailableForClass, tonumber(spellId), classMask)
-        if ok then return available and true or false end
+    spellId = tonumber(spellId)
+    if EbonBuilds.EchoEligibilityResolver and EbonBuilds.EchoCatalog then
+        local state = EbonBuilds.EchoEligibilityResolver.ResolveVariant(spellId, classToken)
+        return EbonBuilds.EchoEligibilityResolver.IsAvailableState(state)
     end
+    local classMask = API.ClassMask(classToken)
+    if not spellId or not classMask then return false end
     local data = API.GetPerkData(spellId)
     local availableMask = tonumber(data and data.classMask) or 0
     return availableMask ~= 0 and bit.band(availableMask, classMask) ~= 0

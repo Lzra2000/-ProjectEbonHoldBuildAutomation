@@ -26,6 +26,9 @@ local allowed = {
     ECHO_CATALOG_CHANGED = true,
     ECHO_RECONCILIATION_FAILED = true,
     ECHO_DIAGNOSTICS_CHANGED = true,
+    ECHO_IDENTITY_CHANGED = true,
+    ECHO_ELIGIBILITY_CHANGED = true,
+    ECHO_PROJECTION_CHANGED = true,
 }
 
 local function IsAllowed(eventName)

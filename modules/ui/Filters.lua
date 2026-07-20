@@ -136,7 +136,7 @@ local function PassesFilters(entry, famActive, learnedSnapshot, settings)
     if famActive and not MatchesFamilies(entry) then return false end
     if state.learnedOnly and learnedSnapshot and not EntryIsLearned(entry, learnedSnapshot) then return false end
     if state.policy ~= nil and EbonBuilds.EchoPolicy
-        and EbonBuilds.EchoPolicy.Get(settings, entry.refKey or entry.name) ~= state.policy then return false end
+        and EbonBuilds.EchoPolicy.Get(settings, entry.refKey) ~= state.policy then return false end
     return true
 end
 

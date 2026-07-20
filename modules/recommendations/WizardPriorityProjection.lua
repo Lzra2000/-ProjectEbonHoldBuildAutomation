@@ -51,17 +51,24 @@ local function BuildMembership(classToken)
     classToken = tostring(classToken or ""):upper()
     local classProjection = EchoProjection.Get(classToken)
     local catalogRevision = classProjection.catalogRevision or 0
+    local identityRevision = classProjection.identityRevision or 0
+    local eligibilityRevision = classProjection.eligibilityRevision or 0
     local sourceInfo = EbonBuilds.EchoSemantics and EbonBuilds.EchoSemantics.SourceInfo()
     local semanticsKey = tostring(sourceInfo and sourceInfo.sourceFingerprint or "none")
         .. ":" .. tostring(sourceInfo and sourceInfo.runtimeAddonVersion or "none")
     local existing = membershipCache[classToken]
-    if existing and existing.catalogRevision == catalogRevision and existing.semanticsKey == semanticsKey then
+    if existing and existing.catalogRevision == catalogRevision
+        and existing.identityRevision == identityRevision
+        and existing.eligibilityRevision == eligibilityRevision
+        and existing.semanticsKey == semanticsKey then
         return existing
     end
 
     local membership = {
         classToken = classToken,
         catalogRevision = catalogRevision,
+        identityRevision = identityRevision,
+        eligibilityRevision = eligibilityRevision,
         semanticsKey = semanticsKey,
         canonical = NewCanonical(),
         primaryGroupByRef = {},

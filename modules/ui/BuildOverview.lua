@@ -115,11 +115,7 @@ end
 -- Missing Echoes computation
 ------------------------------------------------------------------------
 
-local CLASS_MASK = {
-    WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8,
-    PRIEST = 16, DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128,
-    WARLOCK = 256, DRUID = 1024,
-}
+
 
 -- Strip common prefixes/suffixes so spell-name comparison is robust against
 -- cosmetic variants like "Tome of Brittle Forging" vs "Brittle Forging".
@@ -180,6 +176,12 @@ function EbonBuilds.BuildOverview.GetOwnedEchoSets(assumeNoneOwned)
         spellId = tonumber(spellId)
         if not spellId then return end
         ownedSpellIds[spellId] = true
+        local variant = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId(spellId)
+        if variant then
+            AddOwnedName(variant.displayName or variant.sourceName)
+            if variant.groupId then ownedGroups[variant.groupId] = true end
+            return
+        end
         local data = ProjectEbonhold and ProjectEbonhold.PerkDatabase
             and ProjectEbonhold.PerkDatabase[spellId]
         if data then
@@ -323,110 +325,69 @@ EbonBuilds.BuildOverview._BuildWeightedEchoSet = BuildWeightedEchoSet
 
 local function ComputeMissingEchoes(build, assumeNoneOwned, includeOwned, weightedOnly)
     if not build or not build.class then return nil end
-
-    local classMask = CLASS_MASK[build.class] or 0
+    if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
 
     local ok, ownedLower, ownedGroups = pcall(EbonBuilds.BuildOverview.GetOwnedEchoSets, assumeNoneOwned)
     if not ok then
         if EbonBuilds.ErrorLog then
             EbonBuilds.ErrorLog.Record("BuildOverview.ComputeMissingEchoes", tostring(ownedLower))
         end
-        return nil -- surfaces as "still loading" -- RefreshMissing already retries this
+        return nil
     end
     if not ownedLower then return nil end
 
-    -- Build locked echo name set for priority sorting
-    local lockedLower = {}
-    if build.lockedEchoes then
-        for _, spellId in ipairs(build.lockedEchoes) do
-            if spellId then
-                local name = GetSpellInfo(spellId)
-                if name then lockedLower[NormalizeEchoName(name)] = true end
-            end
-        end
+    local lockedRefs = {}
+    for _, spellId in ipairs(build.lockedEchoes or {}) do
+        local refKey = spellId and EbonBuilds.EchoCatalog.GetRefForSpell(spellId)
+        if refKey then lockedRefs[refKey] = true end
     end
 
     local settings = build.settings or EbonBuilds.Build.DefaultSettings()
-    local weights = build.echoWeights or {}
-    local weightedLower = BuildWeightedEchoSet(weights)
-
-    -- Group by spell name, keep highest quality per name. Owned status is
-    -- tracked per entry now (not filtered out here) so the caller can opt
-    -- into seeing owned echoes too, not just missing ones.
-    -- Note: deliberately NOT filtered by current player level -- this tab
-    -- tracks collection progress (tomes not yet learned), and on Ebonhold
-    -- the character resets to level 1 every run, which would empty the list.
-    local byName = {}
-    for spellId, data in pairs(ProjectEbonhold.PerkDatabase) do
-        local spellName = GetSpellInfo(spellId)
-        if spellName then
-            local key = NormalizeEchoName(spellName)
-            if classMask == 0 or bit.band(data.classMask or 0, classMask) ~= 0 then
-                local isOwned = ownedLower[key] or (data.groupId and ownedGroups[data.groupId])
-                local existing = byName[key]
-                if not existing or (data.quality or 0) > (existing.quality or 0) then
-                    local canonical = EbonBuilds.Weights.CanonicalName(spellId) or spellName
-                    local hasWeight = weightedLower and weightedLower[key]
-                        or EbonBuilds.Weights.HasNonZero((build.echoWeights or {})[canonical])
-                    byName[key] = {
-                        spellId = spellId,
-                        data = data,
-                        displayName = spellName,
-                        owned = isOwned,
-                        weighted = hasWeight and true or false,
+    local missing = {}
+    for _, projected in ipairs(EbonBuilds.EchoProjection.GetAvailable(build.class) or {}) do
+        local variant = projected.availableVariants and projected.availableVariants[1]
+        if variant then
+            local refKey = projected.refKey
+            local normalizedCanonical = NormalizeEchoName(projected.canonicalName or projected.sourceName)
+            local normalizedDisplay = NormalizeEchoName(projected.displayName or projected.name)
+            local isOwned = (normalizedCanonical and ownedLower[normalizedCanonical])
+                or (normalizedDisplay and ownedLower[normalizedDisplay])
+                or (projected.groupId and ownedGroups[projected.groupId])
+            local weighted = EbonBuilds.Weights.HasNonZero((build.echoWeightsByRef or {})[refKey])
+            if (not weightedOnly or weighted) and (includeOwned or not isOwned) then
+                if isOwned then
+                    missing[#missing + 1] = {
+                        spellId = variant.spellId,
+                        refKey = refKey,
+                        name = projected.displayName or projected.name,
+                        quality = variant.quality or 0,
+                        isLocked = lockedRefs[refKey] or false,
+                        owned = true,
+                        weighted = weighted,
                     }
+                else
+                    local source = ProjectEbonhold.PerkDropSources and ProjectEbonhold.PerkDropSources[variant.spellId]
+                    if not source and projected.groupId and ProjectEbonhold.PerkDropSourceByGroup then
+                        source = ProjectEbonhold.PerkDropSourceByGroup[projected.groupId]
+                    end
+                    local needsTome = (tonumber(variant.requiredSpell) or 0) > 0
+                    if not EbonBuilds.Scoring.IsBanned(variant.spellId, settings) and needsTome then
+                        local weight = EbonBuilds.Weights.GetForRef(build, refKey, variant.quality)
+                        local score = EbonBuilds.Scoring.Score(projected, weight, settings)
+                        missing[#missing + 1] = {
+                            spellId = variant.spellId,
+                            refKey = refKey,
+                            name = projected.displayName or projected.name,
+                            quality = variant.quality or 0,
+                            dropSource = source or "Unknown",
+                            isLocked = lockedRefs[refKey] or false,
+                            score = score,
+                            owned = false,
+                            weighted = weighted,
+                        }
+                    end
                 end
             end
-        end
-    end
-
-    -- Collect missing echoes (only those with known drop source, exclude
-    -- banned) plus, when requested, owned ones too (score/drop-source
-    -- don't apply to something you already have, so those are omitted).
-    local missing = {}
-    for key, entry in pairs(byName) do
-        if not weightedOnly or entry.weighted then
-        if entry.owned then
-            if includeOwned then
-                missing[#missing + 1] = {
-                    spellId = entry.spellId,
-                    name = entry.displayName,
-                    quality = entry.data.quality or 0,
-                    isLocked = lockedLower[key] or false,
-                    owned = true,
-                    weighted = entry.weighted and true or false,
-                }
-            end
-        else
-            local source = ProjectEbonhold.PerkDropSources and ProjectEbonhold.PerkDropSources[entry.spellId]
-            if not source and entry.data.groupId and ProjectEbonhold.PerkDropSourceByGroup then
-                source = ProjectEbonhold.PerkDropSourceByGroup[entry.data.groupId]
-            end
-            local needsTome = entry.data.requiredSpell and entry.data.requiredSpell > 0
-            if not EbonBuilds.Scoring.IsBanned(entry.spellId, settings) and needsTome then
-                -- Build scoring entry
-                local scoringEntry = {
-                    spellId = entry.spellId,
-                    name = entry.displayName,
-                    quality = entry.data.quality or 0,
-                    families = entry.data.families,
-                    classMask = entry.data.classMask,
-                }
-                local canonical = EbonBuilds.Weights.CanonicalName(entry.spellId) or entry.displayName
-                local weight = EbonBuilds.Weights.GetFromWeights(weights, canonical, scoringEntry.quality)
-                local score = EbonBuilds.Scoring.Score(scoringEntry, weight, settings)
-                missing[#missing + 1] = {
-                    spellId = entry.spellId,
-                    name = entry.displayName,
-                    quality = entry.data.quality or 0,
-                    dropSource = source or "Unknown",
-                    isLocked = lockedLower[key] or false,
-                    score = score,
-                    owned = false,
-                    weighted = entry.weighted and true or false,
-                }
-            end
-        end
         end
     end
 

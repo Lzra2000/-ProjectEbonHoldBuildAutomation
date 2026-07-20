@@ -89,6 +89,34 @@ end
 
 P.ReferenceKey = ReferenceKey
 
+local function LegacyReferenceKey(value)
+    if value == nil then return nil end
+    if type(value) == "table" then
+        if value.refKey and tostring(value.refKey):match("^[gs]:%d+$") then
+            return ReferenceKey(value.refKey)
+        end
+        local exact = value.spellId or value.id
+        if exact then return ReferenceKey(exact) end
+        value = value.name or value.comment
+    end
+
+    local text = tostring(value or "")
+    if text:match("^[gs]:%d+$") or text:match("^%d+$") then
+        return ReferenceKey(text)
+    end
+    if text == "" or not EbonBuilds.EchoCatalog then return nil end
+
+    -- Persisted display-name keys predate canonical refKeys. Search both safe
+    -- and quarantined aliases so a historical Blood Mirror key cannot be
+    -- silently assigned to g:296 when it may have represented Crimson
+    -- Reprisal under the server's incorrect runtime name.
+    local refs = EbonBuilds.EchoCatalog.FindLegacyRefs
+        and EbonBuilds.EchoCatalog.FindLegacyRefs(text)
+        or EbonBuilds.EchoCatalog.FindRefs(text)
+    if #refs == 1 then return refs[1] end
+    return nil, #refs > 1 and "AMBIGUOUS_ALIAS" or "MISSING_ALIAS", refs
+end
+
 function P.IsValid(policy)
     return VALID[policy] and true or false
 end
@@ -100,31 +128,29 @@ end
 function P.Normalize(settings)
     if type(settings) ~= "table" then return {} end
     local source = type(settings.echoPolicies) == "table" and settings.echoPolicies or {}
-    local clean = {}
-    for rawName, rawPolicy in pairs(source) do
-        local refKey = ReferenceKey(rawName)
-        local name = CanonicalName(rawName)
-        local key = refKey or name
+    local clean, unresolved = {}, {}
+    for rawKey, rawPolicy in pairs(source) do
+        local refKey, reason, candidates = LegacyReferenceKey(rawKey)
         local policy = tostring(rawPolicy or "")
-        if key and VALID[policy] and policy ~= P.NORMAL then
-            clean[key] = policy
+        if refKey and VALID[policy] and policy ~= P.NORMAL then
+            clean[refKey] = policy
             if P.IsBanishPolicy(policy) and type(settings.echoWhitelist) == "table" then
-                settings.echoWhitelist[key] = nil
-                if name then settings.echoWhitelist[name] = nil end
+                settings.echoWhitelist[refKey] = nil
             end
+        elseif VALID[policy] and policy ~= P.NORMAL then
+            unresolved[tostring(rawKey)] = { policy = policy, reason = reason, candidates = candidates }
         end
     end
     settings.echoPolicies = clean
+    settings.unresolvedEchoPolicies = next(unresolved) and unresolved or nil
     return clean
 end
 
 function P.Get(settings, value)
     if type(settings) ~= "table" then return P.NORMAL end
     local policies = type(settings.echoPolicies) == "table" and settings.echoPolicies or {}
-    local literal = type(value) == "string" and value or nil
     local refKey = ReferenceKey(value)
-    local name = CanonicalName(value)
-    local policy = (literal and policies[literal]) or (refKey and policies[refKey]) or (name and policies[name])
+    local policy = refKey and policies[refKey] or nil
     return VALID[policy] and policy or P.NORMAL
 end
 
@@ -150,19 +176,8 @@ end
 function P.Set(settings, value, policy)
     if type(settings) ~= "table" then return false end
     local refKey = ReferenceKey(value)
-    local name = CanonicalName(value)
-    local key = refKey or name
-    if not key then return false end
-    policy = VALID[policy] and policy or P.NORMAL
-    settings.echoPolicies = type(settings.echoPolicies) == "table" and settings.echoPolicies or {}
-    if policy == P.NORMAL then
-        settings.echoPolicies[key] = nil
-        if refKey and name and name ~= refKey then settings.echoPolicies[name] = nil end
-    else
-        settings.echoPolicies[key] = policy
-        if refKey and name and name ~= refKey then settings.echoPolicies[name] = nil end
-    end
-    return true
+    if not refKey then return false end
+    return P.SetRef(settings, refKey, policy)
 end
 
 function P.IsBanishPolicy(policy)
@@ -176,7 +191,12 @@ local function EnsureCanonicalIndex()
     if not database then return end
     for spellId in pairs(database) do
         local spellName = GetSpellInfo(spellId)
-        if spellName then canonicalBySpellName[spellName] = CanonicalName(spellId) or spellName end
+        if spellName then
+            local canonical = CanonicalName(spellId) or spellName
+            local previous = canonicalBySpellName[spellName]
+            if previous == nil then canonicalBySpellName[spellName] = canonical
+            elseif previous ~= canonical then canonicalBySpellName[spellName] = false end
+        end
     end
 end
 
@@ -187,7 +207,8 @@ local function MarkSelected(set, value)
         name = CanonicalName(value.spellId or value.id or value.name or value.comment)
     elseif type(value) == "string" and not value:match("^%d+$") then
         EnsureCanonicalIndex()
-        name = canonicalBySpellName[value] or CanonicalName(value)
+        local mapped = canonicalBySpellName[value]
+        name = mapped ~= false and (mapped or CanonicalName(value)) or nil
     else
         name = CanonicalName(value)
     end

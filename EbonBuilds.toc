@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: EbonBuilds
-## Version: 3.52
+## Version: 3.53
 ## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced, EchoWishlist
 ## SavedVariables: EbonBuildsDB
 ## SavedVariablesPerCharacter: EbonBuildsCharDB
@@ -35,9 +35,13 @@ modules/data/SpecData.lua
 modules/integration/ProjectEbonholdAPI.lua
 modules/data/EchoIdentityData.lua
 modules/data/EchoSemanticsData.lua
+modules/data/EchoCorrectionFacts.lua
 modules/data/EchoSemantics.lua
 modules/data/EchoIdentity.lua
+modules/data/EchoIdentityResolver.lua
 modules/data/EchoCatalog.lua
+modules/data/EchoEligibilityEvidence.lua
+modules/data/EchoEligibilityResolver.lua
 modules/data/EchoProjection.lua
 modules/data/EchoGrouping.lua
 modules/weights/Weights.lua

@@ -4,6 +4,27 @@
 
 EbonBuilds.FAQContent = { PAGES = {
 {
+    title = "What's new: 3.53 (2026-07-21) -- Unified Echo identity and exact class eligibility",
+    lines = {
+        "",
+        "- Overtime Conversion eligibility is corrected centrally: Mage and every",
+        "supported class except Paladin can use spell 200756. The generic",
+        "correction-fact pipeline validates identity and source metadata first.",
+        "- Crimson Reprisal (200246 / g:10) and Blood Mirror (201388 / g:296)",
+        "remain separate canonical identities even though the runtime spell name",
+        "collides. Their weights, policies, locks, search, recommendations, and",
+        "exports are independent.",
+        "- Wizard, editor, weights, missing lists, scoring, automation, EWL,",
+        "import/export, recommendations, and community validation now consume one",
+        "exact-variant projection instead of local class-mask or name fallbacks.",
+        "- Echo schema 3 preserves valid configuration, restores old",
+        "CROSS_CLASS_REFERENCE entries, and quarantines ambiguous legacy name-only",
+        "records rather than guessing.",
+        "- Validated live offers can widen future incorrect server masks locally;",
+        "projection and pooled UI refreshes remain deferred outside combat.",
+    },
+},
+{
     title = "What's new: 3.52 (2026-07-20) -- Map overlay: matched to the rest of the UI, a few things fixed along the way",
     lines = {
         "",

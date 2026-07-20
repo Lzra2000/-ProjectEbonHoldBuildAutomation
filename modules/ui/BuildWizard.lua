@@ -57,11 +57,14 @@ local function SetClassIcon(texture, classToken)
 end
 
 local function EchoInfo(nameOrRef, preferredId)
-    if not EbonBuilds.EchoCatalog then return tonumber(preferredId), 0, nil, nil end
-    if tostring(nameOrRef or ""):match("^[gs]:%d+$") then
-        return EbonBuilds.EchoCatalog.GetBestByRef(nameOrRef, state.class, preferredId)
+    if not EbonBuilds.EchoProjection then return tonumber(preferredId), 0, nil, nil end
+    local refKey = tostring(nameOrRef or "")
+    if not refKey:match("^[gs]:%d+$") then
+        local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindRefs(nameOrRef) or {}
+        refKey = #refs == 1 and refs[1] or nil
     end
-    return EbonBuilds.EchoCatalog.GetBest(nameOrRef, state.class, preferredId)
+    if not refKey then return nil, 0, nil, nil end
+    return EbonBuilds.EchoProjection.GetBestVariant(state.class, refKey, preferredId)
 end
 
 local function SetEchoIcon(texture, name, preferredId)
@@ -1295,7 +1298,7 @@ local function OnCatalogChanged(_, revision, fingerprint)
 end
 
 if EbonBuilds.EventHub and EbonBuilds.EventHub.On then
-    EbonBuilds.EventHub.On("ECHO_CATALOG_CHANGED", OnCatalogChanged)
+    EbonBuilds.EventHub.On("ECHO_PROJECTION_CHANGED", OnCatalogChanged)
 end
 
 local view = {}

@@ -18,8 +18,6 @@ EbonBuilds.EchoPerformance = {}
 
 local SAMPLE_INTERVAL = 10  -- seconds between DPS samples while in combat
 local MAX_SAMPLES_PER_ECHO = 200
-local canonicalNameIndex = {}
-local canonicalNameIndexBuilt = false
 local normalizedStoreRef
 local dataRevision = 0
 local allStatsCacheRevision = -1
@@ -31,35 +29,27 @@ local function BumpRevision()
     allStatsCache = nil
 end
 
-local function EnsureCanonicalNameIndex()
-    if canonicalNameIndexBuilt then return end
-    canonicalNameIndexBuilt = true
-    if not (ProjectEbonhold and ProjectEbonhold.PerkDatabase) then return end
-    for spellId in pairs(ProjectEbonhold.PerkDatabase) do
-        local spellName = GetSpellInfo(spellId)
-        if spellName then canonicalNameIndex[spellName] = EbonBuilds.Weights.CanonicalName(spellId) or spellName end
-    end
-end
-
 local function CanonicalEchoName(value)
     if value == nil then return nil end
     local numeric = type(value) == "number" and value
         or (type(value) == "string" and value:match("^%d+$") and tonumber(value))
     if numeric then
-        local cached = canonicalNameIndex[numeric]
-        if cached then return cached end
-        cached = EbonBuilds.Weights.CanonicalName(numeric) or GetSpellInfo(numeric)
-        canonicalNameIndex[numeric] = cached
-        return cached
+        local variant = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId(numeric)
+        return variant and (variant.displayName or variant.sourceName)
+            or EbonBuilds.Weights.CanonicalName(numeric)
+            or (GetSpellInfo and GetSpellInfo(numeric))
     end
 
-    local name = tostring(value)
-    local cached = canonicalNameIndex[name]
-    if cached then return cached end
-    EnsureCanonicalNameIndex()
-    cached = canonicalNameIndex[name] or EbonBuilds.Weights.StripQualitySuffix(name)
-    canonicalNameIndex[name] = cached
-    return cached
+    local name = EbonBuilds.Weights.StripQualitySuffix(tostring(value))
+    local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindLegacyRefs
+        and EbonBuilds.EchoCatalog.FindLegacyRefs(name) or {}
+    if #refs == 1 then
+        local definition = EbonBuilds.EchoCatalog.GetByRef(refs[1])
+        return definition and (definition.displayName or definition.sourceName) or name
+    end
+    -- Ambiguous runtime aliases are not canonicalized. Keeping the literal
+    -- legacy key prevents Crimson Reprisal and Blood Mirror data from merging.
+    return name
 end
 
 local function NormalizeStoreKeys(store)
@@ -476,12 +466,6 @@ local MAX_CLUSTER_SIZE_TO_TRUST = 1          -- an echo's DPS signature must be 
 local WEIGHT_SUGGESTION_DEVIATION = 0.25     -- min fractional deviation from tier average to flag
 local WEIGHT_NUDGE = 10                      -- fixed, modest suggested adjustment
 
-local CLASS_MASK = {
-    WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8,
-    PRIEST = 16, DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128,
-    WARLOCK = 256, DRUID = 1024,
-}
-
 -- Returns a sorted list of { name, currentWeight, suggestedWeight,
 -- deviationPct, tierAvgDPS, avgDPS, sampleCount }, largest deviation
 -- first. Empty list if there isn't enough clean data to say anything.
@@ -512,37 +496,34 @@ function EbonBuilds.EchoPerformance.GetEvidenceStats()
 end
 
 function EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
-    if not build or not build.class then return {} end
-    if not (EbonBuilds.EchoTableRows and EbonBuilds.EchoTableRows.BuildBestByName) then return {} end
-    local classMask = CLASS_MASK[build.class] or 0
-    local weights = build.echoWeights or {}
+    if not build or not build.class or not EbonBuilds.EchoProjection then return {} end
     local allStats = EbonBuilds.EchoPerformance.GetEvidenceStats()
 
-    -- One pass: collect every class-eligible echo with enough samples,
-    -- and count how many share an identical (avgDPS, sampleCount)
-    -- signature (a co-active cluster -- can't be individually judged).
+    -- The canonical class projection is the only eligibility universe.
     local signatureCounts = {}
     local rawEntries = {}
-    for name, info in pairs(EbonBuilds.EchoTableRows.BuildBestByName()) do
-        if classMask == 0 or bit.band(info.classMask or 0, classMask) ~= 0 then
-            local perf = allStats[name]
-            if perf and perf.sampleCount >= MIN_SAMPLES_FOR_WEIGHT_SUGGESTION then
-                local sig = string.format("%.2f|%d", perf.avgDPS, perf.sampleCount)
-                signatureCounts[sig] = (signatureCounts[sig] or 0) + 1
-                rawEntries[#rawEntries + 1] = {
-                    name = name,
-                    -- DPS samples are family-level because older server builds
-                    -- expose granted Echoes by name without a reliable rank.
-                    -- Use the strongest configured rank as the representative
-                    -- tier, but apply any suggestion as the same delta to all
-                    -- available ranks so the rank table is never replaced.
-                    weight = EbonBuilds.Weights.MaxFromWeights(weights, name, info.qualities),
-                    qualities = info.qualities,
-                    avgDPS = perf.avgDPS,
-                    sampleCount = perf.sampleCount,
-                    sig = sig,
-                }
+    for _, info in ipairs(EbonBuilds.EchoProjection.GetAvailable(build.class)) do
+        local name = info.displayName or info.name
+        local perf = name and allStats[name]
+        if perf and perf.sampleCount >= MIN_SAMPLES_FOR_WEIGHT_SUGGESTION then
+            local sig = string.format("%.2f|%d", perf.avgDPS, perf.sampleCount)
+            signatureCounts[sig] = (signatureCounts[sig] or 0) + 1
+            local strongest = nil
+            for _, quality in ipairs(EbonBuilds.Quality.ORDER or {}) do
+                if info.qualities and info.qualities[quality] then
+                    local value = EbonBuilds.Weights.GetForRef(build, info.refKey, quality) or 0
+                    if strongest == nil or value > strongest then strongest = value end
+                end
             end
+            rawEntries[#rawEntries + 1] = {
+                refKey = info.refKey,
+                name = name,
+                weight = strongest or 0,
+                qualities = info.qualities,
+                avgDPS = perf.avgDPS,
+                sampleCount = perf.sampleCount,
+                sig = sig,
+            }
         end
     end
 
@@ -571,6 +552,7 @@ function EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
                 if math.abs(deviation) >= WEIGHT_SUGGESTION_DEVIATION then
                     local delta = deviation > 0 and WEIGHT_NUDGE or -WEIGHT_NUDGE
                     suggestions[#suggestions + 1] = {
+                        refKey = e.refKey,
                         name = e.name,
                         quality = nil,
                         qualities = e.qualities,
@@ -626,30 +608,25 @@ local BONUS_NUDGE = 3
 -- suggestedBonus, deviationPct, tierEchoCount }, or {} if there isn't
 -- enough data across enough distinct tiers to say anything.
 function EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment(build)
-    if not build or not build.class then return {} end
-    if not (EbonBuilds.EchoTableRows and EbonBuilds.EchoTableRows.BuildBestByName) then return {} end
-    local classMask = CLASS_MASK[build.class] or 0
-    local weights = build.echoWeights or {}
+    if not build or not build.class or not EbonBuilds.EchoProjection then return {} end
     local allStats = EbonBuilds.EchoPerformance.GetEvidenceStats()
 
     local signatureCounts = {}
     local raw = {}
-    for name, info in pairs(EbonBuilds.EchoTableRows.BuildBestByName()) do
-        if classMask == 0 or bit.band(info.classMask or 0, classMask) ~= 0 then
-            local quality = info.quality or 0
-            local baseWeight = EbonBuilds.Weights.GetFromWeights(weights, name, quality)
+    for _, info in ipairs(EbonBuilds.EchoProjection.GetAvailable(build.class)) do
+        local name = info.displayName or info.name
+        local perf = name and allStats[name]
+        for _, variant in ipairs(info.availableVariants or {}) do
+            local quality = tonumber(variant.quality) or 0
+            local baseWeight = EbonBuilds.Weights.GetForRef(build, info.refKey, quality) or 0
             local score = EbonBuilds.Scoring.ScorePerQuality({
-                spellId = info.spellId,
-                name = name,
-                quality = quality,
-                families = info.families,
-                classMask = info.classMask,
+                refKey = info.refKey, spellId = variant.spellId, name = name,
+                quality = quality, families = variant.families or info.families,
             }, baseWeight, build.settings or EbonBuilds.Build.DefaultSettings(), quality)
-            local perf = allStats[name]
             if score > 0 and perf and perf.sampleCount >= MIN_SAMPLES_FOR_WEIGHT_SUGGESTION then
                 local sig = string.format("%.2f|%d", perf.avgDPS, perf.sampleCount)
                 signatureCounts[sig] = (signatureCounts[sig] or 0) + 1
-                raw[#raw + 1] = { name = name, quality = quality, ratio = perf.avgDPS / score, sig = sig }
+                raw[#raw + 1] = { name = name, refKey = info.refKey, quality = quality, ratio = perf.avgDPS / score, sig = sig }
             end
         end
     end

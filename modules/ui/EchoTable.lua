@@ -474,15 +474,15 @@ function EbonBuilds.EchoTable.ApplyPolicyToFiltered(policy)
     local count = 0
     local changed = false
     for _, entry in ipairs(filteredList or {}) do
-        if api.Get(settings, entry.refKey or entry.name) ~= policy then
-            api.Set(settings, entry.refKey or entry.name, policy)
+        if api.Get(settings, entry.refKey) ~= policy then
+            api.SetRef(settings, entry.refKey, policy)
             count = count + 1
             changed = true
         end
         if api.IsBanishPolicy(policy) then
             settings.echoWhitelist = settings.echoWhitelist or {}
-            if settings.echoWhitelist[entry.name] then
-                settings.echoWhitelist[entry.name] = nil
+            if settings.echoWhitelist[entry.refKey] then
+                settings.echoWhitelist[entry.refKey] = nil
                 changed = true
             end
         end
@@ -560,6 +560,12 @@ function EbonBuilds.EchoTable.Init(parent)
     end
     if EbonBuilds.BuildForm and EbonBuilds.BuildForm.OnClassChanged then
         EbonBuilds.BuildForm.OnClassChanged(Rebuild)
+    end
+    if EbonBuilds.EventHub then
+        EbonBuilds.EventHub.On("ECHO_PROJECTION_CHANGED", function(_, classToken)
+            local current = GetEditingClass()
+            if not classToken or not current or tostring(classToken):upper() == current then Rebuild() end
+        end)
     end
 
     SyncChildWidth(scrollFrame, scrollChild)

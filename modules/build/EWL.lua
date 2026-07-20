@@ -12,12 +12,6 @@ EbonBuilds.EWL = {}
 local EWL = EbonBuilds.EWL
 local Theme = EbonBuilds.Theme
 
-local CLASS_BITS = {
-    WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16,
-    DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024,
-}
-
-local ALL_CLASS_MASK = 1535
 local exportDialog
 local tooltipScanner
 local TOME_SPELL_CACHE = {}
@@ -25,20 +19,6 @@ local ECHO_SPELL_CACHE = {}
 local compatibleCatalogCache
 local compatibleCatalogDatabase
 
-local function BitBand(a, b)
-    if bit and bit.band then return bit.band(a or 0, b or 0) end
-    local result, bitValue = 0, 1
-    a, b = a or 0, b or 0
-    while a > 0 and b > 0 do
-        local aBit = a % 2
-        local bBit = b % 2
-        if aBit == 1 and bBit == 1 then result = result + bitValue end
-        a = math.floor(a / 2)
-        b = math.floor(b / 2)
-        bitValue = bitValue * 2
-    end
-    return result
-end
 
 local function CleanEchoName(name)
     if not name then return nil end
@@ -109,10 +89,12 @@ local function TryGetPerkData(spellId)
 end
 
 local function CanonicalNameForSpell(spellId)
-    local data = GetPerkData(spellId)
-    local rawName = data and (data.name or data.Name or data.comment or data.Comment)
-    if not rawName or rawName == "" then rawName = GetSpellInfo(spellId) end
-    return CleanEchoName(rawName)
+    local variant = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId
+        and EbonBuilds.EchoCatalog.GetBySpellId(spellId) or nil
+    local definition = variant and EbonBuilds.EchoCatalog.GetByRef(variant.refKey) or nil
+    local name = definition and (definition.displayName or definition.canonicalName or definition.sourceName)
+    if name and name ~= "" then return CleanEchoName(name) end
+    return CleanEchoName(GetSpellInfo(spellId))
 end
 
 local function GetSpellTooltipText(spellId)
@@ -199,7 +181,6 @@ local function NormalizePerkData(id, data)
         item.raw = data
         item.spellId = tonumber(data.spellId or data.spellID or data.spell or data.requiredSpell or data.id or id)
         item.quality = tonumber(data.quality or data.rarity or data.perkQuality or data.Quality or 0) or 0
-        item.classMask = tonumber(data.classMask or data.classes or data.class or data.ClassMask or ALL_CLASS_MASK)
         item.maxStack = tonumber(data.maxStack or data.maxStacks or data.stacks or 1) or 1
         item.groupId = tonumber(data.groupId or data.group or 0) or 0
         item.requiredSpell = tonumber(data.requiredSpell or data.RequiredSpell or 0) or 0
@@ -210,7 +191,6 @@ local function NormalizePerkData(id, data)
     else
         item.spellId = tonumber(id)
         item.quality = 0
-        item.classMask = ALL_CLASS_MASK
         item.maxStack = 1
         item.groupId = 0
         item.requiredSpell = 0
@@ -481,26 +461,6 @@ local function IndexCatalog(catalog)
     return byId, byFamily
 end
 
-local function GetClassMask(classToken)
-    local masks = ProjectEbonhold and ProjectEbonhold.PerkClassMasks
-    return masks and masks[classToken] or CLASS_BITS[classToken or ""]
-end
-
-local function ItemMatchesClass(item, wantedMask)
-    if not wantedMask then return true end
-    local mask = item and tonumber(item.classMask)
-    if not mask or mask == ALL_CLASS_MASK then return true end
-    return BitBand(mask, wantedMask) ~= 0
-end
-
-local function RowMatchesClass(row, classToken)
-    local wantedMask = GetClassMask(classToken)
-    if ItemMatchesClass(row, wantedMask) then return true end
-    for _, variant in ipairs(row and row._variants or {}) do
-        if ItemMatchesClass(variant, wantedMask) then return true end
-    end
-    return false
-end
 
 local function GetRollStatus(item)
     if not item then return "unknown" end
@@ -523,14 +483,14 @@ local function ResolveRowForSpell(byId, byFamily, spellId)
 end
 
 local function MakeFallbackLockedRow(spellId)
+    local variant = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId
+        and EbonBuilds.EchoCatalog.GetBySpellId(spellId) or nil
     local data = GetPerkData(spellId)
     return {
-        id = spellId,
-        spellId = spellId,
-        name = CanonicalNameForSpell(spellId) or GetSpellInfo(spellId) or ("spellId " .. tostring(spellId)),
-        quality = data and tonumber(data.quality) or 0,
-        classMask = data and tonumber(data.classMask) or ALL_CLASS_MASK,
-        requiredSpell = data and tonumber(data.requiredSpell) or 0,
+        id = spellId, spellId = spellId,
+        name = CanonicalNameForSpell(spellId) or ("spellId " .. tostring(spellId)),
+        quality = variant and tonumber(variant.quality) or (data and tonumber(data.quality) or 0),
+        requiredSpell = variant and tonumber(variant.requiredSpell) or (data and tonumber(data.requiredSpell) or 0),
     }
 end
 
@@ -541,24 +501,24 @@ function EWL.BuildEntries(build)
     local classToken = string.upper(tostring(build.class or EbonBuilds.Build.PlayerClassToken() or ""))
     local catalog, catalogSource = GetCompatibleCatalog()
     local byId, byFamily = IndexCatalog(catalog)
-    local entries, entriesByRow, unresolved = {}, {}, {}
+    local entries, entriesBySpell, unresolved = {}, {}, {}
 
-    local function AddRow(row, saved, weight)
+    local function AddRow(row, saved, weight, exactSpellId)
         if not row then return nil end
-        local entry = entriesByRow[row]
+        local spellId = tonumber(exactSpellId or row.spellId or row.id)
+        if not spellId then return nil end
+        local entry = entriesBySpell[spellId]
         if not entry then
-            local spellId = tonumber(row.spellId or row.id)
-            if not spellId then return nil end
+            local variant = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId(spellId)
             entry = {
-                row = row,
-                spellId = spellId,
+                row = row, spellId = spellId,
                 locked = saved and true or false,
-                name = CleanEchoName(row.name) or tostring(row.name or spellId),
-                quality = tonumber(row.quality) or tonumber(row.maxQuality) or 0,
+                name = CanonicalNameForSpell(spellId) or CleanEchoName(row.name) or tostring(spellId),
+                quality = variant and tonumber(variant.quality) or tonumber(row.quality) or tonumber(row.maxQuality) or 0,
                 rollLocked = GetRollStatus(row) == "locked",
                 weight = tonumber(weight) or 0,
             }
-            entriesByRow[row] = entry
+            entriesBySpell[spellId] = entry
             entries[#entries + 1] = entry
         else
             if saved then entry.locked = true end
@@ -570,9 +530,17 @@ function EWL.BuildEntries(build)
     for slot = 1, EbonBuilds.Build.LOCKED_SLOTS do
         local spellId = build.lockedEchoes and tonumber(build.lockedEchoes[slot])
         if spellId then
-            local row = ResolveRowForSpell(byId, byFamily, spellId)
-            if not row then row = MakeFallbackLockedRow(spellId) end
-            AddRow(row, true, 0)
+            local projectionEntry, variant = EbonBuilds.EchoProjection.ResolveSpell(classToken, spellId)
+            if projectionEntry and variant then
+                local row = byId[spellId] or ResolveRowForSpell(byId, byFamily, spellId)
+                if not row then row = MakeFallbackLockedRow(spellId) end
+                AddRow(row, true, 0, spellId)
+            else
+                unresolved[#unresolved + 1] = {
+                    name = CanonicalNameForSpell(spellId) or tostring(spellId),
+                    spellId = spellId, reason = "inactive",
+                }
+            end
         end
     end
 
@@ -585,19 +553,19 @@ function EWL.BuildEntries(build)
                 local spellId = select(1, EbonBuilds.EchoProjection.GetBestVariant(classToken, refKey))
                 local row = spellId and (byId[spellId] or ResolveRowForSpell(byId, byFamily, spellId)) or nil
                 if not row and spellId then row = MakeFallbackLockedRow(spellId) end
-                if row and RowMatchesClass(row, classToken) then
+                if row and spellId then
                     local maxWeight = nil
                     for _, quality in ipairs(EbonBuilds.Quality.ORDER or {}) do
                         local value = EbonBuilds.Weights.GetForRef(build, refKey, quality)
                         if maxWeight == nil or value > maxWeight then maxWeight = value end
                     end
-                    AddRow(row, false, maxWeight or 0)
+                    AddRow(row, false, maxWeight or 0, spellId)
                 else
                     local definition = EbonBuilds.EchoCatalog.GetByRef(refKey)
                     unresolved[#unresolved + 1] = {
                         name = definition and definition.sourceName or refKey,
                         weights = weights,
-                        reason = row and "class" or "catalog",
+                        reason = spellId and "catalog" or "inactive",
                     }
                 end
             end
@@ -606,14 +574,17 @@ function EWL.BuildEntries(build)
         for name, rawWeights in pairs(build.echoWeights or {}) do
             local weights = EbonBuilds.Weights.NormalizeEntry(rawWeights)
             if EbonBuilds.Weights.HasNonZero(weights) then
-                local row = byFamily[FamilyKey(name)]
-                if row and RowMatchesClass(row, classToken) then
-                    AddRow(row, false, EbonBuilds.Weights.MaxFromWeights(build.echoWeights, name))
+                local refs = EbonBuilds.EchoCatalog.FindLegacyRefs(name)
+                local refKey = refs and #refs == 1 and refs[1] or nil
+                local spellId = refKey and select(1, EbonBuilds.EchoProjection.GetBestVariant(classToken, refKey)) or nil
+                local row = spellId and (byId[spellId] or ResolveRowForSpell(byId, byFamily, spellId)) or nil
+                if row then
+                    AddRow(row, false, EbonBuilds.Weights.MaxFromWeights(build.echoWeights, name), spellId)
                 else
                     unresolved[#unresolved + 1] = {
                         name = CleanEchoName(name) or tostring(name),
                         weights = weights,
-                        reason = row and "class" or "catalog",
+                        reason = not refKey and "ambiguous" or (spellId and "catalog" or "inactive"),
                     }
                 end
             end

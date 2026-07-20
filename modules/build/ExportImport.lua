@@ -810,12 +810,7 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
     -- whether a 0-weighted echo actually looks worth raising, or whether
     -- a weighted one doesn't really fit the spec, instead of only seeing
     -- names and numbers with no idea what anything does.
-    local CLASS_MASK = {
-        WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8,
-        PRIEST = 16, DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128,
-        WARLOCK = 256, DRUID = 1024,
-    }
-    local classMask = CLASS_MASK[build.class] or 0
+
 
     local function GetDescription(spellId)
         if utils and utils.GetSpellDescription then
@@ -833,21 +828,21 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
     end
 
     local entries = {}
-    if EbonBuilds.EchoTableRows and EbonBuilds.EchoTableRows.BuildBestByName then
-        for name, info in pairs(EbonBuilds.EchoTableRows.BuildBestByName()) do
-            if classMask == 0 or bit.band(info.classMask or 0, classMask) ~= 0 then
-                local familyList = {}
-                for _, fam in ipairs(info.families or {}) do familyList[#familyList + 1] = fam end
-                entries[#entries + 1] = {
-                    name = name,
-                    weights = EbonBuilds.Weights.DescribeFromWeights(build.echoWeights or {}, name, info.qualities),
-                    sortWeight = EbonBuilds.Weights.MaxFromWeights(build.echoWeights or {}, name, info.qualities),
-                    quality = QUALITY_LABELS[info.quality] or "?",
-                    families = #familyList > 0 and table.concat(familyList, "/") or "none",
-                    spellId = info.spellId,
-                    whitelisted = EbonBuilds.Scoring.IsWhitelisted(name, s),
-                }
-            end
+    if EbonBuilds.EchoProjection then
+        for _, info in ipairs(EbonBuilds.EchoProjection.GetAvailable(build.class)) do
+            local familyList = {}
+            for _, fam in ipairs(info.families or {}) do familyList[#familyList + 1] = fam end
+            local weightsTable = build.echoWeightsByRef or {}
+            entries[#entries + 1] = {
+                refKey = info.refKey,
+                name = info.displayName or info.canonicalName or info.name,
+                weights = EbonBuilds.Weights.DescribeFromWeights(weightsTable, info.refKey, info.qualities),
+                sortWeight = EbonBuilds.Weights.MaxFromWeights(weightsTable, info.refKey, info.qualities),
+                quality = QUALITY_LABELS[info.quality] or "?",
+                families = #familyList > 0 and table.concat(familyList, "/") or "none",
+                spellId = info.representativeSpellId or info.spellId,
+                whitelisted = EbonBuilds.Scoring.IsWhitelisted(info.refKey, s),
+            }
         end
     end
     table.sort(entries, function(a, b)

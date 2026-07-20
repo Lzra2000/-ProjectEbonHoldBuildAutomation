@@ -11,10 +11,7 @@ local QUALITY_RGB = EbonBuilds.Quality.RGB
 local StripQualitySuffix = EbonBuilds.Weights.StripQualitySuffix
 local activeSortKey = "name"
 local RIGHT_MARGIN = 4
-local CLASS_BITS = {
-    WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16,
-    DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024,
-}
+
 
 Rows.ROW_HEIGHT     = 60
 
@@ -67,7 +64,7 @@ local function BuildBestByName()
     local catalog = EbonBuilds.EchoCatalog
     if not catalog then return best end
     for _, entry in ipairs(catalog.GetSortedList() or {}) do
-        best[entry.refKey or entry.name] = entry
+        best[entry.displayName or entry.canonicalName or entry.sourceName or entry.refKey] = entry
     end
     return best
 end
@@ -103,29 +100,41 @@ end
 
 function Rows.BuildAllQualitiesList(classToken)
     local list = {}
-    local catalog = EbonBuilds.EchoCatalog
-    if not catalog then return list end
-    local classBit = CLASS_BITS[tostring(classToken or ""):upper()]
-    for _, entry in ipairs(catalog.GetSortedList() or {}) do
-        for _, variant in ipairs(entry.variants or {}) do
-            local classMask = tonumber(variant.classMask) or 0
-            local availability = classBit and catalog.GetAvailability(variant, classToken) or nil
-            local verified = not classBit
-                or availability == EbonBuilds.EchoIdentity.AVAILABLE
-                or availability == EbonBuilds.EchoIdentity.CONFLICTED
-            if verified then
-                local displayName = entry.sourceName or entry.name or variant.sourceName or variant.localizedName
+    local source
+    if classToken and classToken ~= "" and EbonBuilds.EchoProjection then
+        source = EbonBuilds.EchoProjection.GetAvailable(classToken)
+        for _, entry in ipairs(source or {}) do
+            for _, variant in ipairs(entry.availableVariants or {}) do
                 list[#list + 1] = {
                     spellId = variant.spellId,
-                    refKey = entry.refKey or variant.refKey,
-                    name = displayName,
-                    displayName = displayName,
-                    sourceName = entry.sourceName or variant.sourceName,
+                    refKey = entry.refKey,
+                    name = entry.displayName or entry.name,
+                    displayName = entry.displayName or entry.name,
+                    sourceName = entry.sourceName,
                     searchBlob = entry.searchBlob,
                     quality = variant.quality,
-                    classMask = classMask,
                     groupId = variant.groupId,
-                    families = variant.families or {},
+                    families = variant.families or entry.families or {},
+                    semantics = variant.semantics,
+                    availability = entry.availability,
+                    availabilityReason = entry.availabilityReason,
+                }
+            end
+        end
+    else
+        source = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetSortedList() or {}
+        for _, entry in ipairs(source) do
+            for _, variant in ipairs(entry.variants or {}) do
+                list[#list + 1] = {
+                    spellId = variant.spellId,
+                    refKey = entry.refKey,
+                    name = entry.displayName or entry.sourceName,
+                    displayName = entry.displayName or entry.sourceName,
+                    sourceName = entry.sourceName,
+                    searchBlob = entry.searchBlob,
+                    quality = variant.quality,
+                    groupId = variant.groupId,
+                    families = variant.families or entry.families or {},
                     semantics = variant.semantics,
                 }
             end
@@ -156,17 +165,16 @@ local function PersistSettings()
     if build then EbonBuilds.Build.Save(build.id, { settings = EbonBuilds.Build.CloneSettings(GetSettings()) }) end
 end
 
-local function IsWhitelisted(name)
+local function IsWhitelisted(refKey)
     local settings = GetSettings()
-    return settings.echoWhitelist and settings.echoWhitelist[name] and true or false
+    return settings.echoWhitelist and settings.echoWhitelist[refKey] and true or false
 end
 
 local function RemoveBanConflicts(settings, entry)
     settings.echoBanList = settings.echoBanList or {}
     for spellId in pairs(settings.echoBanList) do
-        if EbonBuilds.Weights.CanonicalName(tonumber(spellId) or spellId) == entry.name then
-            settings.echoBanList[spellId] = nil
-        end
+        local refKey = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetRefForSpell(tonumber(spellId) or spellId)
+        if refKey == entry.refKey then settings.echoBanList[spellId] = nil end
     end
 end
 
@@ -257,9 +265,12 @@ local function WireIconTooltip(iconFrame)
     iconFrame:SetScript("OnEnter", function(self)
         if not self.spellId then return end
         local spellName = GetSpellInfo(self.spellId)
+        local variant = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetBySpellId(self.spellId)
+        local definition = variant and EbonBuilds.EchoCatalog.GetByRef(variant.refKey)
+        local displayName = definition and (definition.displayName or definition.canonicalName or definition.sourceName) or spellName
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:ClearLines()
-        if spellName then GameTooltip:AddLine(spellName, 1, 0.82, 0) end
+        if displayName then GameTooltip:AddLine(displayName, 1, 0.82, 0) end
         local description = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetDescription(self.spellId, 500, 1)
         if not description and utils and utils.GetSpellDescription then
             description = utils.GetSpellDescription(self.spellId, 500, 1)
@@ -307,8 +318,8 @@ local function UpdatePolicyVisual(row, entry, selectedNames)
     if not row.policyDropdown or not entry then return end
     local api = EbonBuilds.EchoPolicy
     local settings = GetSettings()
-    local policy = api and api.Get(settings, entry.refKey or entry.name) or "normal"
-    local selected = api and api.IsSelected(entry.refKey or entry.name, selectedNames) or false
+    local policy = api and api.Get(settings, entry.refKey) or "normal"
+    local selected = api and api.IsSelected(entry.refKey, selectedNames) or false
     local definition = PolicyDefinition(policy)
     row.policyDropdown:SetText(definition.shortLabel or definition.label)
     if row.policyDropdown._label then row.policyDropdown._label:SetTextColor(unpack(definition.color or EbonBuilds.Theme.TEXT_PRIMARY)) end
@@ -329,8 +340,8 @@ local function CreatePolicyDropdown(row)
         local entry = row._entry
         if not api or not entry then return {} end
         local settings = GetSettings()
-        local current = api.Get(settings, entry.refKey or entry.name)
-        local selected = api.IsSelected(entry.refKey or entry.name)
+        local current = api.Get(settings, entry.refKey)
+        local selected = api.IsSelected(entry.refKey)
         local items = {}
         for _, policy in ipairs(api.ORDER or {}) do
             local policyKey = policy
@@ -345,13 +356,13 @@ local function CreatePolicyDropdown(row)
                     local liveEntry = row._entry
                     if not liveEntry then return end
                     local liveSettings = GetSettings()
-                    api.Set(liveSettings, liveEntry.refKey or liveEntry.name, policyKey)
+                    api.Set(liveSettings, liveEntry.refKey, policyKey)
                     if api.IsBanishPolicy(policyKey) then
                         liveSettings.echoWhitelist = liveSettings.echoWhitelist or {}
-                        liveSettings.echoWhitelist[liveEntry.name] = nil
+                        liveSettings.echoWhitelist[liveEntry.refKey] = nil
                     end
                     PersistSettings()
-                    UpdateProtectionVisual(row, liveEntry, IsWhitelisted(liveEntry.name))
+                    UpdateProtectionVisual(row, liveEntry, IsWhitelisted(liveEntry.refKey))
                     UpdatePolicyVisual(row, liveEntry)
                     if EbonBuilds.EchoTable and EbonBuilds.EchoTable.NotifyPolicyChanged then
                         EbonBuilds.EchoTable.NotifyPolicyChanged()
@@ -367,8 +378,8 @@ local function CreatePolicyDropdown(row)
             local entry = row._entry
             local api = EbonBuilds.EchoPolicy
             if not entry or not api then return end
-            local policy = api.Get(GetSettings(), entry.name)
-            local selected = api.IsSelected(entry.refKey or entry.name)
+            local policy = api.Get(GetSettings(), entry.refKey)
+            local selected = api.IsSelected(entry.refKey)
             local definition = api.Definition(policy)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(definition.label, 1, 0.82, 0)
@@ -419,16 +430,16 @@ local function CreateProtectToggle(row)
         settings.echoWhitelist = settings.echoWhitelist or {}
         local newValue = not self:GetChecked()
         if newValue then
-            settings.echoWhitelist[entry.name] = true
+            settings.echoWhitelist[entry.refKey] = true
             RemoveBanConflicts(settings, entry)
             if EbonBuilds.EchoPolicy then
-                local policy = EbonBuilds.EchoPolicy.Get(settings, entry.refKey or entry.name)
+                local policy = EbonBuilds.EchoPolicy.Get(settings, entry.refKey)
                 if EbonBuilds.EchoPolicy.IsBanishPolicy(policy) then
-                    EbonBuilds.EchoPolicy.Set(settings, entry.refKey or entry.name, EbonBuilds.EchoPolicy.NORMAL)
+                    EbonBuilds.EchoPolicy.Set(settings, entry.refKey, EbonBuilds.EchoPolicy.NORMAL)
                 end
             end
         else
-            settings.echoWhitelist[entry.name] = nil
+            settings.echoWhitelist[entry.refKey] = nil
         end
         UpdateProtectionVisual(row, entry, newValue)
         UpdatePolicyVisual(row, entry)
@@ -504,8 +515,8 @@ local function ApplyWeight(box)
 
     ClearError(box)
     box:SetText(tostring(parsed))
-    if box._row and box._row._entry and box._row._entry.name == box.echoName then
-        UpdateProtectionVisual(box._row, box._row._entry, IsWhitelisted(box.echoName))
+    if box._row and box._row._entry and box._row._entry.refKey == box.echoRefKey then
+        UpdateProtectionVisual(box._row, box._row._entry, IsWhitelisted(box.echoRefKey))
         UpdateScores(box._row, box._row._entry)
     end
 
@@ -536,7 +547,7 @@ end
 
 local function RevertInvalidBeforeRecycle(row, nextEntry)
     if not activeEditBox or activeEditBox._row ~= row then return end
-    if not row._entry or row._entry.name == nextEntry.name then return end
+    if not row._entry or row._entry.refKey == nextEntry.refKey then return end
 
     local box = activeEditBox
     local oldName, oldQuality = box.echoName, box.quality
@@ -819,7 +830,7 @@ function Rows.Populate(row, yOffset, entry, selectedNames)
         row.qualityBadge:SetBackdropColor(rgb[1] * 0.10, rgb[2] * 0.10, rgb[3] * 0.10, 0.98)
         row.qualityBadge:SetBackdropBorderColor(rgb[1], rgb[2], rgb[3], activeSortKey == "quality" and 1 or 0.60)
     end
-    UpdateProtectionVisual(row, entry, IsWhitelisted(entry.name))
+    UpdateProtectionVisual(row, entry, IsWhitelisted(entry.refKey))
     UpdatePolicyVisual(row, entry, selectedNames)
 
     for _, quality in ipairs(QUALITY_ORDER) do

@@ -13,8 +13,6 @@ EbonBuilds.ManualTraining = {}
 local M = EbonBuilds.ManualTraining
 local MIN_NET_DISAGREEMENTS = 3
 local WEIGHT_NUDGE = 10
-local canonicalNameIndex = {}
-local canonicalNameIndexBuilt = false
 local suggestionCache = {}
 
 local function GetStore(buildId)
@@ -24,7 +22,7 @@ local function GetStore(buildId)
         store = {}
         EbonBuildsCharDB.manualTraining[buildId] = store
     end
-    store.version = 2
+    store.version = 3
     store.preferredOverHigher = type(store.preferredOverHigher) == "table" and store.preferredOverHigher or {}
     store.passedOverForLower  = type(store.passedOverForLower) == "table" and store.passedOverForLower or {}
     store.totalSelects = tonumber(store.totalSelects) or 0
@@ -98,51 +96,45 @@ local function OnPlayerSelect(pickedSpellId)
     suggestionCache[build.id] = nil
     for _, offered in ipairs(scored) do
         if offered ~= picked and offered.score and picked.score and offered.score > picked.score then
-            local pickedKey = EbonBuilds.Weights.CanonicalName(picked.spellId) or picked.name
-            local offeredKey = EbonBuilds.Weights.CanonicalName(offered.spellId) or offered.name
-            IncrementSignal(store.preferredOverHigher, pickedKey, picked.quality)
-            IncrementSignal(store.passedOverForLower, offeredKey, offered.quality)
+            local pickedKey = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetRefForSpell(picked.spellId)
+            local offeredKey = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetRefForSpell(offered.spellId)
+            if pickedKey then IncrementSignal(store.preferredOverHigher, pickedKey, picked.quality) end
+            if offeredKey then IncrementSignal(store.passedOverForLower, offeredKey, offered.quality) end
         end
     end
 end
 
 
-local function EnsureCanonicalNameIndex()
-    if canonicalNameIndexBuilt then return end
-    canonicalNameIndexBuilt = true
-    if not (ProjectEbonhold and ProjectEbonhold.PerkDatabase) then return end
-    for spellId in pairs(ProjectEbonhold.PerkDatabase) do
-        local spellName = GetSpellInfo(spellId)
-        if spellName then
-            canonicalNameIndex[spellName] = EbonBuilds.Weights.CanonicalName(spellId) or spellName
-        end
+local function ResolveTrainingIdentity(value)
+    if value == nil then return nil end
+    value = tostring(value)
+    if value:match("^[gs]:%d+$") then
+        local definition = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(value)
+        if definition then return value, definition.displayName or definition.sourceName end
+        return nil
     end
+    local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindRefs
+        and EbonBuilds.EchoCatalog.FindLegacyRefs(EbonBuilds.Weights.StripQualitySuffix(value)) or {}
+    if #refs ~= 1 then return nil end
+    local definition = EbonBuilds.EchoCatalog.GetByRef(refs[1])
+    return refs[1], definition and (definition.displayName or definition.sourceName) or value
 end
 
-local function CanonicalTrainingName(name)
-    if not name then return nil end
-    name = tostring(name)
-    local cached = canonicalNameIndex[name]
-    if cached then return cached end
-    EnsureCanonicalNameIndex()
-    cached = canonicalNameIndex[name]
-    if cached then return cached end
-    cached = EbonBuilds.Weights.StripQualitySuffix(name)
-    canonicalNameIndex[name] = cached
-    return cached
-end
-
-local function AddSignal(signals, name, quality, direction, count)
-    name = CanonicalTrainingName(name)
+local function AddSignal(signals, storedKey, quality, direction, count)
+    local refKey, displayName = ResolveTrainingIdentity(storedKey)
     count = tonumber(count) or 0
-    if count <= 0 then return end
-    local key = tostring(name) .. "\031" .. tostring(quality == nil and "legacy" or quality)
-    local s = signals[key]
-    if not s then
-        s = { name = name, quality = quality, raiseCount = 0, lowerCount = 0 }
-        signals[key] = s
+    if not refKey or count <= 0 then return end
+    local key = refKey .. "\031" .. tostring(quality == nil and "legacy" or quality)
+    local signal = signals[key]
+    if not signal then
+        signal = { refKey = refKey, name = displayName, quality = quality, raiseCount = 0, lowerCount = 0 }
+        signals[key] = signal
     end
-    if direction == "raise" then s.raiseCount = s.raiseCount + count else s.lowerCount = s.lowerCount + count end
+    if direction == "raise" then
+        signal.raiseCount = signal.raiseCount + count
+    else
+        signal.lowerCount = signal.lowerCount + count
+    end
 end
 
 local function ReadBucket(signals, bucket, direction)
@@ -182,20 +174,27 @@ function M.SuggestWeightAdjustments(build)
     ReadBucket(signals, store.passedOverForLower, "lower")
 
     local suggestions = {}
-    local weights = build.echoWeights or {}
     for _, signal in pairs(signals) do
         local net = signal.raiseCount - signal.lowerCount
         if math.abs(net) >= MIN_NET_DISAGREEMENTS then
             local delta = net > 0 and WEIGHT_NUDGE or -WEIGHT_NUDGE
             local current
             if signal.quality ~= nil then
-                current = EbonBuilds.Weights.GetFromWeights(weights, signal.name, signal.quality)
+                current = EbonBuilds.Weights.GetForRef(build, signal.refKey, signal.quality)
             else
-                current = EbonBuilds.Weights.MaxFromWeights(weights, signal.name)
+                local values = build.echoWeightsByRef and build.echoWeightsByRef[signal.refKey]
+                current = nil
+                for _, quality in ipairs(EbonBuilds.Quality.ORDER or {}) do
+                    local value = values and EbonBuilds.Weights.GetFromWeights(build.echoWeightsByRef, signal.refKey, quality)
+                        or EbonBuilds.Weights.GetForRef(build, signal.refKey, quality)
+                    if current == nil or value > current then current = value end
+                end
+                current = current or 0
             end
             local suggested = math.max(EbonBuilds.Weights.MIN_VALUE,
                 math.min(EbonBuilds.Weights.MAX_VALUE, current + delta))
             suggestions[#suggestions + 1] = {
+                refKey = signal.refKey,
                 name = signal.name,
                 quality = signal.quality,
                 applyAllRanks = signal.quality == nil,

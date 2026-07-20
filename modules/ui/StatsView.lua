@@ -570,15 +570,29 @@ end
 
 local function WeightedCoverage(build)
     local total, learned = 0, 0
-    local ownedNames = {}
+    local ownedNames, ownedGroups = {}, {}
     if EbonBuilds.BuildOverview and EbonBuilds.BuildOverview.GetOwnedEchoSets then
-        local ok, names = pcall(EbonBuilds.BuildOverview.GetOwnedEchoSets)
+        local ok, names, groups = pcall(EbonBuilds.BuildOverview.GetOwnedEchoSets)
         if ok and type(names) == "table" then ownedNames = names end
+        if ok and type(groups) == "table" then ownedGroups = groups end
     end
-    for name, values in pairs(build.echoWeights or {}) do
-        if EbonBuilds.Weights.HasNonZero(values) then
-            total = total + 1
-            if ownedNames[NormalizeEchoName(name)] then learned = learned + 1 end
+    if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
+    if type(build.echoWeightsByRef) == "table" then
+        for refKey, values in pairs(build.echoWeightsByRef) do
+            if EbonBuilds.Weights.HasNonZero(values) then
+                total = total + 1
+                local definition = EbonBuilds.EchoCatalog.GetByRef(refKey)
+                local canonical = definition and NormalizeEchoName(definition.canonicalName or definition.sourceName)
+                if (canonical and ownedNames[canonical])
+                    or (definition and definition.groupId and ownedGroups[definition.groupId]) then learned = learned + 1 end
+            end
+        end
+    else
+        for name, values in pairs(build.echoWeights or {}) do
+            if EbonBuilds.Weights.HasNonZero(values) then
+                total = total + 1
+                if ownedNames[NormalizeEchoName(name)] then learned = learned + 1 end
+            end
         end
     end
     return learned, total
@@ -598,11 +612,12 @@ local function CatalogByName()
     return {}
 end
 
-local function BestRankData(build, name, entry)
+local function BestRankData(build, storageKey, entry, isRef)
     local bestQuality, bestWeight, bestScore
     for _, quality in ipairs(QUALITY_ORDER) do
         if not entry or not entry.qualities or entry.qualities[quality] then
-            local weight = EbonBuilds.Weights.GetFromWeights(build.echoWeights or {}, name, quality)
+            local weight = isRef and EbonBuilds.Weights.GetForRef(build, storageKey, quality)
+                or EbonBuilds.Weights.GetFromWeights(build.echoWeights or {}, storageKey, quality)
             local score = EbonBuilds.Scoring.ScorePerQuality(entry or { families = {} }, weight, build.settings or {}, quality)
             if bestScore == nil or score > bestScore then
                 bestQuality, bestWeight, bestScore = quality, weight, score
@@ -622,32 +637,44 @@ local function BuildEchoRows(build, manualSuggestions, performanceStats, appeara
         if not old or suggestion.count > old.count then trainingByName[suggestion.name] = suggestion end
     end
 
-    for name, values in pairs(build.echoWeights or {}) do
-        if EbonBuilds.Weights.HasNonZero(values) then
-            local displayName = VisibleEchoName(name)
-            local entry = catalog[name] or catalog[displayName]
-            local quality, weight, score = BestRankData(build, name, entry)
-            local appearance = appearanceStats and (appearanceStats[name] or appearanceStats[displayName])
-            local performance = performanceStats and (performanceStats[name] or performanceStats[displayName])
-            local pickCount = picks[name] or picks[displayName] or 0
-            local recommendation = trainingByName[name] or trainingByName[displayName]
-            rows[#rows + 1] = {
-                name = displayName ~= "" and displayName or "Unknown Echo",
-                internalName = name,
-                sortName = LowerVisibleEchoName(displayName),
-                quality = quality,
-                weight = weight,
-                score = score,
-                appearancePct = appearance and appearance.pct or nil,
-                appearanceSamples = appearance and appearance.totalEvals or 0,
-                pickCount = pickCount,
-                pickShare = totalPicks > 0 and pickCount / totalPicks * 100 or 0,
-                avgDPS = performance and performance.avgDPS or nil,
-                personalCount = performance and performance.personalCount or 0,
-                communityCount = performance and performance.communityCount or 0,
-                sampleCount = performance and performance.sampleCount or 0,
-                recommendation = recommendation,
-            }
+    local function Add(storageKey, values, entry, isRef)
+        if not EbonBuilds.Weights.HasNonZero(values) then return end
+        local displayName = entry and (entry.displayName or entry.canonicalName or entry.sourceName)
+            or VisibleEchoName(storageKey)
+        displayName = VisibleEchoName(displayName)
+        local quality, weight, score = BestRankData(build, storageKey, entry, isRef)
+        local appearance = appearanceStats and (appearanceStats[displayName] or appearanceStats[storageKey])
+        local performance = performanceStats and (performanceStats[displayName] or performanceStats[storageKey])
+        local pickCount = picks[displayName] or picks[storageKey] or 0
+        local recommendation = trainingByName[displayName] or trainingByName[storageKey]
+        rows[#rows + 1] = {
+            refKey = isRef and storageKey or (entry and entry.refKey),
+            name = displayName ~= "" and displayName or "Unknown Echo",
+            internalName = storageKey, sortName = LowerVisibleEchoName(displayName),
+            quality = quality, weight = weight, score = score,
+            appearancePct = appearance and appearance.pct or nil,
+            appearanceSamples = appearance and appearance.totalEvals or 0,
+            pickCount = pickCount, pickShare = totalPicks > 0 and pickCount / totalPicks * 100 or 0,
+            avgDPS = performance and performance.avgDPS or nil,
+            personalCount = performance and performance.personalCount or 0,
+            communityCount = performance and performance.communityCount or 0,
+            sampleCount = performance and performance.sampleCount or 0,
+            recommendation = recommendation,
+            inactive = entry and entry.availability == EbonBuilds.EchoIdentity.UNAVAILABLE or false,
+        }
+    end
+
+    if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
+    if type(build.echoWeightsByRef) == "table" then
+        for refKey, values in pairs(build.echoWeightsByRef) do
+            local entry = EbonBuilds.EchoProjection and EbonBuilds.EchoProjection.GetAnyEntry(build.class, refKey)
+                or EbonBuilds.EchoCatalog.GetByRef(refKey)
+            Add(refKey, values, entry, true)
+        end
+    else
+        for name, values in pairs(build.echoWeights or {}) do
+            local entry = catalog[name] or catalog[VisibleEchoName(name)]
+            Add(name, values, entry, false)
         end
     end
     return rows
@@ -661,8 +688,18 @@ local function RecommendationKey(source, target, quality, field)
     return table.concat({ tostring(source or "analytics"), tostring(target or "setting"), tostring(quality ~= nil and quality or "all"), tostring(field or "") }, "|")
 end
 
-local function TargetQualities(catalog, echoName, explicitQualities)
-    local available = explicitQualities or (catalog[echoName] and catalog[echoName].qualities)
+local function ResolveRecommendationRef(build, refKey, echoName)
+    if refKey and EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetByRef(refKey) then return refKey end
+    local refs = EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.FindLegacyRefs
+        and EbonBuilds.EchoCatalog.FindLegacyRefs(echoName) or {}
+    if #refs == 1 then return refs[1] end
+    return nil
+end
+
+local function TargetQualities(build, refKey, explicitQualities)
+    local entry = refKey and EbonBuilds.EchoProjection
+        and EbonBuilds.EchoProjection.GetAnyEntry(build.class, refKey) or nil
+    local available = explicitQualities or (entry and entry.qualities)
     local out = {}
     for _, quality in ipairs(QUALITY_ORDER) do
         if not available or available[quality] then out[#out + 1] = quality end
@@ -673,10 +710,10 @@ local function TargetQualities(catalog, echoName, explicitQualities)
     return out
 end
 
-local function SnapshotWeights(build, echoName, qualities)
+local function SnapshotWeights(build, refKey, qualities)
     local values = {}
     for _, quality in ipairs(qualities or {}) do
-        values[quality] = EbonBuilds.Weights.GetFromWeights(build.echoWeights or {}, echoName, quality)
+        values[quality] = EbonBuilds.Weights.GetForRef(build, refKey, quality)
     end
     return values
 end
@@ -720,13 +757,14 @@ end
 
 local function BuildRecommendations(build, manualSuggestions)
     local out = {}
-    local catalog = CatalogByName()
 
     for _, suggestion in ipairs(manualSuggestions or {}) do
         local current = tonumber(suggestion.currentWeight) or 0
         local suggested = tonumber(suggestion.suggestedWeight) or (current + (tonumber(suggestion.delta) or 0))
         local quality = suggestion.quality
-        local qualities = quality ~= nil and { quality } or TargetQualities(catalog, suggestion.name, suggestion.qualities)
+        local refKey = ResolveRecommendationRef(build, suggestion.refKey, suggestion.name)
+        if not refKey then refKey = suggestion.refKey end
+        local qualities = quality ~= nil and { quality } or TargetQualities(build, refKey, suggestion.qualities)
         local qualityLabel = quality ~= nil and ((EbonBuilds.Quality.LABELS or {})[quality] or tostring(quality)) or nil
         AddRecommendation(out, {
             kind = suggested > current and "RAISE PRIORITY" or "LOWER PRIORITY",
@@ -741,16 +779,18 @@ local function BuildRecommendations(build, manualSuggestions)
             samples = suggestion.count or 0,
             section = "echo",
             echoName = suggestion.name,
+            refKey = refKey,
             quality = quality,
             apply = {
                 type = "weight",
+                refKey = refKey,
                 echoName = suggestion.name,
                 quality = quality,
                 qualities = qualities,
                 applyAllRanks = quality == nil,
                 delta = tonumber(suggestion.delta) or (suggested - current),
                 value = suggested,
-                expectedValues = SnapshotWeights(build, suggestion.name, qualities),
+                expectedValues = SnapshotWeights(build, refKey, qualities),
             },
         })
     end
@@ -759,7 +799,8 @@ local function BuildRecommendations(build, manualSuggestions)
         for _, suggestion in ipairs(EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build) or {}) do
             local current = tonumber(suggestion.currentWeight) or 0
             local suggested = tonumber(suggestion.suggestedWeight) or current
-            local qualities = TargetQualities(catalog, suggestion.name, suggestion.qualities)
+            local refKey = ResolveRecommendationRef(build, suggestion.refKey, suggestion.name)
+            local qualities = TargetQualities(build, refKey, suggestion.qualities)
             local deviation = tonumber(suggestion.deviationPct)
             local reason
             if deviation then
@@ -778,14 +819,16 @@ local function BuildRecommendations(build, manualSuggestions)
                 samples = suggestion.sampleCount or suggestion.count or 0,
                 section = "echo",
                 echoName = suggestion.name,
+                refKey = refKey,
                 apply = {
                     type = "weight",
+                    refKey = refKey,
                     echoName = suggestion.name,
                     qualities = qualities,
                     applyAllRanks = true,
                     delta = tonumber(suggestion.delta) or (suggested - current),
                     value = suggested,
-                    expectedValues = SnapshotWeights(build, suggestion.name, qualities),
+                    expectedValues = SnapshotWeights(build, refKey, qualities),
                 },
             })
         end
@@ -1482,10 +1525,13 @@ local function CurrentRecommendationMatches(recommendation, build)
     if not recommendation or not recommendation.apply or not build then return false, "This recommendation cannot be applied automatically." end
     local apply = recommendation.apply
     if apply.type == "weight" then
+        local refKey = ResolveRecommendationRef(build, apply.refKey, apply.echoName)
+        if not refKey then return false, "The Echo identity is ambiguous or no longer exists." end
         for quality, expected in pairs(apply.expectedValues or {}) do
-            local current = EbonBuilds.Weights.GetFromWeights(build.echoWeights or {}, apply.echoName, quality)
+            local current = EbonBuilds.Weights.GetForRef(build, refKey, quality)
             if current ~= expected then return false, "The Echo priority changed since this recommendation was calculated." end
         end
+        apply.refKey = refKey
         return true
     elseif apply.type == "setting" then
         local current = tonumber((build.settings or {})[apply.field]) or 0
@@ -1516,8 +1562,10 @@ local function ApplyRecommendation(recommendation)
     local apply = recommendation.apply
     local saveData, undo = {}, { type = apply.type }
     if apply.type == "weight" then
-        local weights = EbonBuilds.Weights.CloneWeights(build.echoWeights or {})
-        local entry = EbonBuilds.Weights.NormalizeEntry(weights[apply.echoName])
+        local refKey = apply.refKey
+        local weights = EbonBuilds.Weights.CloneRefWeights(build.echoWeightsByRef or {})
+        local entry = EbonBuilds.Weights.NormalizeEntry(weights[refKey])
+        undo.refKey = refKey
         undo.echoName = apply.echoName
         undo.beforeValues, undo.afterValues = {}, {}
         if apply.applyAllRanks then
@@ -1529,14 +1577,15 @@ local function ApplyRecommendation(recommendation)
             end
         else
             local quality = apply.quality
-            local before = EbonBuilds.Weights.GetFromWeights(weights, apply.echoName, quality)
+            local before = EbonBuilds.Weights.GetFromWeights(weights, refKey, quality)
             local nextValue = ClampWeight(apply.value)
             undo.beforeValues[quality] = before
             undo.afterValues[quality] = nextValue
             entry[quality] = nextValue
         end
-        weights[apply.echoName] = entry
-        saveData.echoWeights = weights
+        weights[refKey] = entry
+        saveData.echoWeightsByRef = weights
+        saveData.echoSchema = 3
     elseif apply.type == "setting" then
         local settings = EbonBuilds.Build.CloneSettings(build.settings or EbonBuilds.Build.DefaultSettings())
         undo.field = apply.field
@@ -1581,15 +1630,17 @@ local function UndoRecentRecommendation()
     local saveData = {}
 
     if undo.type == "weight" then
-        local weights = EbonBuilds.Weights.CloneWeights(build.echoWeights or {})
-        local entry = EbonBuilds.Weights.NormalizeEntry(weights[undo.echoName])
+        local refKey = undo.refKey
+        local weights = EbonBuilds.Weights.CloneRefWeights(build.echoWeightsByRef or {})
+        local entry = EbonBuilds.Weights.NormalizeEntry(weights[refKey])
         for quality, expectedAfter in pairs(undo.afterValues or {}) do
-            local current = EbonBuilds.Weights.GetFromWeights(weights, undo.echoName, quality)
+            local current = EbonBuilds.Weights.GetFromWeights(weights, refKey, quality)
             if current ~= expectedAfter then return false, "The Echo priority changed after applying; Undo was cancelled." end
         end
         for quality, value in pairs(undo.beforeValues or {}) do entry[quality] = value end
-        weights[undo.echoName] = entry
-        saveData.echoWeights = weights
+        weights[refKey] = entry
+        saveData.echoWeightsByRef = weights
+        saveData.echoSchema = 3
     elseif undo.type == "setting" then
         local settings = EbonBuilds.Build.CloneSettings(build.settings or EbonBuilds.Build.DefaultSettings())
         if (tonumber(settings[undo.field]) or 0) ~= (tonumber(undo.after) or 0) then return false, "The automation setting changed after applying; Undo was cancelled." end
