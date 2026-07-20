@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ & Changelog
 
-*This file is updated with every release. Latest version: 3.28 — also available in-game via* `/ebb faq`
+*This file is updated with every release. Latest version: 3.29 — also available in-game via* `/ebb faq`
 
 ---
 
