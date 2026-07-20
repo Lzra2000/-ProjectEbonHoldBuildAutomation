@@ -12,15 +12,7 @@ local ROW_HEIGHT    = Rows.ROW_HEIGHT
 local QUALITY_ORDER = EbonBuilds.Quality.ORDER or {}
 local RIGHT_MARGIN  = 4
 
-local CLASS_BITS = {
-    WARRIOR = 1, PALADIN = 2, HUNTER = 4, ROGUE = 8, PRIEST = 16,
-    DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024,
-}
-
-local function ApplyClassFilter(list)
-    if EbonBuilds.Filters and EbonBuilds.Filters.ShowAllClasses and EbonBuilds.Filters.ShowAllClasses() then
-        return list
-    end
+local function GetEditingClass()
     local token
     if EbonBuilds.BuildForm and EbonBuilds.BuildForm.GetEditingClass then
         token = EbonBuilds.BuildForm.GetEditingClass()
@@ -29,17 +21,16 @@ local function ApplyClassFilter(list)
         local build = EbonBuilds.Build.GetActive()
         token = build and build.class
     end
-    local bitVal = token and CLASS_BITS[token]
-    if not bitVal then return list end
+    return token and tostring(token):upper() or nil
+end
 
-    local out = {}
-    for i = 1, #list do
-        local entry = list[i]
-        if not entry.classMask or entry.classMask == 0 or bit.band(entry.classMask, bitVal) ~= 0 then
-            out[#out + 1] = entry
-        end
+local function BuildEditorEchoList()
+    local showAll = EbonBuilds.Filters and EbonBuilds.Filters.ShowAllClasses
+        and EbonBuilds.Filters.ShowAllClasses()
+    if Rows and Rows.BuildPriorityList then
+        return Rows.BuildPriorityList(GetEditingClass(), showAll)
     end
-    return out
+    return Rows and Rows.BuildSortedList and Rows.BuildSortedList() or {}
 end
 
 local echoList, filteredList = {}, {}
@@ -55,8 +46,20 @@ local policyRefreshPending = false
 
 
 local function ScoreForRank(weights, settings, entry, quality)
-    local weight = EbonBuilds.Weights.GetFromWeights(weights, entry.name, quality) or 0
-    return EbonBuilds.Scoring.ScorePerQuality(entry, weight, settings, quality)
+    local weight
+    -- Test and compatibility callers can still provide a direct weight table,
+    -- but normal editor sorting resolves the exact same ref-key weights shown
+    -- in the row cells and used by automation.
+    if type(weights) == "table" and entry.refKey and weights[entry.refKey] ~= nil then
+        weight = EbonBuilds.Weights.GetFromWeights(weights, entry.refKey, quality)
+    elseif type(weights) == "table" and entry.name and weights[entry.name] ~= nil then
+        weight = EbonBuilds.Weights.GetFromWeights(weights, entry.name, quality)
+    elseif entry.refKey and EbonBuilds.Weights.GetForRef then
+        weight = EbonBuilds.Weights.GetForRef(EbonBuilds.Build.GetActive(), entry.refKey, quality)
+    else
+        weight = EbonBuilds.Weights.GetFromWeights(weights or {}, entry.name, quality)
+    end
+    return EbonBuilds.Scoring.ScorePerQuality(entry, weight or 0, settings, quality)
 end
 
 local function MaxScoreFrom(weights, settings, entry)
@@ -186,7 +189,11 @@ function EbonBuilds.EchoTable._SortEntriesForTest(list, key, desc, weights, sett
 end
 
 local function ApplyFiltersAndSort()
-    local base = ApplyClassFilter(echoList)
+    -- Rebuild from the shared projection so class changes and the optional
+    -- All-classes toggle cannot leave this screen on a stale, independently
+    -- filtered catalog.
+    echoList = BuildEditorEchoList()
+    local base = echoList
     if EbonBuilds.Filters and EbonBuilds.Filters.Apply then
         base = EbonBuilds.Filters.Apply(base)
     end
@@ -490,7 +497,7 @@ end
 function EbonBuilds.EchoTable.RefreshCurrentView(resetScroll)
     if not scrollFrame then return end
     CancelPendingResort()
-    echoList = EbonBuilds.EchoTableRows.BuildSortedList()
+    echoList = BuildEditorEchoList()
     ApplyFiltersAndSort()
     UpdateHeaderVisuals()
     UpdateScrollRange()
@@ -505,7 +512,7 @@ end
 local FILTER_BAR_OFFSET = 100
 
 function EbonBuilds.EchoTable.Init(parent)
-    echoList = EbonBuilds.EchoTableRows.BuildSortedList()
+    echoList = BuildEditorEchoList()
     ApplyFiltersAndSort()
 
     local left = PADDING
@@ -542,7 +549,7 @@ function EbonBuilds.EchoTable.Init(parent)
 
     local function Rebuild()
         CancelPendingResort()
-        echoList = EbonBuilds.EchoTableRows.BuildSortedList()
+        echoList = BuildEditorEchoList()
         ApplyFiltersAndSort()
         UpdateScrollRange()
         RefreshRows()

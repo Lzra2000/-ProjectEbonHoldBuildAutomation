@@ -9,18 +9,25 @@ Draft.SCHEMA = 4
 Draft.IMPORTANCE = { "Essential", "Strong", "Useful", "Neutral", "Avoid" }
 Draft.STYLES = { "Recommendation-focused", "Balanced", "Quality-focused" }
 Draft.DEFAULT_INCLUDED_IMPORTANCE = "Useful"
+Draft.PRIMARY_FAMILY_BONUS = 20
+Draft.SECONDARY_FAMILY_BONUS = 10
 
 local STYLE_WEIGHTS = {
     -- Avoid is policy-only. It applies Never Pick but never contributes a
-    -- negative scoring weight, regardless of the Use toggle.
-    ["Recommendation-focused"] = { Essential = 60, Strong = 40, Useful = 20, Neutral = 0, Avoid = 0 },
-    ["Balanced"]               = { Essential = 54, Strong = 36, Useful = 18, Neutral = 0, Avoid = 0 },
-    ["Quality-focused"]        = { Essential = 45, Strong = 30, Useful = 15, Neutral = 0, Avoid = 0 },
+    -- negative scoring weight, regardless of the Use toggle. Every Wizard
+    -- scoring value stays on a 10-point grid so generated weights and scores
+    -- are always divisible by 10.
+    ["Recommendation-focused"] = { Essential = 80, Strong = 50, Useful = 20, Neutral = 0, Avoid = 0 },
+    ["Balanced"]               = { Essential = 60, Strong = 40, Useful = 20, Neutral = 0, Avoid = 0 },
+    ["Quality-focused"]        = { Essential = 40, Strong = 30, Useful = 20, Neutral = 0, Avoid = 0 },
 }
 local STYLE_QUALITY = {
-    ["Recommendation-focused"] = { [3] = 9,  [2] = 6,  [1] = 3, [0] = 0 },
-    ["Balanced"]               = { [3] = 15, [2] = 10, [1] = 5, [0] = 0 },
-    ["Quality-focused"]        = { [3] = 24, [2] = 16, [1] = 8, [0] = 0 },
+    -- Recommendation-focused keeps quality as a small tie-breaker, Balanced
+    -- gives each rank a meaningful step, and Quality-focused lets rarity
+    -- dominate. All bonuses remain divisible by 10.
+    ["Recommendation-focused"] = { [3] = 10, [2] = 0,  [1] = 0,  [0] = 0 },
+    ["Balanced"]               = { [3] = 30, [2] = 20, [1] = 10, [0] = 0 },
+    ["Quality-focused"]        = { [3] = 60, [2] = 40, [1] = 20, [0] = 0 },
 }
 
 local function DerivedPolicyForImportance(importance)
@@ -473,9 +480,9 @@ function Draft.Settings(draft)
     local quality = STYLE_QUALITY[draft.scoringStyle] or STYLE_QUALITY["Recommendation-focused"]
     for rank = 0, 3 do settings.qualityBonus[rank] = quality[rank] or 0 end
     local primary = Draft.ResolvePrimaryFamily(draft)
-    if primary and primary ~= "None" then settings.familyBonus[primary] = 8 end
+    if primary and primary ~= "None" then settings.familyBonus[primary] = Draft.PRIMARY_FAMILY_BONUS end
     local secondary = draft.secondaryFamily
-    if secondary and secondary ~= "None" and secondary ~= primary then settings.familyBonus[secondary] = 4 end
+    if secondary and secondary ~= "None" and secondary ~= primary then settings.familyBonus[secondary] = Draft.SECONDARY_FAMILY_BONUS end
 
     -- Avoid is a policy-only priority. Every Echo currently flagged Avoid
     -- receives Never Pick in the generated build settings, while its scoring

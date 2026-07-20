@@ -97,7 +97,9 @@ local function EntryIsLearned(entry, snapshot)
         if snapshot.groups[groupId] then return true end
     end
 
-    local normalized = NormalizeEchoName(entry.name)
+    if entry.groupId and snapshot.groups[entry.groupId] then return true end
+
+    local normalized = NormalizeEchoName(entry.displayName or entry.sourceName or entry.name)
     return normalized and snapshot.names[normalized] and true or false
 end
 
@@ -121,11 +123,20 @@ local function UpdateToggleVisuals()
 end
 
 local function PassesFilters(entry, famActive, learnedSnapshot, settings)
-    if state.text ~= "" and not entry.name:lower():find(state.text, 1, true) then return false end
+    if state.text ~= "" then
+        local blob = entry.searchBlob
+        if not blob or blob == "" then
+            local visible = entry.displayName or entry.sourceName or entry.name or ""
+            blob = EbonBuilds.EchoIdentity and EbonBuilds.EchoIdentity.NormalizeSearch
+                and EbonBuilds.EchoIdentity.NormalizeSearch(visible) or string.lower(visible)
+        end
+        if not string.find(blob, state.text, 1, true) then return false end
+    end
     if state.quality ~= nil and not (entry.qualities and entry.qualities[state.quality]) then return false end
     if famActive and not MatchesFamilies(entry) then return false end
     if state.learnedOnly and learnedSnapshot and not EntryIsLearned(entry, learnedSnapshot) then return false end
-    if state.policy ~= nil and EbonBuilds.EchoPolicy and EbonBuilds.EchoPolicy.Get(settings, entry.name) ~= state.policy then return false end
+    if state.policy ~= nil and EbonBuilds.EchoPolicy
+        and EbonBuilds.EchoPolicy.Get(settings, entry.refKey or entry.name) ~= state.policy then return false end
     return true
 end
 
@@ -206,7 +217,9 @@ local function CreateSearchBox(bar)
     EbonBuilds.Theme.AttachTooltip(clear, "Clear search", "Remove the current Echo name filter.")
 
     edit:SetScript("OnTextChanged", function(self)
-        state.text = (self:GetText() or ""):lower()
+        local text = self:GetText() or ""
+        state.text = EbonBuilds.EchoIdentity and EbonBuilds.EchoIdentity.NormalizeSearch
+            and EbonBuilds.EchoIdentity.NormalizeSearch(text) or string.lower(text)
         UpdateSearchPlaceholder()
         ScheduleNotify()
     end)

@@ -10,7 +10,32 @@ local Identity = EbonBuilds.EchoIdentity
 local cache = {}
 local CLASS_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
 
-local function MakeEntry(definition, selected, availability)
+local function MakeEntry(definition, selected, availability, scopedVariants)
+    -- A class projection is more than a membership filter.  It must also expose
+    -- only the quality variants that are valid for that class so every consumer
+    -- (Wizard, editor, picker, learned filter, and rank columns) sees the same
+    -- canonical Echo surface.
+    local variants = scopedVariants
+    if type(variants) ~= "table" or #variants == 0 then
+        variants = definition.variants or {}
+    end
+
+    local qualities, spellIds, variantsBySpellId = {}, {}, {}
+    local familySet = {}
+    for _, variant in ipairs(variants) do
+        variantsBySpellId[variant.spellId] = variant
+        local quality = tonumber(variant.quality) or 0
+        qualities[quality] = true
+        local previous = spellIds[quality]
+        if not previous or variant.spellId < previous then spellIds[quality] = variant.spellId end
+        for _, family in ipairs(variant.families or {}) do familySet[family] = true end
+    end
+
+    local families = {}
+    for family in pairs(familySet) do families[#families + 1] = family end
+    table.sort(families)
+    if #families == 0 then families = definition.families or {} end
+
     local entry = {
         key = definition.refKey,
         refKey = definition.refKey,
@@ -21,11 +46,11 @@ local function MakeEntry(definition, selected, availability)
         aliases = definition.aliases,
         searchBlob = definition.searchBlob,
         semantics = selected and selected.semantics or definition.semantics,
-        families = definition.families or {},
-        qualities = definition.qualities,
-        spellIds = definition.spellIds,
-        variants = definition.variants,
-        variantsBySpellId = definition.variantsBySpellId,
+        families = families,
+        qualities = qualities,
+        spellIds = spellIds,
+        variants = variants,
+        variantsBySpellId = variantsBySpellId,
         spellId = selected and selected.spellId or definition.spellId,
         representativeSpellId = selected and selected.spellId or definition.spellId,
         quality = selected and selected.quality or definition.quality,
@@ -64,26 +89,31 @@ local function Build(classToken)
         projection.fullCount = projection.fullCount + 1
         local selected
         local hasUnknown = false
+        local availableVariants, unknownVariants = {}, {}
         for _, variant in ipairs(definition.variants or {}) do
-            local availability = EbonBuilds.EchoCatalog.GetAvailability(variant, classToken)
-            if availability == Identity.AVAILABLE or availability == Identity.CONFLICTED then
-                selected = variant
-                break
-            elseif availability == Identity.UNKNOWN then
+            local variantAvailability = EbonBuilds.EchoCatalog.GetAvailability(variant, classToken)
+            if variantAvailability == Identity.AVAILABLE or variantAvailability == Identity.CONFLICTED then
+                availableVariants[#availableVariants + 1] = variant
+                if not selected then selected = variant end
+            elseif variantAvailability == Identity.UNKNOWN then
                 hasUnknown = true
+                unknownVariants[#unknownVariants + 1] = variant
             end
         end
 
-        local availability
+        local availability, scopedVariants
         if selected then
             availability = selected.availabilityConflict and Identity.CONFLICTED or Identity.AVAILABLE
+            scopedVariants = availableVariants
         elseif hasUnknown then
             availability = Identity.UNKNOWN
+            scopedVariants = unknownVariants
         else
             availability = Identity.UNAVAILABLE
+            scopedVariants = definition.variants
         end
 
-        local entry = MakeEntry(definition, selected, availability)
+        local entry = MakeEntry(definition, selected, availability, scopedVariants)
         projection.allEntriesByKey[entry.refKey] = entry
         if availability ~= Identity.UNAVAILABLE then projection.entriesByKey[entry.refKey] = entry end
         if selected then projection.variantByKey[entry.refKey] = selected.spellId end

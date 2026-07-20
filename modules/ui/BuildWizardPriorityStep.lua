@@ -61,6 +61,37 @@ local scheduledRefreshComponent
 local scheduledLayoutComponent
 local activeComponent
 
+local function LayoutToolbar(component)
+    if not component or not component.main or not component.search or not component.scope
+        or not component.sortLabel or not component.sort or not component.direction then return end
+
+    local width = tonumber(component.main:GetWidth()) or 0
+    if width < 40 then return end
+
+    local compact = width < 390
+    local scopeWidth = compact and 62 or (width >= 500 and 76 or 68)
+    local sortLabelWidth = compact and 38 or 44
+    local sortWidth = compact and 86 or (width >= 500 and 124 or 108)
+    local directionWidth = 28
+    local gaps = 6 + 6 + 4 + 5
+    local fixedWidth = scopeWidth + sortLabelWidth + sortWidth + directionWidth + gaps
+    local searchWidth = width - fixedWidth
+
+    local minimumSearchWidth = compact and 96 or 120
+    if searchWidth < minimumSearchWidth then
+        local deficit = minimumSearchWidth - searchWidth
+        sortWidth = math.max(compact and 78 or 92, sortWidth - deficit)
+        fixedWidth = scopeWidth + sortLabelWidth + sortWidth + directionWidth + gaps
+        searchWidth = math.max(minimumSearchWidth, width - fixedWidth)
+    end
+
+    component.search:SetWidth(math.floor(searchWidth))
+    component.scope:SetWidth(scopeWidth)
+    component.sortLabel:SetWidth(sortLabelWidth)
+    component.sort:SetWidth(sortWidth)
+    component.direction:SetWidth(directionWidth)
+end
+
 local function MakeText(parent, font, width, justify)
     local text = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlight")
     if width then text:SetWidth(width) end
@@ -115,7 +146,10 @@ end
 local function ScheduledLayout()
     local component = scheduledLayoutComponent
     scheduledLayoutComponent = nil
-    if component and component.active then component:UpdateRows() end
+    if component and component.active then
+        LayoutToolbar(component)
+        component:UpdateRows()
+    end
 end
 
 local function ScheduleLayout(component)
@@ -928,7 +962,7 @@ function PriorityStep.Create(parent, options)
     component.description = description
 
     local search = CreateFrame("EditBox", nil, main)
-    search:SetSize(205, 24)
+    search:SetSize(180, 24)
     search:SetPoint("TOPLEFT", main, "TOPLEFT", 0, -56)
     search:SetAutoFocus(false)
     search:SetFontObject("ChatFontNormal")
@@ -955,8 +989,14 @@ function PriorityStep.Create(parent, options)
     Theme.AttachTooltip(scope, "Search scope", "Switch between the active view and every canonical function group.")
     component.scope = scope
 
-    local sort = Theme.CreateDropdown(main, 137, "Recommendation")
-    sort:SetPoint("LEFT", scope, "RIGHT", 6, 0)
+    local sortLabel = MakeText(main, "GameFontNormalSmall", 44, "RIGHT")
+    sortLabel:SetPoint("LEFT", scope, "RIGHT", 6, 0)
+    sortLabel:SetText("Sort by")
+    sortLabel:SetTextColor(unpack(Theme.ACCENT_GOLD))
+    component.sortLabel = sortLabel
+
+    local sort = Theme.CreateDropdown(main, 124, "Recommendation")
+    sort:SetPoint("LEFT", sortLabel, "RIGHT", 4, 0)
     sort:SetMenuBuilder(function() return SortMenuBuilder(component) end)
     component.sort = sort
 
@@ -1035,7 +1075,9 @@ function PriorityStep.Create(parent, options)
 
     component.priorityPopup = CreatePriorityPopup(component)
 
+    main:HookScript("OnSizeChanged", function() ScheduleLayout(component) end)
     viewport:HookScript("OnSizeChanged", function() ScheduleLayout(component) end)
+    LayoutToolbar(component)
     component.active = false
     return component
 end
@@ -1144,6 +1186,7 @@ function PriorityStep:Show()
     self.active = true
     activeComponent = self
     self.frame:Show()
+    LayoutToolbar(self)
     self:Refresh(false)
 end
 
@@ -1156,6 +1199,7 @@ function PriorityStep:Hide()
 end
 
 function PriorityStep:RefreshLayout()
+    LayoutToolbar(self)
     ScheduleLayout(self)
 end
 

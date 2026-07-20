@@ -645,15 +645,26 @@ local function ScoringExample(style)
     return "A Strong common Echo and a Useful epic Echo are approximately tied."
 end
 
-local function FamilyMenu(dropdown, values, setter)
+local function FamilyChoiceLabel(value, bonus)
+    value = value or "None"
+    if value == "None" then return "None (+0)" end
+    return string.format("%s (+%d)", value, tonumber(bonus) or 0)
+end
+
+local function FamilyMenu(dropdown, values, setter, bonus)
     dropdown:SetMenuBuilder(function()
         local items = {}
         for _, value in ipairs(values) do
             local valueKey = value
             items[#items + 1] = {
-                text = valueKey,
-                checked = dropdown:GetText() == valueKey,
-                func = function() setter(valueKey); dropdown:SetText(valueKey); RefreshScoring() end,
+                text = FamilyChoiceLabel(valueKey, bonus),
+                checked = dropdown._familyValue == valueKey,
+                func = function()
+                    setter(valueKey)
+                    dropdown._familyValue = valueKey
+                    dropdown:SetText(FamilyChoiceLabel(valueKey, bonus))
+                    RefreshScoring()
+                end,
             }
         end
         return items
@@ -685,25 +696,50 @@ local function CreateScoringCard(parent, style, description)
 
     local title = MakeText(card, "GameFontNormal")
     title:SetPoint("TOPLEFT", card, "TOPLEFT", 11, -9)
-    title:SetPoint("RIGHT", card, "RIGHT", -11, 0)
+    title:SetPoint("RIGHT", card, "RIGHT", -72, 0)
     title:SetJustifyH("LEFT")
     title:SetText(style)
 
     local desc = MakeText(card, "GameFontDisableSmall")
     desc:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
-    desc:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -11, 16)
+    desc:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -11, 39)
     desc:SetJustifyH("LEFT")
     desc:SetJustifyV("TOP")
     desc:SetText(description)
 
+    local profile = Draft.StyleProfile(style)
+    local priorityText = MakeText(card, "GameFontNormalSmall")
+    priorityText:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 10, 20)
+    priorityText:SetPoint("RIGHT", card, "RIGHT", -10, 0)
+    priorityText:SetJustifyH("LEFT")
+    priorityText:SetText(string.format("Priority E %+d · S %+d · U %+d",
+        profile.weights.Essential or 0, profile.weights.Strong or 0, profile.weights.Useful or 0))
+    priorityText:SetTextColor(0.45, 0.82, 1, 1)
+
+    local rarityText = MakeText(card, "GameFontNormalSmall")
+    rarityText:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 10, 6)
+    rarityText:SetPoint("RIGHT", card, "RIGHT", -10, 0)
+    rarityText:SetJustifyH("LEFT")
+    rarityText:SetText(
+        "Rarity "
+        .. EbonBuilds.Quality.Colorize(string.format("C %+d", profile.quality[0] or 0), 0)
+        .. " · "
+        .. EbonBuilds.Quality.Colorize(string.format("U %+d", profile.quality[1] or 0), 1)
+        .. " · "
+        .. EbonBuilds.Quality.Colorize(string.format("R %+d", profile.quality[2] or 0), 2)
+        .. " · "
+        .. EbonBuilds.Quality.Colorize(string.format("E %+d", profile.quality[3] or 0), 3)
+    )
     local selectedText = MakeText(card, "GameFontNormalSmall", 58, "RIGHT")
-    selectedText:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -9, 5)
+    selectedText:SetPoint("TOPRIGHT", card, "TOPRIGHT", -9, -9)
     selectedText:SetText("Selected")
     selectedText:SetTextColor(unpack(Theme.ACCENT_GOLD))
     selectedText:Hide()
 
     card.title = title
     card.description = desc
+    card.priorityText = priorityText
+    card.rarityText = rarityText
     card.selectedText = selectedText
     card:SetScript("OnEnter", function(self)
         if not self._selected then Theme.SetCardHovered(self, true) end
@@ -711,6 +747,7 @@ local function CreateScoringCard(parent, style, description)
     card:SetScript("OnLeave", function(self)
         if self._selected then SetScoringCardSelected(self, true) else Theme.SetCardHovered(self, false) end
     end)
+    Theme.AttachTooltip(card, "Scoring profile", "The cyan line shows priority values. The quality-colored line shows Common, Uncommon, Rare, and Epic bonuses added on top of that priority.")
     return card
 end
 
@@ -729,28 +766,28 @@ local function LayoutScoringStep()
         local cardWidth = math.floor((width - margin * 2 - gap * 2) / 3)
         for index, card in ipairs(cards) do
             card:ClearAllPoints()
-            card:SetSize(cardWidth, 82)
+            card:SetSize(cardWidth, 108)
             card:SetPoint("TOPLEFT", frame, "TOPLEFT", margin + (index - 1) * (cardWidth + gap), top)
         end
-        cardsBottom = top - 82
+        cardsBottom = top - 108
     elseif width >= 410 then
         local cardWidth = math.floor((width - margin * 2 - gap) / 2)
         for index, card in ipairs(cards) do card:ClearAllPoints() end
-        cards[1]:SetSize(cardWidth, 68)
+        cards[1]:SetSize(cardWidth, 108)
         cards[1]:SetPoint("TOPLEFT", frame, "TOPLEFT", margin, top)
-        cards[2]:SetSize(cardWidth, 68)
+        cards[2]:SetSize(cardWidth, 108)
         cards[2]:SetPoint("TOPLEFT", frame, "TOPLEFT", margin + cardWidth + gap, top)
-        cards[3]:SetSize(width - margin * 2, 62)
-        cards[3]:SetPoint("TOPLEFT", frame, "TOPLEFT", margin, top - 68 - gap)
-        cardsBottom = top - 68 - gap - 62
+        cards[3]:SetSize(width - margin * 2, 96)
+        cards[3]:SetPoint("TOPLEFT", frame, "TOPLEFT", margin, top - 108 - gap)
+        cardsBottom = top - 108 - gap - 96
     else
         local cardWidth = width - margin * 2
         for index, card in ipairs(cards) do
             card:ClearAllPoints()
-            card:SetSize(cardWidth, 56)
-            card:SetPoint("TOPLEFT", frame, "TOPLEFT", margin, top - (index - 1) * (56 + gap))
+            card:SetSize(cardWidth, 102)
+            card:SetPoint("TOPLEFT", frame, "TOPLEFT", margin, top - (index - 1) * (102 + gap))
         end
-        cardsBottom = top - 3 * 56 - 2 * gap
+        cardsBottom = top - 3 * 102 - 2 * gap
     end
 
     scoringUI.behaviorPanel:ClearAllPoints()
@@ -838,9 +875,9 @@ local function BuildScoringStep()
     local styleButtons = {}
     local orderedCards = {}
     local styleDescriptions = {
-        ["Recommendation-focused"] = "Your chosen importance levels dominate quality differences.",
-        ["Balanced"] = "Priority and Echo quality both influence the result.",
-        ["Quality-focused"] = "Higher-quality Echoes receive substantially more influence.",
+        ["Recommendation-focused"] = "Large priority gaps; quality acts mainly as a tie-breaker.",
+        ["Balanced"] = "Priority leads, while rarity can overturn close choices.",
+        ["Quality-focused"] = "Rarity can overtake higher priority levels more often.",
     }
     for _, style in ipairs(Draft.STYLES) do
         local styleKey = style
@@ -861,14 +898,17 @@ local function BuildScoringStep()
     advancedToggle:SetText("Advanced tuning v")
     local advanced = Theme.CreateSection(frame, "Advanced tuning", "Optional family modifiers are disabled by default.")
 
+    local primaryBonus = Draft.PRIMARY_FAMILY_BONUS or 20
+    local secondaryBonus = Draft.SECONDARY_FAMILY_BONUS or 10
+
     local primaryLabel = MakeText(advanced, "GameFontNormal")
-    primaryLabel:SetText("Primary family")
-    local primary = Theme.CreateDropdown(advanced, 150, "None")
+    primaryLabel:SetText(string.format("Primary family bonus (+%d)", primaryBonus))
+    local primary = Theme.CreateDropdown(advanced, 150, "None (+0)")
     local primaryResolved = MakeText(advanced, "GameFontDisableSmall")
 
     local secondaryLabel = MakeText(advanced, "GameFontNormal")
-    secondaryLabel:SetText("Secondary family")
-    local secondary = Theme.CreateDropdown(advanced, 150, "None")
+    secondaryLabel:SetText(string.format("Secondary family bonus (+%d)", secondaryBonus))
+    local secondary = Theme.CreateDropdown(advanced, 150, "None (+0)")
 
     local values = MakeText(advanced, "GameFontHighlightSmall")
     values:SetJustifyV("TOP")
@@ -880,8 +920,10 @@ local function BuildScoringStep()
         if state.advancedScoring then advanced:Show(); advancedToggle:SetText("Advanced tuning ^")
         else advanced:Hide(); advancedToggle:SetText("Advanced tuning v") end
     end)
-    FamilyMenu(primary, FAMILY_VALUES, function(value) Draft.SetPrimaryFamily(state.draft, value) end)
-    FamilyMenu(secondary, SECONDARY_VALUES, function(value) Draft.SetSecondaryFamily(state.draft, value) end)
+    FamilyMenu(primary, FAMILY_VALUES, function(value) Draft.SetPrimaryFamily(state.draft, value) end, primaryBonus)
+    FamilyMenu(secondary, SECONDARY_VALUES, function(value) Draft.SetSecondaryFamily(state.draft, value) end, secondaryBonus)
+    Theme.AttachTooltip(primary._button or primary, "Primary family bonus", string.format("Selecting a family adds +%d score to matching Echoes. None adds +0.", primaryBonus))
+    Theme.AttachTooltip(secondary._button or secondary, "Secondary family bonus", string.format("Selecting a family adds +%d score to matching Echoes. None adds +0.", secondaryBonus))
 
     scoringUI = {
         frame = frame, styleButtons = styleButtons, orderedCards = orderedCards,
@@ -906,21 +948,25 @@ RefreshScoring = function()
     LayoutScoringStep()
     for style, button in pairs(scoringUI.styleButtons) do SetScoringCardSelected(button, style == state.draft.scoringStyle) end
     scoringUI.behavior:SetText(ScoringExample(state.draft.scoringStyle))
-    scoringUI.primary:SetText(state.draft.primaryFamily or "None")
-    scoringUI.secondary:SetText(state.draft.secondaryFamily or "None")
+    local primaryBonus = Draft.PRIMARY_FAMILY_BONUS or 20
+    local secondaryBonus = Draft.SECONDARY_FAMILY_BONUS or 10
+    scoringUI.primary._familyValue = state.draft.primaryFamily or "None"
+    scoringUI.secondary._familyValue = state.draft.secondaryFamily or "None"
+    scoringUI.primary:SetText(FamilyChoiceLabel(scoringUI.primary._familyValue, primaryBonus))
+    scoringUI.secondary:SetText(FamilyChoiceLabel(scoringUI.secondary._familyValue, secondaryBonus))
     local resolved = Draft.ResolvePrimaryFamily(state.draft) or "None"
     if not state.draft.primaryFamily or state.draft.primaryFamily == "None" then
-        scoringUI.primaryResolved:SetText("No primary family modifier")
+        scoringUI.primaryResolved:SetText("No primary family bonus (+0)")
     elseif state.draft.primaryFamily == "Auto" then
-        scoringUI.primaryResolved:SetText("Auto resolved to " .. resolved)
+        scoringUI.primaryResolved:SetText(string.format("Auto: %s (+%d)", resolved, primaryBonus))
     else
-        scoringUI.primaryResolved:SetText("Resolved: " .. resolved)
+        scoringUI.primaryResolved:SetText(string.format("%s family (+%d)", resolved, primaryBonus))
     end
     local profile = Draft.StyleProfile(state.draft.scoringStyle)
     scoringUI.values:SetText(string.format(
-        "Importance values\nEssential %+d · Strong %+d · Useful %+d · Neutral %+d · Avoid %+d\n\nQuality bonuses\nCommon %+d · Uncommon %+d · Rare %+d · Epic %+d",
+        "Importance values\nEssential %+d · Strong %+d · Useful %+d · Neutral %+d · Avoid %+d\n\nQuality bonuses\nCommon %+d · Uncommon %+d · Rare %+d · Epic %+d\n\nFamily bonuses\nPrimary %+d · Secondary %+d when selected",
         profile.weights.Essential, profile.weights.Strong, profile.weights.Useful, profile.weights.Neutral, profile.weights.Avoid,
-        profile.quality[0], profile.quality[1], profile.quality[2], profile.quality[3]))
+        profile.quality[0], profile.quality[1], profile.quality[2], profile.quality[3], primaryBonus, secondaryBonus))
     local ok, diagnostics = Draft.Calibrate(state.draft)
     if ok then
         scoringUI.validation:SetText(string.format("Validation ready · %d included Echoes checked.", tonumber(diagnostics.checkedEchoes) or 0))
@@ -1191,24 +1237,24 @@ RenderCurrentStep = function()
     if state.step == 1 then
         BuildContextStep():Show()
         backBtn:Hide()
-        nextBtn:SetText("Find recommendations")
+        nextBtn:SetText("Continue")
         nextBtn:Enable()
         RefreshContextStep()
         LayoutContextStep()
     elseif state.step == 2 then
         BuildLocksStep():Show()
-        nextBtn:SetText("Echo priorities")
+        nextBtn:SetText("Continue")
         if state.loading then nextBtn:Disable() else nextBtn:Enable() end
         RefreshLocks()
     elseif state.step == 3 then
         BuildPrioritiesStep()
         prioritiesUI:SetContext(state.draft, state.class, SnapshotItem)
         prioritiesUI:Show()
-        nextBtn:SetText("Scoring style")
+        nextBtn:SetText("Continue")
         nextBtn:Enable()
     elseif state.step == 4 then
         BuildScoringStep():Show()
-        nextBtn:SetText("Review")
+        nextBtn:SetText("Continue")
         nextBtn:Enable()
         RefreshScoring()
     else
