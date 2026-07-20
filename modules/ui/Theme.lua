@@ -343,6 +343,12 @@ function T.CreateButton(parent, accent)
     local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     T.SkinButton(btn)
     if accent then T.SetButtonAccent(btn, accent) end
+    -- Every OnClick a caller attaches to this button from here on is
+    -- auto-wrapped in ErrorLog.Protect, without the caller having to do
+    -- anything -- see core/Debug.lua for why this exists.
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(btn, "Theme.Button")
+    end
     btn:HookScript("OnClick", function(self)
         if EbonBuilds.ClickTrace then
             EbonBuilds.ClickTrace.Log("click", self:GetText() or self:GetName() or "?")

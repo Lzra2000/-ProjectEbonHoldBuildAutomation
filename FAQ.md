@@ -264,6 +264,15 @@ The gear score is directional build guidance, not a best-in-slot verdict. Uncach
 
 ## Changelog
 
+### 3.35 (2026-07-20) -- New: core/Debug.lua, a small internal framework layer
+
+A follow-up to the repository audit's note that most UI handlers weren't isolated against unexpected errors (only a handful were manually wrapped in ErrorLog.Protect out of hundreds).
+
+- **`core/Debug.lua`** adds two things on top of the existing `core/ErrorLog.lua`: `ProtectScript(frame, source)` opts a frame in once, and every handler any caller later attaches to it via `SetScript` is automatically wrapped in error isolation from then on -- no per-call-site changes needed anywhere else in the addon. A lightweight self-test registry (`RegisterTest`/`RunSelfTests`) also lets a module add its own sanity check next to the code it's testing instead of hand-editing the large shared test files.
+- **`Theme.CreateButton` now opts in automatically**, so every button built through the shared theme (the vast majority of the addon's buttons) gets this protection with zero changes required in the modules that call it.
+- **`tests/test_selftests.lua`** is a new test file (wired into `tests/run.sh`) that loads the full addon and runs every registered self-test; it currently covers `core/Debug.lua`'s own behavior and the `Theme.CreateButton` integration.
+- This is intentionally scoped as a foundation, not a full framework migration: existing handlers elsewhere are unaffected until they're routed through `ProtectScript` (directly, or through a widget factory like `Theme.CreateButton` that already does).
+
 ### 3.34 (2026-07-20) -- Echo policy persistence fix, unified Wizard/editor catalogs (contributed)
 
 Two correctness fixes plus a follow-up unification, contributed by Juriz V (PR #9) and ha99dfs (PR #11).

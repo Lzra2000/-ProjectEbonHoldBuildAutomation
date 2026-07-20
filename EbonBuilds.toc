@@ -96,6 +96,7 @@ modules/ui/BagAffixDots.lua
 modules/ui/SessionHistory.lua
 modules/automation/DebugLog.lua
 core/ErrorLog.lua
+core/Debug.lua
 modules/vendor/AutoSell.lua
 modules/automation/Calibration.lua
 modules/automation/EchoSamples.lua
