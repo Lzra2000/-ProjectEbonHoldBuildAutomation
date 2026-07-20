@@ -264,6 +264,11 @@ The gear score is directional build guidance, not a best-in-slot verdict. Uncach
 
 ## Changelog
 
+### 3.43 (2026-07-20) -- Handler protection: BuildWizard.lua
+
+- `modules/ui/BuildWizard.lua` -- 4 frames now opt into `EbonBuilds.Debug.ProtectScript` at creation (pick button, inspect button, archetype card button, build name edit box).
+- Remaining files, largest first: Calibration, TomeAtlasView, CharacterView, and others.
+
 ### 3.42 (2026-07-20) -- Handler protection: MainWindow.lua
 
 - `modules/ui/MainWindow.lua` -- 6 frames now opt into `EbonBuilds.Debug.ProtectScript` at creation (header drag region, global settings popup and its drag header, card slider, toolbar icon button, and the main addon window frame itself).

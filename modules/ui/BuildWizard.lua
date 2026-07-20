@@ -399,6 +399,9 @@ local function CreateLockCard(parent, slot)
     pill:SetSize(58, 16)
     pill:SetPoint("TOPRIGHT", card, "TOPRIGHT", -5, -4)
     local pick = CreateFrame("Button", nil, card)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(pick, "BuildWizard.PickButton")
+    end
     pick:SetSize(38, 38)
     pick:SetPoint("TOP", card, "TOP", 0, -22)
     local icon = pick:CreateTexture(nil, "ARTWORK")
@@ -440,6 +443,9 @@ local function CreateLockSuggestion(parent)
     row:SetHeight(38)
     Theme.ApplyPanel(row)
     local inspect = CreateFrame("Button", nil, row)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(inspect, "BuildWizard.InspectButton")
+    end
     inspect:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
     inspect:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -72, 1)
     local icon = inspect:CreateTexture(nil, "ARTWORK")
@@ -691,6 +697,9 @@ end
 
 local function CreateScoringCard(parent, style, description)
     local card = CreateFrame("Button", nil, parent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(card, "BuildWizard.ArchetypeCard")
+    end
     Theme.ApplyCard(card)
     card:RegisterForClicks("LeftButtonUp")
 
@@ -1018,6 +1027,9 @@ local function BuildReviewStep()
     nameLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -38)
     nameLabel:SetText("Build name")
     local nameBox = CreateFrame("EditBox", nil, frame)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(nameBox, "BuildWizard.NameBox")
+    end
     nameBox:SetHeight(26)
     nameBox:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -4)
     nameBox:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -58)
