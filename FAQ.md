@@ -264,6 +264,12 @@ The gear score is directional build guidance, not a best-in-slot verdict. Uncach
 
 ## Changelog
 
+### 3.44 (2026-07-20) -- Handler protection: Calibration.lua, TomeAtlasView.lua
+
+- `modules/automation/Calibration.lua` -- the popup's drag header now opts into `EbonBuilds.Debug.ProtectScript` (its other 9 `SetScript` calls were already covered indirectly via Theme.lua's factories).
+- `modules/ui/TomeAtlasView.lua` -- 5 frames now opt into `ProtectScript` at creation (zone row, main search box, picker search box, picker row button, refresh-throttle OnUpdate timer).
+- Remaining files, largest first: CharacterView, BuildList, BuildForm, EchoTableRows, Filters, PublicBuildsView, ExportImport, EchoPicker, AffixView, BonusView, MinimapButton.
+
 ### 3.43 (2026-07-20) -- Handler protection: BuildWizard.lua
 
 - `modules/ui/BuildWizard.lua` -- 4 frames now opt into `EbonBuilds.Debug.ProtectScript` at creation (pick button, inspect button, archetype card button, build name edit box).

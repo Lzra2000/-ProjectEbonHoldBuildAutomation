@@ -224,6 +224,9 @@ end
 
 local function CreateRow(parent)
     local row = CreateFrame("Frame", nil, parent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(row, "TomeAtlasView.ZoneRow")
+    end
     row:SetHeight(ROW_HEIGHT)
     row:SetPoint("LEFT", parent, "LEFT", 0, 0)
     row:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
@@ -430,6 +433,9 @@ local function BuildViewFrame(parent)
 
     -- Row 1: search box, full width.
     searchBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(searchBox, "TomeAtlasView.SearchBox")
+    end
     searchBox:SetHeight(20)
     searchBox:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -78)
     searchBox:SetPoint("RIGHT", f, "RIGHT", -38, 0)
@@ -573,6 +579,9 @@ local function BuildViewFrame(parent)
     picker:Hide()
 
     local pickerSearch = CreateFrame("EditBox", nil, picker, "InputBoxTemplate")
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(pickerSearch, "TomeAtlasView.PickerSearch")
+    end
     pickerSearch:SetHeight(20)
     pickerSearch:SetPoint("TOPLEFT", picker, "TOPLEFT", 14, -10)
     pickerSearch:SetPoint("RIGHT", picker, "RIGHT", -12, 0)
@@ -627,6 +636,9 @@ local function BuildViewFrame(parent)
             local row = pickerRows[i]
             if not row then
                 row = CreateFrame("Button", nil, pickerChild)
+                if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+                    EbonBuilds.Debug.ProtectScript(row, "TomeAtlasView.PickerRow")
+                end
                 row:SetHeight(PICKER_ROW_H)
                 row:SetPoint("LEFT", pickerChild, "LEFT", 0, 0)
                 row:SetPoint("RIGHT", pickerChild, "RIGHT", 0, 0)
@@ -723,6 +735,9 @@ local function ScheduleRefresh()
     pendingRefresh = true
     if not refreshThrottleFrame then
         refreshThrottleFrame = CreateFrame("Frame")
+        if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+            EbonBuilds.Debug.ProtectScript(refreshThrottleFrame, "TomeAtlasView.RefreshThrottleTimer")
+        end
         refreshThrottleFrame:SetScript("OnUpdate", function(self, dt)
             self._elapsed = (self._elapsed or 0) + dt
             if self._elapsed < REFRESH_THROTTLE then return end
