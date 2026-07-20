@@ -258,6 +258,12 @@ The gear score is directional build guidance, not a best-in-slot verdict. Uncach
 
 ## Changelog
 
+### 3.26 (2026-07-19) -- fix: screenshots matched to the right captions
+
+Repo-only release, nothing changes in-game.
+
+- 3.25's gallery had ten of the twelve screenshots attached to the wrong captions -- the upload order wasn't the filename order, and only two happened to line up by accident. Every image now actually shows what its caption says (verified against the images, not just renamed).
+
 ### 3.25 (2026-07-19) -- Screenshot tour on the repo page, all seven READMEs
 
 Repo-only release, nothing changes in-game.
