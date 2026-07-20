@@ -285,6 +285,16 @@ function T.ResetButtonVisual(btn)
         return
     end
 
+    -- Tabs use a muted neutral label while idle. Previously every tab's
+    -- OnLeave passed through the generic button reset below, which changed
+    -- the hovered navigation label to gold until another selection refresh.
+    if btn._tabSelected ~= nil then
+        btn._accentBorder = nil
+        ApplyButtonVisual(btn, BTN_BG, T.BORDER_DIM)
+        if label then label:SetTextColor(0.82, 0.82, 0.86) end
+        return
+    end
+
     ApplyButtonVisual(btn, BTN_BG, btn._accentBorder or T.BORDER_DIM)
     if label then label:SetTextColor(1, 0.82, 0) end
 end

@@ -78,6 +78,25 @@ function Rows.BuildSortedList()
     return EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.GetSortedList() or {}
 end
 
+local function CopyList(source)
+    local out = {}
+    for index = 1, #(source or {}) do out[index] = source[index] end
+    return out
+end
+
+-- Canonical source for the Build editor's Priorities table.  The Build Wizard,
+-- Echo Picker, and editor now all consume EchoProjection.GetAvailable(), so a
+-- class can never gain or lose an Echo merely because a different screen used
+-- a separate class-mask implementation.  A shallow copy protects the cached
+-- projection from table.sort() and UI filters.
+function Rows.BuildPriorityList(classToken, showAllClasses)
+    if showAllClasses or not classToken or classToken == "" then
+        return CopyList(Rows.BuildSortedList())
+    end
+    local projection = EbonBuilds.EchoProjection
+    return CopyList(projection and projection.GetAvailable(classToken) or {})
+end
+
 function Rows.InvalidateCache()
     if EbonBuilds.EchoCatalog then EbonBuilds.EchoCatalog.Invalidate() end
 end
