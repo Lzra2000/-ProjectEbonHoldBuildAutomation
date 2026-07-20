@@ -95,9 +95,9 @@ Yes (2.0). Weights are stored under the database name (e.g. *"Warrior - Voidstee
 Yes (2.0). Selecting now excludes echoes frozen this round — the whole point of spending the freeze charge is to take something else on this screen and collect the frozen echo later. Carried echoes from previous screens remain selectable, as intended.
 
 ### How do I report a problem so it can actually be fixed?
-1. `/ebb debug` — turns on decision tracing (confirmation in chat)
+1. the Debug log (Settings, Windows & Tools) — turns on decision tracing (confirmation in chat)
 2. Play until the problem happens
-3. `/ebb debuglog` — opens a window with the full trace, pre-selected: Ctrl+C and paste it in your report
+3. Settings — opens a window with the full trace, pre-selected: Ctrl+C and paste it in your report
 
 The log shows the peak, every threshold as an absolute number, every offered echo with score/weight/frozen state, and the reason behind every action or non-action. It's plain text, capped at the last 500 lines, and costs nothing while disabled.
 
@@ -125,7 +125,7 @@ Reliability and efficiency, same protocol on the wire (old versions stay compati
 - **Lost transfers recover.** Previously a single dropped message meant that build silently never arrived. Now the receiver notices a stalled transfer, asks the sender to retransmit (up to 2 attempts), and falls back to other players offering the same build.
 - **No duplicate downloads.** When several players offer the same build during one sync, it is requested from only one of them.
 - **Flood protection.** Responders answer at most one sync request per player per 30 seconds.
-- **Feedback.** A toast summarizes each sync ("Sync complete: N build(s) received"), and with `/ebb debug` enabled the full sync traffic appears in the debug log.
+- **Feedback.** A toast summarizes each sync ("Sync complete: N build(s) received"), and with the Debug log (Settings, Windows & Tools) enabled the full sync traffic appears in the debug log.
 - Retransmit requests can only ever re-send **public** builds you own -- a forged request cannot extract private data.
 
 ### What is Smart mode? (extended in 2.4)
@@ -150,23 +150,23 @@ Yes (2.6). Hover any tome row: the tooltip shows the item itself (icon, quality)
 Project Ebonhold has two separate progression systems. **Echoes** are the run-based perks EbonBuilds has always been about. **Affixes** are a permanent, character-bound unlock applied to gear (weapon procs, armor stats) -- a different system entirely, previously only visible through third-party tooltip-scanning tools. EbonBuilds now reads it directly from the server's own data feed, so there's no guessing involved.
 
 ### How do I use the Affixes tab? (new in 2.7)
-Open via the **Affixes** button in the left panel or `/ebb affix`. Every known affix is listed with a green dot (learned) or red dot (missing). Search by name, toggle *"Show: Missing only"*, and hover any entry for its full tooltip, weapon/armor restriction, apply cost, and use count. Press **Refresh** to request an updated list from the server (throttled to avoid spamming it).
+Open via the **Affixes** button in the left panel or the Affixes reference (Settings, Windows & Tools). Every known affix is listed with a green dot (learned) or red dot (missing). Search by name, toggle *"Show: Missing only"*, and hover any entry for its full tooltip, weapon/armor restriction, apply cost, and use count. Press **Refresh** to request an updated list from the server (throttled to avoid spamming it).
 
 ### The Missing tab said "Requesting data..." forever. Fixed?
-Yes (2.9). The tab reads your spellbook's "Echoes" category to know what you own -- but that category only exists once you've learned at least one echo, so a fresh character (or one who just reset) has no such tab, and the check used to wait for something that would never arrive. It now retries automatically every 1.5s, and after 15 seconds gives up waiting and shows the full list anyway. If that fallback triggers, it's logged in `/ebb debuglog` for reference.
+Yes (2.9). The tab reads your spellbook's "Echoes" category to know what you own -- but that category only exists once you've learned at least one echo, so a fresh character (or one who just reset) has no such tab, and the check used to wait for something that would never arrive. It now retries automatically every 1.5s, and after 15 seconds gives up waiting and shows the full list anyway. If that fallback triggers, it's logged in Settings for reference.
 
 ### My build disappeared after logging in later. What happened?
 This was a real bug, fixed in 2.11 -- not something you did wrong. Saving a build compares its stored author name to your current character name to decide whether it's yours or someone else's. `UnitName("player")` can occasionally come back from the game in a different format (with or without the realm attached) after a reconnect. That mismatch made the addon think your OWN build belonged to someone else, "forked" it into a new slot, and removed the old one.
 
 **Nothing was truly deleted.** The build kept existing under a different id, tagged with a "copied from `<your name>`" note. If you still have a build like that, it's yours -- rename it and clear the copied-from note via Edit Build. The comparison is now realm-suffix-tolerant, so this can't happen again.
 
-### What do /ebb autosell, /ebb bagdots, /ebb errors and /ebb clicktrace do? (new in 2.12)
+### What do the Auto-sell toggle (Settings, Automation), Settings, the Error log (Settings, Windows & Tools) and the Click Trace log (Settings, Windows & Tools) do? (new in 2.12)
 Four small standalone tools:
 
-- **`/ebb autosell`** — toggle. Auto-sells 0-copper junk items while a vendor window is open. An item carrying an affix you haven't learned yet is always protected, even if it sells for nothing. Off by default; opt in explicitly.
-- **`/ebb bagdots`** — toggle. Draws a colored dot on bag items whose gear affix you're missing: red for a brand-new affix line, purple for a rank you're missing on one you already partly have. On by default.
-- **`/ebb errors`** — opens a small always-on error log (last 20 entries), separate from `/ebb debug`. Useful as a first step when something breaks and you don't have debug tracing already running.
-- **`/ebb clicktrace`** — diagnostic for "I clicked a button and nothing happened." Logs every themed button click and view transition, so a bug report can show whether the click even reached EbonBuilds or was intercepted before that.
+- **`the Auto-sell toggle (Settings, Automation)`** — toggle. Auto-sells 0-copper junk items while a vendor window is open. An item carrying an affix you haven't learned yet is always protected, even if it sells for nothing. Off by default; opt in explicitly.
+- **`Settings`** — toggle. Draws a colored dot on bag items whose gear affix you're missing: red for a brand-new affix line, purple for a rank you're missing on one you already partly have. On by default.
+- **`the Error log (Settings, Windows & Tools)`** — opens a small always-on error log (last 20 entries), separate from the Debug log (Settings, Windows & Tools). Useful as a first step when something breaks and you don't have debug tracing already running.
+- **`the Click Trace log (Settings, Windows & Tools)`** — diagnostic for "I clicked a button and nothing happened." Logs every themed button click and view transition, so a bug report can show whether the click even reached EbonBuilds or was intercepted before that.
 
 ### Why did Reload get faster / show fewer builds? (2.13)
 The Public Builds **Reload** button now only requests builds for the class currently selected in the dropdown (your own class by default), instead of every class from every peer on every reload. Switch the dropdown to "All Classes" if you want the old everything-at-once behavior back. This cuts sync traffic and page count dramatically on classes many players share builds for.
@@ -176,8 +176,8 @@ That's the small "EbonBuilds Settings" popup (gear icon next to the window's clo
 
 - **Action delay** — how long automation waits before acting on a new echo screen. Very low values may cause the addon to malfunction.
 - **Toast duration** — how long pick/reroll/freeze/banish notifications stay on screen.
-- **Auto-sell junk at vendors** — same as `/ebb autosell`, now with a persistent checkbox instead of only a slash command.
-- **Bag affix dots** — same as `/ebb bagdots`, likewise now a checkbox here.
+- **Auto-sell junk at vendors** — same as `the Auto-sell toggle (Settings, Automation)`, now with a persistent checkbox instead of only a slash command.
+- **Bag affix dots** — same as `Settings`, likewise now a checkbox here.
 
 The dialog scrolls if it ever grows past the window (same fix as the FAQ window in 2.14), so more settings can be added here later without risk of overflow.
 
@@ -207,7 +207,7 @@ Yes (2.21). Importing a public build used to delete Public Builds' cached copy o
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
 
 ### Sync is flooding my chat with "[EbonBuilds Sync] Build ... stored in remote" spam. Fixed?
-Yes (2.23). Several internal sync diagnostics (one line per build received, one line per REQ broadcast, channel-index bookkeeping) were printing to general chat unconditionally instead of only when `/ebbsync verbose` is on -- always been there, but the 2.15 staggered all-classes sync made it much worse, since a single "All Classes" Reload can now pull in dozens of builds and fires the REQ-sent line up to 10x (once per class) instead of once. All of that moved behind the existing verbose toggle; real problems (a build failing to assemble) now go to `/ebb errors` instead of the chat window. Command output (`/ebbsync status`, `/ebbsync reset`, etc.) and cooldown/actionable messages are unaffected -- you'll still see those.
+Yes (2.23). Several internal sync diagnostics (one line per build received, one line per REQ broadcast, channel-index bookkeeping) were printing to general chat unconditionally instead of only when `/ebbsync verbose` is on -- always been there, but the 2.15 staggered all-classes sync made it much worse, since a single "All Classes" Reload can now pull in dozens of builds and fires the REQ-sent line up to 10x (once per class) instead of once. All of that moved behind the existing verbose toggle; real problems (a build failing to assemble) now go to `the Error log (Settings, Windows & Tools)` instead of the chat window. Command output (`/ebbsync status`, `/ebbsync reset`, etc.) and cooldown/actionable messages are unaffected -- you'll still see those.
 
 ### The game froze / hung after syncing with Tome Atlas open. Fixed?
 Yes (2.24), most likely cause found and fixed. Tome Atlas (and Public Builds) re-rendered its entire list synchronously on every single incoming synced entry -- normally one build/tome is no big deal, but a real sync can stream in dozens to 100+ in a burst over a few seconds, especially since 2.15's staggered all-classes sync. Each render re-scans your spellbook and rebuilds/sorts the whole list (worse in "Group: Zone"/"Group: Mob" mode), so doing that dozens of times in rapid succession is exactly the kind of thing that makes a client stutter hard or lock up. Both views now coalesce bursty refresh requests into at most one actual render every 0.3s, however many sync messages arrive in between.
@@ -218,7 +218,7 @@ As of 2.24, clicking Save in the gear-icon Settings dialog shows a toast confirm
 ### The Missing tab has no way to re-check what I've learned. New?
 Fixed (2.25): a **Refresh** button next to Show: All/Missing only. Unlike Affixes' Refresh (which asks the server), this one is a local spellbook re-scan -- Echoes come straight from your own client's spellbook, no server round-trip needed. Previously the only way to force a re-check was leaving the tab and coming back.
 
-If the tab says "0 learned" and that looks wrong: the count only reflects what your current character's spellbook "Echoes" category actually contains right now. A fresh character (or one who just reset) legitimately shows 0 until the server grants that category. Try Refresh first; if it's still 0 after you know you've picked up an echo, that's worth a bug report (`/ebb errors`).
+If the tab says "0 learned" and that looks wrong: the count only reflects what your current character's spellbook "Echoes" category actually contains right now. A fresh character (or one who just reset) legitimately shows 0 until the server grants that category. Try Refresh first; if it's still 0 after you know you've picked up an echo, that's worth a bug report (`the Error log (Settings, Windows & Tools)`).
 
 ### New: Apply to Character (2.26)
 Build Overview has a new **Apply to Character** button. It sends this build's locked echoes to the server's native Active Echo Loadout (`ProjectEbonhold.PerkService.SetActiveEchoLoadout`) -- the game's own echo-pick screen then highlights choices that match, directly in-game, without needing to alt-tab to EbonBuilds while picking. Needs at least one locked echo in the build; works on both ProjectEbonhold and ProjectEbonhold Enhanced.
@@ -230,7 +230,7 @@ The Missing tab and Tome Atlas both used to determine what you've learned by sca
 It used to be deliberately hidden there (you already have it in your left sidebar, so browsing it again seemed redundant) -- but that also meant there was no easy way to confirm a build actually published successfully. As of 2.29, your own public builds show up in Public Builds too, tagged **(You)** next to your name, with the Import button replaced by a disabled "Yours" label. If it's not there after making a build public, that's a real sign something's wrong (check the title-collision popup from 2.18 -- your build gets auto-unpublished if the exact title is already public under someone else).
 
 ### Tuning Advisor: self-calibrating thresholds (2.33, Smart mode support in 2.34)
-`/ebb tuning` opens a window comparing your Banish/Reroll/Freeze thresholds against what your build has actually been offered, not just the theoretical scoring model. EbonBuilds records the score (as % of peak) of every echo automation evaluates, always-on and lightweight, into a per-character sample buffer. Once it has at least 30 samples, the advisor computes what threshold your CURRENT setting actually corresponds to (e.g. "rejects ~13% of real offers") and suggests a value to hit a sensible target (~15% for Banish, ~45% for Reroll, ~10% for Freeze), with an Apply button that writes it straight to your active build.
+Settings opens a window comparing your Banish/Reroll/Freeze thresholds against what your build has actually been offered, not just the theoretical scoring model. EbonBuilds records the score (as % of peak) of every echo automation evaluates, always-on and lightweight, into a per-character sample buffer. Once it has at least 30 samples, the advisor computes what threshold your CURRENT setting actually corresponds to (e.g. "rejects ~13% of real offers") and suggests a value to hit a sensible target (~15% for Banish, ~45% for Reroll, ~10% for Freeze), with an Apply button that writes it straight to your active build.
 
 Works with **both Classic and Smart (EV) mode**, covering Banish, Reroll, and Freeze in both. Smart mode's fields are a % of mean/evBest3/EV rather than peak directly -- the advisor converts through the current mean/peak, evBest3/peak, or EV/peak ratio so both modes analyze against comparable underlying data (cross-checked: a Classic and a Smart suggestion targeting the same percentile land on the same real threshold). Smart Reroll's suggestion (2.48) uses its own sample stream with each evaluation's charge-pacing multiplier divided back out, since its live threshold moves with remaining charges -- the same pacing behavior as before, just now something the advisor can actually analyze. "Clear Collected Data" is worth using after a major reweight, since old samples reflect the previous weighting.
 
@@ -241,7 +241,7 @@ Automation now spends its Banish/Reroll/Freeze charges with the REST OF THE RUN 
 - **Reroll** (Classic mode, previously had no pacing at all): same idea -- pickier as charges run low.
 - **Freeze**: with plenty of charges left, freezes anything above the usual threshold; with few left, only freezes genuinely excellent finds.
 
-All three use the same shared curve (`ChargePacing`), just with per-lever comfort caps and conservativeness. `/ebb debug` now also shows the pacing multiplier actually applied to each threshold in the EVAL header, for troubleshooting.
+All three use the same shared curve (`ChargePacing`), just with per-lever comfort caps and conservativeness. the Debug log (Settings, Windows & Tools) now also shows the pacing multiplier actually applied to each threshold in the EVAL header, for troubleshooting.
 
 Known limitation: the Tuning Advisor's "current threshold rejects/catches X%" figure is computed against the *base* (unpaced) threshold value -- it's still a useful approximation, but not perfectly exact now that the real applied threshold shifts with remaining charges throughout a run.
 
