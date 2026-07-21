@@ -4,16 +4,14 @@
 
 EbonBuilds.FAQContent = { PAGES = {
 {
-    title = "What's new: 3.57 (2026-07-21) -- Handler protection: PublicBuildsView.lua, ExportImport.lua",
+    title = "What's new: 3.58 (2026-07-21) -- Handler protection: EchoPicker.lua",
     category = "What's New",
     lines = {
         "",
-        "- modules/ui/PublicBuildsView.lua -- 3 frames now opt into",
-        "EbonBuilds.Debug.ProtectScript at creation (icon button, main scroll",
-        "frame, refresh-throttle OnUpdate timer).",
-        "- modules/build/ExportImport.lua -- 4 frames now opt into ProtectScript",
-        "at creation (export and import dialogs, their respective text edit boxes).",
-        "- Remaining files: EchoPicker, AffixView, BonusView.",
+        "- modules/ui/EchoPicker.lua -- 4 frames now opt into",
+        "EbonBuilds.Debug.ProtectScript at creation (picker row, picker window,",
+        "search box, clear-search button).",
+        "- Remaining files: AffixView, BonusView.",
     },
 },
 {
