@@ -373,39 +373,48 @@ end
 -- -- enough to make an informed vote or import decision without
 -- dropping into a full editor the browsing player doesn't own.
 
-local TOP_PRIORITY_COUNT = 8
 local inspectFrame
 
-local function TopPriorities(build)
+local function AllPriorities(build)
     if not (EbonBuilds.EchoProjection and EbonBuilds.Weights and EbonBuilds.Quality) then return {} end
     local rows = {}
     for _, info in ipairs(EbonBuilds.EchoProjection.GetAvailable(build.class) or {}) do
-        local best = 0
+        local best, bestQuality = 0, nil
         for _, quality in ipairs(EbonBuilds.Quality.ORDER or {}) do
             if info.qualities and info.qualities[quality] then
                 local v = EbonBuilds.Weights.GetForRef(build, info.refKey, quality) or 0
-                if v > best then best = v end
+                if v > best then best, bestQuality = v, quality end
             end
         end
         if best > 0 then
-            rows[#rows + 1] = { name = info.displayName or info.name, weight = best }
+            rows[#rows + 1] = {
+                name = info.displayName or info.name,
+                weight = best,
+                quality = bestQuality,
+                spellId = info.spellId,
+            }
         end
     end
     table.sort(rows, function(a, b)
         if a.weight ~= b.weight then return a.weight > b.weight end
         return a.name < b.name
     end)
-    local top = {}
-    for i = 1, math.min(TOP_PRIORITY_COUNT, #rows) do top[i] = rows[i] end
-    return top
+    return rows
 end
 
-EbonBuilds.PublicBuildsView._TopPrioritiesForTest = TopPriorities
+EbonBuilds.PublicBuildsView._TopPrioritiesForTest = AllPriorities
 
 local function BuildInspectFrame(parent)
     local f = CreateFrame("Frame", nil, parent)
     EbonBuilds.Theme.ApplyBackdropDefinition(f)
     f:SetBackdropColor(0, 0, 0, 0.92)
+    -- A frame-level offset alone isn't enough here: it only wins against
+    -- siblings in the SAME strata, and the scrollable build list beneath
+    -- (nested ScrollFrame -> scrollChild -> card -> buttons) can end up
+    -- several levels deep depending on template internals, which was
+    -- letting card content show through at reduced brightness instead of
+    -- being fully covered. An explicit higher strata is unconditional.
+    f:SetFrameStrata("DIALOG")
     f:SetFrameLevel((parent:GetFrameLevel() or 0) + 20)
 
     local closeBtn = EbonBuilds.Theme.CreateCloseButton(f)
@@ -456,21 +465,62 @@ local function BuildInspectFrame(parent)
         f._lockedBtns[i] = btn
     end
 
-    local priLabel = EbonBuilds.Theme.CreateSectionLabel(f, "Top Priorities")
+    local priLabel = EbonBuilds.Theme.CreateSectionLabel(f, "Weighted Priorities")
     f._priLabel = priLabel
-
-    f._priRows = {}
-    for i = 1, TOP_PRIORITY_COUNT do
-        local row = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        row:SetJustifyH("LEFT")
-        f._priRows[i] = row
-    end
 
     local importBtn = EbonBuilds.Theme.CreateButton(f)
     importBtn:SetWidth(140)
     importBtn:SetHeight(24)
     importBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -18, 16)
     f._importBtn = importBtn
+
+    -- Scrollable priority list: the old version showed at most 8 flat
+    -- text lines ("1. Name (12)"), nothing like the icon + quality-color
+    -- rows the editor uses for the same data. This mirrors that instead,
+    -- and shows every configured priority rather than a hard cap.
+    local priScroll = CreateFrame("ScrollFrame", nil, f)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(priScroll, "PublicBuildsView.Inspect.PriScroll")
+    end
+    -- BOTTOMRIGHT anchored to f's actual bottom-right corner (not the
+    -- horizontally-centered BOTTOM point) with room left for the
+    -- scrollbar (34px) and the Import button below (52px).
+    priScroll:SetPoint("TOPLEFT", priLabel, "BOTTOMLEFT", 0, -6)
+    priScroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 52)
+    f._priScroll = priScroll
+
+    local priChild = CreateFrame("Frame", nil, priScroll)
+    priChild:SetWidth(1)
+    priChild:SetHeight(1)
+    priScroll:SetScrollChild(priChild)
+    f._priChild = priChild
+
+    local priBar = EbonBuilds.Theme.CreateScrollBar(f)
+    priBar:SetPoint("TOPLEFT", priScroll, "TOPRIGHT", 4, 0)
+    priBar:SetPoint("BOTTOMLEFT", priScroll, "BOTTOMRIGHT", 4, 0)
+    priBar:SetValueStep(20)
+    priBar:SetMinMaxValues(0, 0)
+    priBar:SetValue(0)
+    priBar:SetScript("OnValueChanged", function(_, value)
+        priChild:ClearAllPoints()
+        priChild:SetPoint("TOPLEFT", priScroll, "TOPLEFT", 0, value)
+    end)
+    f._priBar = priBar
+    EbonBuilds.Theme.BindScrollWheel(priScroll, priBar, 24)
+
+    priScroll:SetScript("OnSizeChanged", function()
+        local w = priScroll:GetWidth()
+        if w and w > 0 and f._priRowPool then
+            priChild:SetWidth(w)
+            for _, row in ipairs(f._priRowPool) do row:SetWidth(w) end
+        end
+        if f._currentBuild and f._RefreshPriorities then f._RefreshPriorities() end
+    end)
+
+    f._priRowPool = {}
+    f._priEmpty = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    f._priEmpty:SetPoint("TOPLEFT", priLabel, "BOTTOMLEFT", 0, -6)
+    f._priEmpty:SetText("No weighted priorities configured.")
 
     if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
         EbonBuilds.Debug.ProtectScript(f, "PublicBuildsView.Inspect")
@@ -479,6 +529,87 @@ local function BuildInspectFrame(parent)
     return f
 end
 
+local PRI_ROW_HEIGHT = 22
+local PRI_ROW_ICON = 18
+
+local function CreatePriorityRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetHeight(PRI_ROW_HEIGHT)
+
+    local icon = row:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(PRI_ROW_ICON)
+    icon:SetHeight(PRI_ROW_ICON)
+    icon:SetPoint("LEFT", row, "LEFT", 0, 0)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    row._icon = icon
+
+    local name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+    name:SetPoint("RIGHT", row, "RIGHT", -50, 0)
+    name:SetJustifyH("LEFT")
+    row._name = name
+
+    local weight = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    weight:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+    weight:SetJustifyH("RIGHT")
+    weight:SetTextColor(0.7, 0.7, 0.7, 1)
+    row._weight = weight
+
+    return row
+end
+
+-- Fills the pooled, scrollable priority list from AllPriorities(build).
+-- Same icon-lookup convention as the Locked Echoes row (GetSpellInfo's
+-- 3rd return is the icon texture).
+local function PopulateInspectPriorities(f, build)
+    f._currentBuild = build
+    f._RefreshPriorities = function() PopulateInspectPriorities(f, build) end
+    local rows = AllPriorities(build)
+    if #rows == 0 then f._priEmpty:Show() else f._priEmpty:Hide() end
+    if #rows > 0 then f._priScroll:Show() else f._priScroll:Hide() end
+    if #rows > 0 then f._priBar:Show() else f._priBar:Hide() end
+
+    for i, entry in ipairs(rows) do
+        local row = f._priRowPool[i]
+        if not row then
+            row = CreatePriorityRow(f._priChild)
+            f._priRowPool[i] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", f._priChild, "TOPLEFT", 0, -(i - 1) * PRI_ROW_HEIGHT)
+        row:SetPoint("RIGHT", f._priChild, "RIGHT", 0, 0)
+        if entry.spellId then
+            row._icon:SetTexture(select(3, GetSpellInfo(entry.spellId)))
+            row._icon:Show()
+        else
+            row._icon:Hide()
+        end
+        local r, g, b = EbonBuilds.Quality.GetRGB(entry.quality)
+        row._name:SetText(entry.name)
+        row._name:SetTextColor(r, g, b, 1)
+        row._weight:SetText(tostring(entry.weight))
+        row:Show()
+    end
+    for i = #rows + 1, #f._priRowPool do
+        f._priRowPool[i]:Hide()
+    end
+
+    local w = f._priScroll:GetWidth()
+    if w and w > 0 then f._priChild:SetWidth(w) end
+    local totalHeight = math.max(1, #rows * PRI_ROW_HEIGHT)
+    f._priChild:SetHeight(totalHeight)
+    local visible = f._priScroll:GetHeight() or 0
+    local maxScroll = math.max(0, totalHeight - visible)
+    f._priBar:SetMinMaxValues(0, maxScroll)
+    f._priBar:SetValue(0)
+    f._priChild:ClearAllPoints()
+    f._priChild:SetPoint("TOPLEFT", f._priScroll, "TOPLEFT", 0, 0)
+end
+
+-- Locked Echo icon count never changes (EbonBuilds.Build.LOCKED_SLOTS is
+-- a constant), so this only needs to run once per frame, not per
+-- ShowInspect call -- but it's cheap and idempotent, so keeping it here
+-- keeps the "re-layout on every open" pattern the rest of the file uses.
 local function LayoutInspectRows(f)
     f._lockedLabel:ClearAllPoints()
     f._lockedLabel:SetPoint("TOPLEFT", f._intentText, "BOTTOMLEFT", 0, -16)
@@ -490,12 +621,6 @@ local function LayoutInspectRows(f)
     end
     f._priLabel:ClearAllPoints()
     f._priLabel:SetPoint("TOPLEFT", f._lockedLabel, "BOTTOMLEFT", 0, -40)
-    local prevAnchor = f._priLabel
-    for i, row in ipairs(f._priRows) do
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -4)
-        prevAnchor = row
-    end
 end
 
 -- ShowInspect(build): populates and shows the panel for one build.
@@ -546,20 +671,7 @@ ShowInspect = function(build)
         end
     end
 
-    local top = TopPriorities(build)
-    for i, row in ipairs(inspectFrame._priRows) do
-        local entry = top[i]
-        if entry then
-            row:SetText(string.format("%d.  %s  |cffaaaaaa(%d)|r", i, entry.name, entry.weight))
-            row:Show()
-        else
-            row:Hide()
-        end
-    end
-    if #top == 0 then
-        inspectFrame._priRows[1]:SetText("|cff888888No weighted priorities configured.|r")
-        inspectFrame._priRows[1]:Show()
-    end
+    PopulateInspectPriorities(inspectFrame, build)
 
     if isOwn then
         inspectFrame._importBtn:SetText("Yours")

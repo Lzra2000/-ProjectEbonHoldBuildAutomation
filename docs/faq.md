@@ -229,6 +229,9 @@ Click a card in Public Builds to open a read-only inspect view -- class/spec, th
 Votes are direct-witness only: your client only ever broadcasts your own vote, never a relayed list of what other people supposedly voted. WoW authenticates the sender name on every addon and channel message, so nobody can broadcast a vote as someone else. The number you see is how many distinct voters your client has personally heard from -- it grows as you play alongside more people, and two players might see slightly different counts if one has synced with more of the community than the other. Public Builds sorts by vote count first, so well-regarded builds surface above someone's experiments.
 
 
+### What does Inspect show me before I import or vote on a public build?
+Click anywhere on a build card (not the Import or vote button) to open a read-only Inspect view: the author's intent notes, the locked Echoes, and every one of the author's weighted priorities -- icon, name in its quality color, and the weight value, same as you'd see while editing your own build, and scrollable rather than capped to a handful. You can vote or import right from Inspect, without going back to the list.
+
 ### Does shared community DPS data actually affect my recommendations now?
 Yes, since 3.76 -- and only in a specific, honest way. Previously, shared performance data was raw per-echo DPS averages pooled across players, which mixes everyone's gear, skill, and fight types together; it was collected but deliberately never allowed to influence anything. The addon now shares each player's **with/without deltas** instead: "my runs with this Echo average X more DPS than my runs without it." A delta is measured within one player, so their gear and skill sit on both sides of the comparison -- combining deltas across players is defensible in a way pooled raw DPS never was.
 

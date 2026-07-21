@@ -671,6 +671,18 @@ EbonBuilds.FAQContent = { PAGES = {
     },
 },
 {
+    title = "What does Inspect show me before I import or vote on a public build?",
+    category = "Sync, Sharing & Public Builds",
+    lines = {
+        "Click anywhere on a build card (not the Import or vote button) to open a",
+        "read-only Inspect view: the author's intent notes, the locked Echoes, and",
+        "every one of the author's weighted priorities -- icon, name in its",
+        "quality color, and the weight value, same as you'd see while editing your",
+        "own build, and scrollable rather than capped to a handful. You can vote",
+        "or import right from Inspect, without going back to the list.",
+    },
+},
+{
     title = "Does shared community DPS data actually affect my recommendations now?",
     category = "Sync, Sharing & Public Builds",
     lines = {
