@@ -286,6 +286,16 @@ The dialog scrolls if it ever grows past the window (same fix as the FAQ window 
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
 ## Changelog
 
+### 3.62 (2026-07-21) -- Framework: slow-handler detection, event-spam warnings, a diagnostic HUD, and Assert()
+
+Four additions to `core/Debug.lua`, all following the same pattern as the error-isolation work: catch a class of bug once, centrally, instead of relying on every module remembering to check for it.
+
+- **`Debug.Time(source, fn, thresholdMs)`** wraps a function so its execution time is measured on every call; anything over the threshold (default 5ms) gets recorded to the Error Log -- spotting a slow handler without attaching a profiler.
+- **Event-spam detection** is now built into `ProtectScript` itself: a handler firing 120+ times within one second (almost always over-broad event registration, not intended behavior) gets a single Error Log warning per window instead of silently running unchecked. `OnUpdate` is exempt, since firing every frame is exactly what it's for.
+- **A small diagnostic HUD** (Error Log window -> new **HUD** button) shows protected-frame count, errors recorded, spam warnings, and the last self-test result -- live, no digging through separate windows.
+- **`Debug.Assert(condition, message)`** for "this should never happen here" spots: records to the Error Log and returns `false` on failure instead of raising, so a violated assumption can't crash a handler any more than a caught error can.
+- 5 new self-tests cover all four (13/13 total now, up from 8).
+
 ### 3.61 (2026-07-21) -- Handler protection rollout complete
 
 Last 10 files from the repo-wide scan: `TalentAutoLearn`, `Talents`, `Session`, `EchoEligibilityEvidence`, `EchoCatalog`, `EWL`, `Sync`, `Affix`, `TomeAtlas`, `ClickTrace` all now opt into `EbonBuilds.Debug.ProtectScript`. Every frame in the addon that registers an event or UI handler is now error-isolated -- a bug in one handler can no longer take down others on the same frame or spam a red error toast.

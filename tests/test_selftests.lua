@@ -87,6 +87,11 @@ function UnitClass() return "Mage", "MAGE" end
 function UnitLevel() return 80 end
 function UnitGUID() return "GUID" end
 function GetTime() return 0 end
+local profileClock = 0
+function debugprofilestop()
+    profileClock = profileClock + 1
+    return profileClock
+end
 function time() return 1 end
 function date() return "2026-07-17 12:00:00" end
 function GetChannelName() return 0 end
@@ -204,6 +209,67 @@ EbonBuilds.Debug.RegisterTest("Debug.ProtectScript is idempotent on the same fra
     EbonBuilds.Debug.ProtectScript(frame, "selftest.frame")
     if frame.SetScript ~= firstSetScript then
         error("calling ProtectScript twice wrapped the handler twice")
+    end
+end)
+
+EbonBuilds.Debug.RegisterTest("Debug.Time records a slow call and still returns the result", function()
+    local errorsBefore = #EbonBuilds.ErrorLog.GetAll()
+    local timed = EbonBuilds.Debug.Time("selftest.slow", function(x) return x * 2 end, 0)
+    local result = timed(21)
+    if result ~= 42 then error("Time() did not pass through the wrapped function's return value") end
+    if #EbonBuilds.ErrorLog.GetAll() ~= errorsBefore + 1 then
+        error("Time() did not record a call exceeding its 0ms threshold")
+    end
+end)
+
+EbonBuilds.Debug.RegisterTest("Debug.Time does not record a call under its threshold", function()
+    local errorsBefore = #EbonBuilds.ErrorLog.GetAll()
+    local timed = EbonBuilds.Debug.Time("selftest.fast", function() end, 999999)
+    timed()
+    if #EbonBuilds.ErrorLog.GetAll() ~= errorsBefore then
+        error("Time() recorded a call that was under its threshold")
+    end
+end)
+
+EbonBuilds.Debug.RegisterTest("Debug.Assert records on failure, not on success", function()
+    local errorsBefore = #EbonBuilds.ErrorLog.GetAll()
+    if EbonBuilds.Debug.Assert(true, "should not fire") ~= true then
+        error("Assert(true, ...) did not return true")
+    end
+    if #EbonBuilds.ErrorLog.GetAll() ~= errorsBefore then
+        error("Assert(true, ...) recorded an error despite the condition holding")
+    end
+    if EbonBuilds.Debug.Assert(false, "expected failure") ~= false then
+        error("Assert(false, ...) did not return false")
+    end
+    if #EbonBuilds.ErrorLog.GetAll() ~= errorsBefore + 1 then
+        error("Assert(false, ...) did not record to the Error Log")
+    end
+end)
+
+EbonBuilds.Debug.RegisterTest("ProtectScript warns once per window on event spam, not once per call", function()
+    local frame = NewObject()
+    EbonBuilds.Debug.ProtectScript(frame, "selftest.spam")
+    local statsBefore = EbonBuilds.Debug.GetStats().spamWarningCount
+    frame:SetScript("OnEvent", function() end)
+    local handler = frame:GetScript("OnEvent")
+    for _ = 1, 150 do handler() end
+    local warned = EbonBuilds.Debug.GetStats().spamWarningCount
+    if warned ~= statsBefore + 1 then
+        error("expected exactly one spam warning for 150 calls in one window, got " .. tostring(warned - statsBefore))
+    end
+end)
+
+EbonBuilds.Debug.RegisterTest("ProtectScript does not spam-check OnUpdate", function()
+    local frame = NewObject()
+    EbonBuilds.Debug.ProtectScript(frame, "selftest.onupdate")
+    local statsBefore = EbonBuilds.Debug.GetStats().spamWarningCount
+    frame:SetScript("OnUpdate", function() end)
+    local handler = frame:GetScript("OnUpdate")
+    for _ = 1, 150 do handler() end
+    local warned = EbonBuilds.Debug.GetStats().spamWarningCount
+    if warned ~= statsBefore then
+        error("OnUpdate should be exempt from spam detection, but a warning fired")
     end
 end)
 

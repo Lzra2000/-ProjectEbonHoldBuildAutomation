@@ -175,6 +175,14 @@ local function BuildWindow()
         selfTestStatus:SetText(string.format("%d/%d self-tests passed", summary.passed, summary.total))
     end)
 
+    local hudBtn = EbonBuilds.Theme.CreateButton(f)
+    hudBtn:SetSize(80, 22)
+    hudBtn:SetPoint("LEFT", selfTestBtn, "RIGHT", 8, 0)
+    hudBtn:SetText("HUD")
+    hudBtn:SetScript("OnClick", function()
+        if EbonBuilds.Debug and EbonBuilds.Debug.ToggleHUD then EbonBuilds.Debug.ToggleHUD() end
+    end)
+
     tinsert(UISpecialFrames, "EbonBuildsErrorLogWindow")
     f:Hide()
     return f
