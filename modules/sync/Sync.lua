@@ -635,6 +635,13 @@ local function HandleChannelMessage(msg, sender, _, channelName, _, _, _, channe
         end
         return
     end
+    if code == "VOT" then
+        if EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.HandleBroadcast then
+            local ok, err = pcall(EbonBuilds.BuildVotes.HandleBroadcast, decoded, sender)
+            if not ok then Log("BuildVotes.HandleBroadcast error: " .. tostring(err)) end
+        end
+        return
+    end
     if code == "APR" then
         if EbonBuilds.Calibration and EbonBuilds.Calibration.HandleAppearanceBroadcast then
             local ok, err = pcall(EbonBuilds.Calibration.HandleAppearanceBroadcast, decoded, sender)
@@ -914,6 +921,20 @@ end
 -- EchoPerformance.lua's SerializeBatch) to everyone. Same
 -- channel+guild pattern as BroadcastTomeEntry; the payload already
 -- starts with "PRF|", not re-tagged here.
+-- Broadcasts a build-vote batch (see BuildVotes.lua). Same
+-- channel+guild pattern; payload is self-tagged with "VOT|".
+function EbonBuilds.Sync.BroadcastVotes(payload)
+    if not payload then return end
+    RefreshChannel()
+    if syncChannelIndex and syncChannelIndex > 0 then
+        local escaped = payload:gsub("|", "||")
+        pcall(SendChatMessage, escaped, "CHANNEL", nil, syncChannelIndex)
+    end
+    if GetGuildInfo and GetGuildInfo("player") then
+        SendAddonMessage(PREFIX, payload, "GUILD")
+    end
+end
+
 function EbonBuilds.Sync.BroadcastPerfBatch(payload)
     if not payload then return end
     RefreshChannel()
@@ -1007,6 +1028,20 @@ local function DispatchAddon(prefix, payload, dist, sender)
         if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.HandleBroadcast then
             local ok, err = pcall(EbonBuilds.EchoPerformance.HandleBroadcast, payload, sender)
             if not ok then Log("EchoPerformance.HandleBroadcast error: " .. tostring(err)) end
+        end
+    elseif code == "PRD" then
+        -- Missing from the 3.76 release: PRD was routed in the addon
+        -- dispatcher only, so delta batches arriving over the sync
+        -- CHANNEL (the primary broadcast path) were silently dropped and
+        -- only the guild copy landed. Fixed alongside VOT.
+        if EbonBuilds.EchoDeltaSync and EbonBuilds.EchoDeltaSync.HandleBroadcast then
+            local ok, err = pcall(EbonBuilds.EchoDeltaSync.HandleBroadcast, payload, sender)
+            if not ok then Log("EchoDeltaSync.HandleBroadcast error: " .. tostring(err)) end
+        end
+    elseif code == "VOT" then
+        if EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.HandleBroadcast then
+            local ok, err = pcall(EbonBuilds.BuildVotes.HandleBroadcast, payload, sender)
+            if not ok then Log("BuildVotes.HandleBroadcast error: " .. tostring(err)) end
         end
     elseif code == "APR" then
         if EbonBuilds.Calibration and EbonBuilds.Calibration.HandleAppearanceBroadcast then
