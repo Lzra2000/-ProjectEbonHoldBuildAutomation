@@ -165,9 +165,33 @@ local function HideOverlays()
     if legend then legend:Hide() end
 end
 
+-- Mapster actively SetScale()'s WorldMapDetailFrame/WorldMapBlobFrame
+-- between its windowed and quest-list presets (Mapster.lua's
+-- setupQuestList/restoreMap) -- a live rescale vanilla WoW's own map
+-- never does. Our continent overlay geometry is sampled once per
+-- continent and cached (SampleContinent), so a rescale after that sample
+-- desyncs it from what's actually on screen: reported as the tint
+-- rendering as oversized solid boxes instead of zone-shaped highlights.
+-- Rather than fight a rescale we can't reliably observe, skip the
+-- overlay entirely when Mapster is loaded -- the zone panel (which
+-- doesn't depend on continent geometry) still works normally.
+local function MapsterLoaded()
+    return IsAddOnLoaded and IsAddOnLoaded("Mapster")
+end
+
 local function ShowContinentOverlays()
     local parent = WorldMapButton or WorldMapDetailFrame
     if not parent then return end
+    if MapsterLoaded() then
+        HideOverlays()
+        if not legend then
+            legend = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            legend:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -10, 10)
+        end
+        legend:SetText("|cff888888Zone tinting disabled (Mapster changes map scaling)|r")
+        legend:Show()
+        return
+    end
     local cont = GetCurrentMapContinent and GetCurrentMapContinent() or 0
     local zone = GetCurrentMapZone and GetCurrentMapZone() or 0
     if cont <= 0 or zone ~= 0 then
