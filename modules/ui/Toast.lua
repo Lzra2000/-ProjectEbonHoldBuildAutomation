@@ -178,6 +178,9 @@ end
 
 local function BuildFrame()
     local f = CreateFrame("Frame", "EbonBuildsToastFrame", UIParent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(f, "Toast.Frame")
+    end
     f:SetSize(TOAST_W, TOAST_H)
     f:SetPoint("TOP", UIParent, "TOP", 0, -20)
     f:SetFrameStrata("TOOLTIP")

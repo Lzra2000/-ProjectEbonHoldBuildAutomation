@@ -75,6 +75,9 @@ local function BuildWindow()
     title:SetText("Welcome to EbonBuilds")
 
     local drag = CreateFrame("Frame", nil, f)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(drag, "ShowcaseView.Drag")
+    end
     drag:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     drag:SetPoint("TOPRIGHT", f, "TOPRIGHT", -30, 0)
     drag:SetHeight(28)

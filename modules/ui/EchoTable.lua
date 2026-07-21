@@ -423,6 +423,9 @@ end
 
 local function CreateScrollFrame(parent, x, y)
     local sf = CreateFrame("ScrollFrame", nil, parent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(sf, "EchoTable.ScrollFrame")
+    end
     sf:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     sf:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -x - 20, PADDING)
     local child = CreateFrame("Frame", nil, sf)

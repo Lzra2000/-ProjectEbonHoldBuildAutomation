@@ -212,6 +212,9 @@ end
 
 local function BuildViewFrame()
     local f = CreateFrame("Frame", "EbonBuildsBuildTabs", UIParent)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(f, "BuildTabs.ViewFrame")
+    end
     CreateTabs(f)
     contentArea = CreateContentArea(f)
 

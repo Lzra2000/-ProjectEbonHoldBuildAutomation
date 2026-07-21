@@ -286,6 +286,15 @@ The dialog scrolls if it ever grows past the window (same fix as the FAQ window 
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
 ## Changelog
 
+### 3.60 (2026-07-21) -- Handler protection: EchoTable, BuildTabs, Toast, ShowcaseView, DebugLog
+
+- `modules/ui/EchoTable.lua` -- scroll frame.
+- `modules/ui/BuildTabs.lua` -- view frame.
+- `modules/ui/Toast.lua` -- toast notification frame.
+- `modules/ui/ShowcaseView.lua` -- drag region.
+- `modules/automation/DebugLog.lua` -- drag region and edit box.
+- Remaining files without coverage: WelcomeView, TalentAutoLearn, Talents, Session, EchoEligibilityEvidence, EchoCatalog, EWL, Sync, Affix, TomeAtlas, ClickTrace.
+
 ### 3.59 (2026-07-21) -- core/Init.lua and core/Scheduler.lua's handlers now protected too
 
 A repo-wide scan of the handler-protection follow-up found 18 files with zero `ProtectScript` coverage that earlier passes had missed (that pass had only covered the highest-`SetScript`-count files under `modules/ui/`, not a full sweep). Two of them needed more than the usual one-line fix:

@@ -90,6 +90,9 @@ local function BuildWindow()
     title:SetText("EbonBuilds Debug Log (Ctrl+C to copy)")
 
     local drag = CreateFrame("Frame", nil, f)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(drag, "DebugLog.Drag")
+    end
     drag:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     drag:SetPoint("TOPRIGHT", f, "TOPRIGHT", -30, 0)
     drag:SetHeight(28)
@@ -105,6 +108,9 @@ local function BuildWindow()
     sf:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 44)
 
     editBox = CreateFrame("EditBox", nil, sf)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(editBox, "DebugLog.EditBox")
+    end
     editBox:SetMultiLine(true)
     editBox:SetAutoFocus(false)
     editBox:SetFontObject(ChatFontNormal)
