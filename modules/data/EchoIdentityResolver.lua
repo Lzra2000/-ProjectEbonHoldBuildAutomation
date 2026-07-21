@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoIdentityResolver.lua
 -- Canonical Echo identity and safe alias resolution. Runtime spell names are
 -- presentation metadata only and may not overwrite a bundled canonical Echo.

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/TomeAtlasView.lua
 -- AtlasLoot-style community drop browser for echo tomes: which mob drops
 -- which tome, in which zone, with community-observed counts. Data comes
@@ -745,33 +747,19 @@ end
 ------------------------------------------------------------------------
 
 local pendingRefresh = false
-local refreshThrottleFrame
 local REFRESH_THROTTLE = 0.3 -- seconds; coalesces bursty sync-driven refreshes
 
 local function ScheduleRefresh()
     pendingRefresh = true
-    if not refreshThrottleFrame then
-        refreshThrottleFrame = CreateFrame("Frame")
-        if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-            EbonBuilds.Debug.ProtectScript(refreshThrottleFrame, "TomeAtlasView.RefreshThrottleTimer")
+    EbonBuilds.Scheduler.After("tomeAtlasView.refresh", REFRESH_THROTTLE, function()
+        if pendingRefresh and viewFrame and viewFrame:IsShown() then
+            pendingRefresh = false
+            local ok, err = pcall(Render)
+            if not ok and EbonBuilds.ErrorLog then
+                EbonBuilds.ErrorLog.Record("TomeAtlasView.ScheduleRefresh/Render", tostring(err))
+            end
         end
-        refreshThrottleFrame:SetScript("OnUpdate", function(self, dt)
-            self._elapsed = (self._elapsed or 0) + dt
-            if self._elapsed < REFRESH_THROTTLE then return end
-            self._elapsed = 0
-            if pendingRefresh and viewFrame and viewFrame:IsShown() then
-                pendingRefresh = false
-                local ok, err = pcall(Render)
-                if not ok and EbonBuilds.ErrorLog then
-                    EbonBuilds.ErrorLog.Record("TomeAtlasView.ScheduleRefresh/Render", tostring(err))
-                end
-            end
-            if not pendingRefresh then
-                self:Hide() -- nothing left to do; stop ticking until scheduled again
-            end
-        end)
-    end
-    refreshThrottleFrame:Show()
+    end, EbonBuilds.Scheduler.INTERACTIVE, true, "TomeAtlasView")
 end
 
 function EbonBuilds.TomeAtlasView.Show(parent)

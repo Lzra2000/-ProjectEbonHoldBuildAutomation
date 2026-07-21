@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/sync/ChatLink.lua
 -- Shareable build links in chat. WoW's server strips unknown hyperlink
 -- types from outgoing messages, so we send a PLAIN-TEXT token

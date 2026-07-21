@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/WeightsView.lua
 -- Host for Echo filters and rank-specific value table.
 

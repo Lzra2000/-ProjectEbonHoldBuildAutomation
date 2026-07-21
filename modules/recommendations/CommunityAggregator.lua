@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/CommunityAggregator.lua
 -- Bounded, incremental aggregation of public build strategy signals.
 

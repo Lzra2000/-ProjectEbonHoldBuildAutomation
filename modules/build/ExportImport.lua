@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/ExportImport.lua
 -- Responsibility: serialise a build to base64-encoded JSON for sharing,
 -- and deserialise an imported string back into a new build.

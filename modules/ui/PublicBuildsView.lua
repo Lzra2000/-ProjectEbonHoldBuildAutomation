@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/PublicBuildsView.lua
 -- Responsibility: paginated browser for builds shared by other players.
 -- Exposes Mount/Unmount. Registered as the "publicBuilds" view.
@@ -703,7 +705,6 @@ function EbonBuilds.PublicBuildsView.Unmount()
 end
 
 local pendingRefresh = false
-local refreshThrottleFrame
 local REFRESH_THROTTLE = 0.3 -- seconds; coalesces bursty sync-driven refreshes
 
 local function DoRefreshIfMounted()
@@ -725,25 +726,12 @@ end
 function EbonBuilds.PublicBuildsView.RefreshIfMounted()
     if not (viewFrame and viewFrame:IsVisible()) then return end
     pendingRefresh = true
-    if not refreshThrottleFrame then
-        refreshThrottleFrame = CreateFrame("Frame")
-        if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-            EbonBuilds.Debug.ProtectScript(refreshThrottleFrame, "PublicBuildsView.RefreshThrottleTimer")
+    EbonBuilds.Scheduler.After("publicBuilds.refresh", REFRESH_THROTTLE, function()
+        if pendingRefresh then
+            pendingRefresh = false
+            DoRefreshIfMounted()
         end
-        refreshThrottleFrame:SetScript("OnUpdate", function(self, dt)
-            self._elapsed = (self._elapsed or 0) + dt
-            if self._elapsed < REFRESH_THROTTLE then return end
-            self._elapsed = 0
-            if pendingRefresh then
-                pendingRefresh = false
-                DoRefreshIfMounted()
-            end
-            if not pendingRefresh then
-                self:Hide()
-            end
-        end)
-    end
-    refreshThrottleFrame:Show()
+    end, EbonBuilds.Scheduler.INTERACTIVE, true, "PublicBuildsView")
 end
 
 function EbonBuilds.PublicBuildsView.Init()

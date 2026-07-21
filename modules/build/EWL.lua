@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/EWL.lua
 -- Generates EchoWishlist-compatible EWL1 import strings.
 --

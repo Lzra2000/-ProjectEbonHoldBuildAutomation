@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/i18n/locales/plPL.lua
 -- Polish translation. "build" and "echo"/"echa" stay as loanwords,
 -- automation actions (Banish/Reroll/Freeze/Select) and Autopilot stay in

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/affix/Affix.lua
 -- Client-side half of the learned-affix system: requests the server feed
 -- (core/AffixServer.lua speaks the wire format), reassembles chunked
@@ -126,18 +128,13 @@ function EbonBuilds.Affix.HandleAddonMessage(prefix, payload, dist, sender)
 end
 
 function EbonBuilds.Affix.Init()
-    local f = CreateFrame("Frame")
-    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-        -- spam-exempt: CHAT_MSG_ADDON fires here for every addon message on
-        -- the client (not just ours), and HandleAddonMessage's prefix check
-        -- is already the cheapest possible first operation -- high call
-        -- volume during a busy sync period isn't wasted work.
-        EbonBuilds.Debug.ProtectScript(f, "Affix.EventFrame", true)
-    end
-    f:RegisterEvent("CHAT_MSG_ADDON")
-    f:SetScript("OnEvent", function(_, _, prefix, payload, dist, sender)
+    -- spam-exempt: CHAT_MSG_ADDON fires for every addon message on the
+    -- client (not just ours), and HandleAddonMessage's prefix check is
+    -- already the cheapest possible first operation -- high call volume
+    -- during a busy sync period isn't wasted work.
+    EbonBuilds.WoWEvents.On("CHAT_MSG_ADDON", function(_, prefix, payload, dist, sender)
         EbonBuilds.Affix.HandleAddonMessage(prefix, payload, dist, sender)
-    end)
+    end, "Affix", false, true)
     -- Ask once shortly after login; cheap no-op if the character already
     -- has a cached list from a previous session.
     EbonBuilds.Affix.RequestLearned(false)

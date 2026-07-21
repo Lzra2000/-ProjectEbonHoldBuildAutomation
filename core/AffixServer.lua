@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/AffixServer.lua
 -- Wire protocol for Project Ebonhold's server-fed "learned affixes" feed.
 -- This is a different system from Echoes: Affixes are permanent per-

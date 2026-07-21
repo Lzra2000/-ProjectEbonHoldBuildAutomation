@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoCorrectionFacts.lua
 -- Reviewed, versioned corrections for ProjectEbonhold metadata defects.
 -- The resolver consumes this schema generically; consumers never branch on a

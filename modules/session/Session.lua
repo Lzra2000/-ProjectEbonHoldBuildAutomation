@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/session/Session.lua
 -- Responsibility: session lifecycle management (start, end, log actions).
 -- A session spans from level 1 until the player dies and resets back to
@@ -532,20 +534,12 @@ function EbonBuilds.Session.Init()
         EbonBuildsDB.currentSessionIndex = nil  -- normalize falsey
     end
 
-    -- Event frame for lifecycle detection
-    local ef = CreateFrame("Frame", nil, UIParent)
-    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-        EbonBuilds.Debug.ProtectScript(ef, "Session.EventFrame")
-    end
-    ef:RegisterEvent("PLAYER_ENTERING_WORLD")
-    ef:RegisterEvent("PLAYER_LEVEL_UP")
-    ef:SetScript("OnEvent", function(self, event, ...)
-        if event == "PLAYER_ENTERING_WORLD" then
-            OnPlayerEnteringWorld()
-        elseif event == "PLAYER_LEVEL_UP" then
-            OnPlayerLevelUp(...)
-        end
-    end)
+    EbonBuilds.WoWEvents.On("PLAYER_ENTERING_WORLD", function()
+        OnPlayerEnteringWorld()
+    end, "Session")
+    EbonBuilds.WoWEvents.On("PLAYER_LEVEL_UP", function(_, ...)
+        OnPlayerLevelUp(...)
+    end, "Session")
 
     -- Shared scheduler polling for reset detection without a loading screen.
     EbonBuilds.Scheduler.Every("session.levelReset", POLL_INTERVAL, PollLevel,

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/vendor/AutoSell.lua
 -- Sells zero-value bag items to an open vendor. Off by default -- the
 -- player must explicitly opt in via the Settings window.
@@ -191,59 +193,32 @@ function EbonBuilds.AutoSell.ShouldSell(link, getItemInfo)
 end
 
 local sellQueue = EbonBuilds.RingBuffer.New(400)
-local sellTicker
-local SELL_INTERVAL = 0.3 -- seconds between individual sells; gentle pacing,
-                           -- avoids firing a burst of rapid consecutive
-                           -- sell requests at the server (see AutoDelete's
-                           -- own throttled sell/delete queues for why).
+local sellTicker = false
+local SELL_INTERVAL = 0.3 -- seconds between individual sells
+
+local function StopSellTicker()
+    sellTicker = false
+    EbonBuilds.Scheduler.Cancel("autoSell.tick")
+    EbonBuilds.RingBuffer.Clear(sellQueue)
+end
 
 local function EnsureSellTicker()
     if sellTicker then return end
-    sellTicker = CreateFrame("Frame")
-    local elapsed = 0
-    local consecutiveFailures = 0
-    local rawTick = function(self, dt)
+    sellTicker = true
+    EbonBuilds.Scheduler.Every("autoSell.tick", SELL_INTERVAL, function()
         if EbonBuilds.RingBuffer.Count(sellQueue) == 0 or not MerchantFrame or not MerchantFrame:IsShown() then
-            self:SetScript("OnUpdate", nil)
-            sellTicker = nil
-            EbonBuilds.RingBuffer.Clear(sellQueue)
-            return true
+            StopSellTicker()
+            return false
         end
-        elapsed = elapsed + dt
-        if elapsed < SELL_INTERVAL then return true end
-        elapsed = 0
         local next_ = EbonBuilds.RingBuffer.PopOldest(sellQueue)
         if next_ then
-            -- Re-verify at sell time: bag contents can shift while the
-            -- queue drains (picked up loot, another sell already emptied
-            -- an earlier slot, etc.), so don't trust a stale decision.
             local link = GetContainerItemLink(next_.bag, next_.slot)
             if link and EbonBuilds.AutoSell.ShouldSell(link) then
                 UseContainerItem(next_.bag, next_.slot)
             end
         end
-        return true
-    end
-    local protectedTick = EbonBuilds.ErrorLog.Protect("AutoSell.ticker", rawTick)
-    sellTicker:SetScript("OnUpdate", function(self, dt)
-        local ok = protectedTick(self, dt)
-        if ok == nil then
-            -- Protect() returns nil on a caught error (rawTick always
-            -- returns true on success, so nil is unambiguous here). A
-            -- repeating OnUpdate that errors every tick would otherwise
-            -- get its error silently swallowed forever (once per frame)
-            -- without ever actually stopping -- self-terminate after a
-            -- few consecutive failures instead of running broken forever.
-            consecutiveFailures = consecutiveFailures + 1
-            if consecutiveFailures >= 3 then
-                self:SetScript("OnUpdate", nil)
-                sellTicker = nil
-                EbonBuilds.RingBuffer.Clear(sellQueue)
-            end
-        else
-            consecutiveFailures = 0
-        end
-    end)
+        return SELL_INTERVAL
+    end, EbonBuilds.Scheduler.INTERACTIVE, true, "AutoSell")
 end
 
 local function SellBags()
@@ -451,17 +426,16 @@ function EbonBuilds.AutoSell.Init()
         enabled = EbonBuildsCharDB.autoSellJunkEnabled == true
     end
     LoadCategories()
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("MERCHANT_SHOW")
-    f:RegisterEvent("MERCHANT_CLOSED")
-    f:SetScript("OnEvent", EbonBuilds.ErrorLog.Protect("AutoSell", function(_, event)
+    local onMerchantEvent = EbonBuilds.ErrorLog.Protect("AutoSell", function(event)
         if event == "MERCHANT_SHOW" then
             SellBags()
         else -- MERCHANT_CLOSED: stop immediately, don't wait for the next poll
             EbonBuilds.RingBuffer.Clear(sellQueue)
-            if sellTicker then sellTicker:SetScript("OnUpdate", nil); sellTicker = nil end
+            if sellTicker then StopSellTicker() end
         end
-    end))
+    end)
+    EbonBuilds.WoWEvents.On("MERCHANT_SHOW", onMerchantEvent, "AutoSell")
+    EbonBuilds.WoWEvents.On("MERCHANT_CLOSED", onMerchantEvent, "AutoSell")
 end
 
 ------------------------------------------------------------------------

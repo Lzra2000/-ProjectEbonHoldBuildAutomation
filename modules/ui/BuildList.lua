@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BuildList.lua
 -- Split sidebar: fixed Explore navigation plus a searchable, scrollable build
 -- library. Build cards keep identity, state and locked Echoes readable without
@@ -188,6 +190,12 @@ local function CreateRow(parent)
         if self._surface then EbonBuilds.Theme.SetCardHovered(self._surface, false) end
         GameTooltip:Hide()
     end)
+    if EbonBuilds.Theme.BindHoverReset then
+        EbonBuilds.Theme.BindHoverReset(row, function(self)
+            if self._surface then EbonBuilds.Theme.SetCardHovered(self._surface, false) end
+            GameTooltip:Hide()
+        end)
+    end
     return row
 end
 

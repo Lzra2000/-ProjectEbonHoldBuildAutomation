@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- Generated from Work.zip perks_data.lua + Spell.dbc. Do not edit by hand.
 EbonBuilds.EchoIdentityData = {
     SCHEMA = 2,

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/Families.lua
 -- Responsibility: the single source of truth for Echo families. Before
 -- this module, four places each held their own idea of what a family

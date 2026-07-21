@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/automation/Calibration.lua
 -- Self-calibrating threshold advisor.
 --

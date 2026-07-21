@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/EchoReferenceMigration.lua
 -- Lazy, atomic compatibility boundary for name-keyed and revision-bound Echo
 -- references. Validation is cached per build table so hot GetActive() paths do

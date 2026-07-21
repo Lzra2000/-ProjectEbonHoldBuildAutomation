@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/ClickTrace.lua
 -- Diagnostic tool for exactly the situation that's been impossible to
 -- debug without a screenshot: "I click a button and nothing happens."

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/EchoTableRows.lua
 -- Echo catalog preparation and pooled row rendering for rank-specific values.
 -- Rows communicate protection and validation with text as well as color.

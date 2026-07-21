@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BagAffixDots.lua
 -- Draws a colored dot on bag items worth a second look:
 --   red    -- carries a gear affix line you haven't learned at all

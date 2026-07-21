@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/RecommendationService.lua
 -- Async cache/provider boundary for wizard recommendations.
 

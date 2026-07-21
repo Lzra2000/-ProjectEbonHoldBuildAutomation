@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/WelcomeView.lua
 -- Responsibility: empty-state welcome screen shown when no builds exist.
 -- Exposes Mount/Unmount. Registered as the "welcome" view.

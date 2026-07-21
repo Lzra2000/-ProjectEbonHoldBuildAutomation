@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoEligibilityEvidence.lua
 -- Local, exact-spell positive gameplay evidence. It never narrows eligibility
 -- and never becomes community/server truth. Persisted records are only class
@@ -24,10 +26,7 @@ local diagnostics = {
     persistedExceptions = 0,
     discoveryLive = false,
 }
-local lifecycleFrame = CreateFrame("Frame")
-if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-    EbonBuilds.Debug.ProtectScript(lifecycleFrame, "EchoEligibilityEvidence.LifecycleFrame")
-end
+local hookedSelectService, hookedGrantJournal, hookedDiscoveryJournal
 local cachedScopeRealm, cachedScopeFingerprint, cachedScopeKey, cachedScope
 
 local function Clear(t)
@@ -326,18 +325,18 @@ end
 
 local function InstallHooks()
     local service = ProjectEbonhold and ProjectEbonhold.PerkService
-    if service and type(service.SelectPerk) == "function" and not service._ebonBuildsEligibilityHooked then
+    if service and type(service.SelectPerk) == "function" and hookedSelectService ~= service then
         hooksecurefunc(service, "SelectPerk", function(spellId) Evidence.CaptureSelectionAttempt(spellId) end)
-        service._ebonBuildsEligibilityHooked = true
+        hookedSelectService = service
     end
     local journal = ProjectEbonhold and ProjectEbonhold.EchoJournal
-    if journal and type(journal.NotifyNewEcho) == "function" and not journal._ebonBuildsGrantHooked then
+    if journal and type(journal.NotifyNewEcho) == "function" and hookedGrantJournal ~= journal then
         hooksecurefunc(journal, "NotifyNewEcho", Evidence.ConfirmPendingSelection)
-        journal._ebonBuildsGrantHooked = true
+        hookedGrantJournal = journal
     end
-    if journal and type(journal.OnDataChanged) == "function" and not journal._ebonBuildsDiscoveryHooked then
+    if journal and type(journal.OnDataChanged) == "function" and hookedDiscoveryJournal ~= journal then
         hooksecurefunc(journal, "OnDataChanged", Evidence.ScheduleDiscoveryScan)
-        journal._ebonBuildsDiscoveryHooked = true
+        hookedDiscoveryJournal = journal
     end
 end
 
@@ -347,15 +346,16 @@ function Evidence.Init()
     EnsureClassTables()
     Root()
     InstallHooks()
-    lifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    lifecycleFrame:SetScript("OnEvent", function()
-        InstallHooks()
-        Evidence.ScheduleDiscoveryScan()
-        if EbonBuilds.Scheduler then
-            EbonBuilds.Scheduler.After("echoEligibility.prune", 1, Evidence.Prune,
-                EbonBuilds.Scheduler.MAINTENANCE, false)
-        end
-    end)
+    if EbonBuilds.WoWEvents then
+        EbonBuilds.WoWEvents.On("PLAYER_ENTERING_WORLD", function()
+            InstallHooks()
+            Evidence.ScheduleDiscoveryScan()
+            if EbonBuilds.Scheduler then
+                EbonBuilds.Scheduler.After("echoEligibility.prune", 1, Evidence.Prune,
+                    EbonBuilds.Scheduler.MAINTENANCE, false, "EchoEligibilityEvidence")
+            end
+        end, "EchoEligibilityEvidence")
+    end
     if EbonBuilds.EventHub then
         EbonBuilds.EventHub.On("ECHO_CATALOG_CHANGED", function()
             InvalidateScopeCache()

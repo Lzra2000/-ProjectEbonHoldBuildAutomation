@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoSemanticsData.lua
 -- GENERATED from the ProjectEbonhold MPQ extraction. Do not edit by hand.
 -- Tuple fields: purpose, mechanic, target, profile, trigger, synergy, role.

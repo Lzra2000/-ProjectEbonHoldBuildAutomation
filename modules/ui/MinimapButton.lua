@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/MinimapButton.lua
 -- Responsibility: draggable minimap button that toggles the config window.
 

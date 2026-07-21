@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/Theme.lua
 -- Shared visual language and reusable UI helpers for the addon.
 -- All textures and APIs used here are safe for WoW 3.3.5a.
@@ -5,46 +7,35 @@
 EbonBuilds.Theme = {}
 
 local T = EbonBuilds.Theme
-local FLAT = "Interface\\Buttons\\WHITE8X8"
+local R = EbonBuilds.ThemeRegistry.Get()
+local FLAT = R.textures.flat
 
--- Palette -----------------------------------------------------------------
--- Near-opaque surfaces keep game-world text and spell effects from showing
--- through the configuration UI. Contrast is intentionally high because most
--- users open the addon while moving through visually busy environments.
-T.WINDOW_BG    = { 0.035, 0.035, 0.050, 0.985 }
-T.PANEL_BG     = { 0.060, 0.060, 0.080, 0.985 }
-T.CARD_BG      = { 0.090, 0.090, 0.115, 0.985 }
-T.CARD_HOVER   = { 0.135, 0.135, 0.175, 0.995 }
-T.INPUT_BG     = { 0.020, 0.020, 0.030, 0.980 }
-T.BORDER       = { 0.42, 0.42, 0.48, 1.00 }
-T.BORDER_DIM   = { 0.24, 0.24, 0.29, 1.00 }
-T.ACCENT_GOLD  = { 1.00, 0.82, 0.00, 1.00 }
-T.ACCENT_HEX   = "ffd100"
-T.FOCUS        = { 1.00, 0.82, 0.00, 1.00 }
--- Background tint for a "selected" row/tab/card. Previously hand-typed
--- separately in Theme.lua, BuildWizard.lua, SessionHistory.lua, and
--- SettingsView.lua, each slightly different (0.20/0.17/0.07 vs 0.18/0.16/0.07
--- vs 0.17/0.15/0.07) -- one shared constant so "selected" means the same
--- shade everywhere.
-T.SELECTED_BG  = { 0.20, 0.17, 0.07, 1.00 }
-T.SUCCESS      = { 0.30, 0.86, 0.38, 1.00 }
-T.WARNING      = { 1.00, 0.66, 0.16, 1.00 }
--- "This is EbonBuilds talking" accent -- used on tooltip lines that
--- identify the addon itself (peer-version lines, gear-upgrade hints, map
--- legend). Was hand-typed as {0.36, 0.77, 0.64} in WorldIntegration.lua
--- and GearTooltip.lua, and had separately drifted to a different hex
--- (59d9a0) on the map legend's |cff escape -- one constant now, with a
--- matching hex string for |cff-style inline coloring.
-T.PRESENCE_TEAL     = { 0.36, 0.77, 0.64, 1.00 }
-T.PRESENCE_TEAL_HEX = "5cc4a3"
-T.DANGER       = { 1.00, 0.26, 0.26, 1.00 }
-T.TEXT_PRIMARY = { 0.96, 0.96, 0.98, 1.00 }
-T.TEXT_MUTED   = { 0.66, 0.68, 0.74, 1.00 }
+-- Compatibility aliases for existing components. New code consumes semantic
+-- tokens from ThemeRegistry directly; these aliases keep the refactor atomic.
+T.WINDOW_BG = R.colors.surfaceWindow
+T.PANEL_BG = R.colors.surfacePanel
+T.CARD_BG = R.colors.surfaceCard
+T.CARD_HOVER = R.colors.surfaceCardHover
+T.INPUT_BG = R.colors.surfaceInput
+T.BORDER = R.colors.border
+T.BORDER_DIM = R.colors.borderDim
+T.ACCENT_GOLD = R.colors.accent
+T.ACCENT_HEX = R.colorHex.accent
+T.FOCUS = R.colors.accent
+T.SELECTED_BG = R.colors.selected
+T.SUCCESS = R.colors.success
+T.WARNING = R.colors.warning
+T.PRESENCE_TEAL = R.colors.presence
+T.PRESENCE_TEAL_HEX = R.colorHex.presence
+T.DANGER = R.colors.danger
+T.TEXT_PRIMARY = R.colors.textPrimary
+T.TEXT_MUTED = R.colors.textMuted
+T.Registry = R
 
 local NORMAL_BACKDROP = {
     bgFile   = FLAT,
     edgeFile = FLAT,
-    edgeSize = 1,
+    edgeSize = R.sizes.border,
     insets   = { left = 1, right = 1, top = 1, bottom = 1 },
 }
 
@@ -55,7 +46,7 @@ local NORMAL_BACKDROP = {
 local LOW_SCALE_BACKDROP = {
     bgFile   = FLAT,
     edgeFile = FLAT,
-    edgeSize = 2,
+    edgeSize = R.sizes.borderLowScale,
     insets   = { left = 1, right = 1, top = 1, bottom = 1 },
 }
 
@@ -137,6 +128,22 @@ function T.SetCardHovered(frame, hovered)
     end
 end
 
+-- Runs a widget-specific hover cleanup when WoW hides or recycles the frame
+-- without delivering OnLeave. This happens frequently when a click changes
+-- views, opens a popup over the control, or rebinds a virtualized row.
+function T.BindHoverReset(frame, reset)
+    if not frame or type(reset) ~= "function" then return frame end
+    frame._ebonHoverReset = reset
+    if not frame._ebonHoverResetHooked then
+        frame._ebonHoverResetHooked = true
+        frame:HookScript("OnHide", function(self)
+            local handler = self._ebonHoverReset
+            if handler then handler(self) end
+        end)
+    end
+    return frame
+end
+
 function T.ApplyInput(frame)
     ApplySurface(frame, T.INPUT_BG, T.BORDER_DIM)
     frame._uiState = "normal"
@@ -150,14 +157,14 @@ function T.SetInputState(frame, state)
         frame:SetBackdropColor(unpack(T.INPUT_BG))
         frame:SetBackdropBorderColor(unpack(T.FOCUS))
     elseif state == "error" then
-        frame:SetBackdropColor(0.16, 0.025, 0.025, 0.98)
+        frame:SetBackdropColor(unpack(R.colors.surfaceInputError))
         frame:SetBackdropBorderColor(unpack(T.DANGER))
     elseif state == "success" then
         frame:SetBackdropColor(unpack(T.INPUT_BG))
         frame:SetBackdropBorderColor(unpack(T.SUCCESS))
     elseif state == "disabled" then
-        frame:SetBackdropColor(0.03, 0.03, 0.04, 0.65)
-        frame:SetBackdropBorderColor(0.16, 0.16, 0.19, 0.8)
+        frame:SetBackdropColor(unpack(R.colors.surfaceInputDisabled))
+        frame:SetBackdropBorderColor(unpack(R.colors.borderDisabled))
     else
         frame:SetBackdropColor(unpack(T.INPUT_BG))
         frame:SetBackdropBorderColor(unpack(T.BORDER_DIM))
@@ -189,8 +196,8 @@ end
 function T.AddSearchIcon(container)
     if not container then return nil end
     local icon = container:CreateTexture(nil, "OVERLAY")
-    icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
-    icon:SetSize(14, 14)
+    icon:SetTexture(R.textures.search)
+    icon:SetSize(R.sizes.iconSmall, R.sizes.iconSmall)
     icon:SetPoint("LEFT", container, "LEFT", 4, 0)
     icon:SetVertexColor(T.TEXT_MUTED[1], T.TEXT_MUTED[2], T.TEXT_MUTED[3], 0.85)
     return icon
@@ -326,7 +333,11 @@ function T.ResetButtonVisual(btn)
     end
 
     ApplyButtonVisual(btn, BTN_BG, btn._accentBorder or T.BORDER_DIM)
-    if label then label:SetTextColor(1, 0.82, 0) end
+    -- Generic buttons are allowed to use context-specific text colors. The
+    -- old reset forced every label back to gold on OnLeave, so hovering a
+    -- muted navigation/action button permanently changed its text color.
+    -- Tabs and disabled buttons have explicit states above; ordinary buttons
+    -- keep whichever text color their owning view assigned.
 end
 
 function T.SkinButton(btn)
@@ -359,13 +370,24 @@ function T.SkinButton(btn)
     end)
     btn:HookScript("OnDisable", function(self)
         local c = self._accentBorder or T.BORDER_DIM
+        local label = self:GetFontString()
+        if label and label.GetTextColor then
+            self._enabledTextColor = { label:GetTextColor() }
+        end
         self:SetBackdropColor(unpack(BTN_BG_DISABLED))
         self:SetBackdropBorderColor(c[1], c[2], c[3], self._accentBorder and 0.42 or 0.70)
-        if self:GetFontString() then self:GetFontString():SetTextColor(0.52, 0.52, 0.56) end
+        if label then label:SetTextColor(0.52, 0.52, 0.56) end
     end)
     btn:HookScript("OnEnable", function(self)
         T.ResetButtonVisual(self)
+        local label = self:GetFontString()
+        local color = self._enabledTextColor
+        if label and color and self._tabSelected == nil then
+            label:SetTextColor(color[1], color[2], color[3], color[4] or 1)
+        end
+        self._enabledTextColor = nil
     end)
+    T.BindHoverReset(btn, T.ResetButtonVisual)
     return btn
 end
 
@@ -550,6 +572,11 @@ function T.CreateDropdown(parent, width, defaultText, opts)
             self:SetBackdropColor(0.08, 0.08, 0.11, 0.98)
             self:SetBackdropBorderColor(0.16, 0.16, 0.20, 1)
         end)
+        T.BindHoverReset(btn, function(self)
+            GameTooltip:Hide()
+            self:SetBackdropColor(0.08, 0.08, 0.11, 0.98)
+            self:SetBackdropBorderColor(0.16, 0.16, 0.20, 1)
+        end)
 
         optionButtons[index] = btn
         return btn
@@ -654,6 +681,11 @@ function T.CreateDropdown(parent, width, defaultText, opts)
     end)
     button:SetScript("OnLeave", function()
         if not menu:IsShown() and container._uiState ~= "focus" then container:SetBackdropBorderColor(unpack(T.BORDER_DIM)) end
+    end)
+    T.BindHoverReset(button, function()
+        if not menu:IsShown() and container._uiState ~= "focus" then
+            container:SetBackdropBorderColor(unpack(T.BORDER_DIM))
+        end
     end)
 
     frame:HookScript("OnHide", function() frame:CloseMenu() end)
@@ -793,6 +825,10 @@ function T.CreateScrollBar(parent, width)
         if self._thumb then self._thumb:SetVertexColor(0.90, 0.72, 0.12, 1) end
         if self._thumbGlow then self._thumbGlow:Hide() end
     end)
+    T.BindHoverReset(bar, function(self)
+        if self._thumb then self._thumb:SetVertexColor(0.90, 0.72, 0.12, 1) end
+        if self._thumbGlow then self._thumbGlow:Hide() end
+    end)
     bar:HookScript("OnDisable", function(self)
         if self._thumb then self._thumb:SetAlpha(0.30) end
         if self._rail then self._rail:SetAlpha(0.45) end
@@ -869,6 +905,10 @@ function T.CreateHorizontalScrollBar(parent, height)
         if self._thumbGlow then self._thumbGlow:Show() end
     end)
     bar:SetScript("OnLeave", function(self)
+        if self._thumb then self._thumb:SetVertexColor(0.90, 0.72, 0.12, 1) end
+        if self._thumbGlow then self._thumbGlow:Hide() end
+    end)
+    T.BindHoverReset(bar, function(self)
         if self._thumb then self._thumb:SetVertexColor(0.90, 0.72, 0.12, 1) end
         if self._thumbGlow then self._thumbGlow:Hide() end
     end)
@@ -1150,6 +1190,10 @@ function T.CreateCloseButton(parent)
         ApplyButtonVisual(self, BTN_BG, T.BORDER_DIM)
         self._label:SetTextColor(0.85, 0.85, 0.88)
     end)
+    T.BindHoverReset(btn, function(self)
+        ApplyButtonVisual(self, BTN_BG, T.BORDER_DIM)
+        self._label:SetTextColor(0.85, 0.85, 0.88)
+    end)
     btn:SetScript("OnClick", function(self)
         if EbonBuilds.ClickTrace then EbonBuilds.ClickTrace.Log("click", "close") end
         parent:Hide()
@@ -1198,6 +1242,9 @@ function T.CreateCheckbox(parent, labelText)
         self:SetBackdropBorderColor(unpack(T.BORDER))
     end)
     btn:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(unpack(T.BORDER_DIM))
+    end)
+    T.BindHoverReset(btn, function(self)
         self:SetBackdropBorderColor(unpack(T.BORDER_DIM))
     end)
     -- Contract: a call site's OnClick handler must read the NEW state,

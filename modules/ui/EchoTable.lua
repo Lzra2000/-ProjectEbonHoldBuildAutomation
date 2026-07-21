@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/EchoTable.lua
 -- Responsibility: scroll frame, headers, and pooled row management for the
 -- rank-specific Echo Weights list.

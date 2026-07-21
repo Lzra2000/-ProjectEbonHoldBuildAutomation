@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/Quality.lua
 -- Single source of truth for Echo quality labels and colors.
 -- Project Ebonhold currently exposes four supported Echo ranks. The UI and

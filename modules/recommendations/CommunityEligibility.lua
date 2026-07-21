@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/CommunityEligibility.lua
 -- Converts public builds into bounded recommendation records keyed by Echo refs.
 

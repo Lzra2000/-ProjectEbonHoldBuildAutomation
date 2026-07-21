@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoEligibilityResolver.lua
 -- Single exact-variant authority for class eligibility. It combines declared
 -- metadata, guarded reviewed facts, and validated local positive observations.

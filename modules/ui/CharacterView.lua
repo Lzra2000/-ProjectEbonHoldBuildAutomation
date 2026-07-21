@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/CharacterView.lua
 -- Responsive Character workspace: overview, one focused game-style talent
 -- tree, and a paper-doll equipment view. The stored build snapshot is always
@@ -7,7 +9,7 @@ EbonBuilds.CharacterView = {}
 
 local V = EbonBuilds.CharacterView
 local Theme
-local viewFrame, pageHost, actionBar, snapshotStatus, adoptBtn, eventFrame
+local viewFrame, pageHost, actionBar, snapshotStatus, adoptBtn, itemInfoToken
 local navButtons, pages = {}, {}
 local activeSubview = "overview"
 local mountedContext
@@ -1731,12 +1733,11 @@ local function EnsureBuilt(container)
     end)
     viewFrame:SetScript("OnShow", function() Layout(); Refresh() end)
 
-    eventFrame = CreateFrame("Frame")
-    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-        EbonBuilds.Debug.ProtectScript(eventFrame, "CharacterView.GearEventFrame")
+    if not itemInfoToken then
+        itemInfoToken = EbonBuilds.WoWEvents.On("GET_ITEM_INFO_RECEIVED", function()
+            MarkDirty("gear")
+        end, "CharacterView")
     end
-    eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-    eventFrame:SetScript("OnEvent", function() MarkDirty("gear") end)
 end
 
 function V.Mount(container, context)

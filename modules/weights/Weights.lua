@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/weights/Weights.lua
 -- Responsibility: read/write and migrate rank-specific echo weights stored on
 -- the active build. Legacy single-number entries remain readable and are
@@ -360,6 +362,22 @@ function W.GetForSpell(build, spellId, quality)
     return name and W.GetFromWeights(build.echoWeights or {}, name, quality) or 0
 end
 
+-- Returns whether a canonical Echo reference has at least one non-zero rank
+-- value in the effective build configuration.  Consumers must use this
+-- accessor instead of reading echoWeightsByRef directly: imported/legacy
+-- builds may still carry valid name-keyed values, and the editor may expose a
+-- pending reference table while the durable build remains unchanged.
+function W.HasNonZeroForRef(build, refKey)
+    if type(build) ~= "table" then build = ActiveBuild() end
+    if not build or not refKey then return false end
+    local order = EbonBuilds.Quality and EbonBuilds.Quality.ORDER or { 3, 2, 1, 0 }
+    for _, quality in ipairs(order) do
+        local value = tonumber(W.GetForRef(build, refKey, quality)) or 0
+        if value ~= 0 then return true end
+    end
+    return false
+end
+
 function W.SetForRef(build, refKey, value, quality)
     if type(build) ~= "table" then build = ActiveBuild() end
     local pending = EbonBuilds.Runtime and EbonBuilds.Runtime.isEditingBuild and type(EbonBuilds.Runtime.pendingRefWeights) == "table"
@@ -396,26 +414,52 @@ function W.SetForRef(build, refKey, value, quality)
     return true
 end
 
+-- Returns one normalized effective entry for a canonical Echo reference.
+-- This deliberately reads through GetForRef instead of returning the raw
+-- schema table. A build may have an allocated but incomplete
+-- echoWeightsByRef table while still carrying authoritative legacy/imported
+-- name-keyed values; direct table reads make those builds appear empty.
+function W.GetEntryForRef(build, refKey)
+    if type(build) ~= "table" then build = ActiveBuild() end
+    if type(build) ~= "table" or not refKey then return W.MakeUniform(0) end
+    local entry = {}
+    for _, quality in ipairs(EbonBuilds.Quality.ORDER or {}) do
+        entry[quality] = W.GetForRef(build, refKey, quality)
+    end
+    return entry
+end
+
+-- Iterates the union of canonical reference storage and unambiguous legacy
+-- name storage. Consumers receive normalized effective rank values, so every
+-- UI and analytics view observes the same configuration as scoring and
+-- Autopilot. Ambiguous legacy aliases remain quarantined rather than guessed.
 function W.IterateResolved(build)
     local keys, seen = {}, {}
     if type(build) ~= "table" then return function() end end
-    for refKey in pairs(build.echoWeightsByRef or {}) do
+
+    local refWeights = EffectiveRefWeights(build) or {}
+    local legacyWeights = EffectiveLegacyWeights(build) or {}
+    for refKey in pairs(refWeights) do
         if type(refKey) == "string" and refKey:match("^[gs]:%d+$") then
-            seen[refKey] = true; keys[#keys + 1] = refKey
+            seen[refKey] = true
+            keys[#keys + 1] = refKey
         end
     end
-    for legacyName in pairs(build.echoWeights or {}) do
+    for legacyName in pairs(legacyWeights) do
         local refKey = ResolveRefByName(legacyName, build.class)
-        if refKey and not seen[refKey] then seen[refKey] = true; keys[#keys + 1] = refKey end
+        if refKey and not seen[refKey] then
+            seen[refKey] = true
+            keys[#keys + 1] = refKey
+        end
     end
+
     table.sort(keys)
     local index = 0
     return function()
         index = index + 1
         local refKey = keys[index]
         if not refKey then return nil end
-        return refKey, build.echoWeightsByRef and build.echoWeightsByRef[refKey]
-            or (EbonBuilds.EchoCatalog.GetByRef(refKey) and build.echoWeights[EbonBuilds.EchoCatalog.GetByRef(refKey).sourceName])
+        return refKey, W.GetEntryForRef(build, refKey)
     end
 end
 

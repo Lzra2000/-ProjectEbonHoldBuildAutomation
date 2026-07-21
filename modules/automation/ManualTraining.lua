@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/automation/ManualTraining.lua
 -- Responsibility: learn from the player's manual Echo choices without acting.
 -- Manual Training is opt-in per build. While active, Automation.Evaluate()

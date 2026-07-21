@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/affix/AffixItemScan.lua
 -- Detects which gear affix (if any) a specific ITEM has, and classifies it
 -- against the character's learned-affix data (modules/affix/Affix.lua).

@@ -8,8 +8,12 @@
 core/Init.lua
 core/ErrorLog.lua
 core/Debug.lua
+core/Modules.lua
+core/WoWEvents.lua
+core/Pool.lua
 core/EventHub.lua
 core/Scheduler.lua
+core/InitPipeline.lua
 core/RingBuffer.lua
 core/Database.lua
 modules/i18n/Locale.lua
@@ -57,6 +61,7 @@ modules/recommendations/WizardDraft.lua
 modules/recommendations/WizardPriorityProjection.lua
 modules/recommendations/BuildWizardSummary.lua
 modules/recommendations/StarterBuildPolicy.lua
+modules/ui/ThemeRegistry.lua
 modules/ui/Theme.lua
 modules/ui/VirtualList.lua
 core/ClickTrace.lua

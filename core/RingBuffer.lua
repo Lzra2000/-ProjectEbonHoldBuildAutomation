@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/RingBuffer.lua
 -- SavedVariables-safe O(1) bounded queue. Legacy arrays migrate in place.
 

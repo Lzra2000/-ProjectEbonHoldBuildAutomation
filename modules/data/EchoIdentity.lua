@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoIdentity.lua
 -- Stable identity helpers shared by the catalog, migration, search and UI.
 -- Names are display/search metadata. Current-catalog priority identity is a

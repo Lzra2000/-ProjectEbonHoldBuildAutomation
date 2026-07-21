@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BonusView.lua
 -- Clear, explicit editors for quality, family, and novelty score modifiers.
 

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoProjection.lua
 -- Canonical class projection over exact resolved spell variants. Group rows are
 -- derived views; consumers may only select/export variants from the resolved

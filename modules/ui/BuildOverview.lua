@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BuildOverview.lua
 -- Responsibility: build overview dashboard with tabs (Overview + Stats +
 -- Missing + Logbook). Registered as "buildOverview" view. Shows build metadata,
@@ -353,7 +355,12 @@ local function ComputeMissingEchoes(build, assumeNoneOwned, includeOwned, weight
             local isOwned = (normalizedCanonical and ownedLower[normalizedCanonical])
                 or (normalizedDisplay and ownedLower[normalizedDisplay])
                 or (projected.groupId and ownedGroups[projected.groupId])
-            local weighted = EbonBuilds.Weights.HasNonZero((build.echoWeightsByRef or {})[refKey])
+            -- Use the same effective rank-value accessor as the Priorities
+            -- editor and automation.  Reading echoWeightsByRef directly makes
+            -- valid legacy/imported builds appear completely unweighted.
+            local weighted = EbonBuilds.Weights.HasNonZeroForRef
+                and EbonBuilds.Weights.HasNonZeroForRef(build, refKey)
+                or EbonBuilds.Weights.HasNonZero((build.echoWeightsByRef or {})[refKey])
             if (not weightedOnly or weighted) and (includeOwned or not isOwned) then
                 if isOwned then
                     missing[#missing + 1] = {
@@ -1086,14 +1093,15 @@ local function RefreshStats()
     end
 end
 
-local missingRetryFrame
-local missingRetryElapsed = 0
+local missingRetryActive = false
+local missingRetryTotal = 0
 local MISSING_RETRY_INTERVAL = 1.5
 local MISSING_RETRY_TIMEOUT  = 15
 
 local function StopMissingRetry()
-    if missingRetryFrame then missingRetryFrame:Hide() end
-    missingRetryElapsed = 0
+    missingRetryActive = false
+    missingRetryTotal = 0
+    if EbonBuilds.Scheduler then EbonBuilds.Scheduler.Cancel("buildOverview.missingRetry") end
 end
 
 RefreshMissing = function(assumeNoneOwned)
@@ -1115,30 +1123,24 @@ RefreshMissing = function(assumeNoneOwned)
         -- MISSING_RETRY_TIMEOUT and show the list anyway (see the
         -- assumeNoneOwned comment in ComputeMissingEchoes for why this
         -- can otherwise hang forever on a fresh character).
-        if not missingRetryFrame then
-            missingRetryFrame = CreateFrame("Frame")
-            if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-                EbonBuilds.Debug.ProtectScript(missingRetryFrame, "BuildOverview.MissingRetryTimer")
-            end
-            missingRetryFrame:SetScript("OnUpdate", function(self, dt)
-                missingRetryElapsed = missingRetryElapsed + dt
-                if missingRetryElapsed < MISSING_RETRY_INTERVAL then return end
-                missingRetryElapsed = 0
-                self._totalWaited = (self._totalWaited or 0) + MISSING_RETRY_INTERVAL
-                local giveUp = self._totalWaited >= MISSING_RETRY_TIMEOUT
+        if not missingRetryActive then
+            missingRetryActive = true
+            missingRetryTotal = 0
+            EbonBuilds.Scheduler.Every("buildOverview.missingRetry", MISSING_RETRY_INTERVAL, function()
+                if not missingRetryActive then return false end
+                missingRetryTotal = missingRetryTotal + MISSING_RETRY_INTERVAL
+                local giveUp = missingRetryTotal >= MISSING_RETRY_TIMEOUT
                 if giveUp and EbonBuilds.DebugLog then
                     EbonBuilds.DebugLog.Add("Missing tab: Echoes spellbook tab never appeared after " ..
                         MISSING_RETRY_TIMEOUT .. "s, showing full list (likely 0 echoes learned yet)")
                 end
                 RefreshMissing(giveUp)
-            end)
+                return missingRetryActive and MISSING_RETRY_INTERVAL or false
+            end, EbonBuilds.Scheduler.BACKGROUND, false, "BuildOverview")
         end
-        missingRetryFrame._totalWaited = missingRetryFrame._totalWaited or 0
-        missingRetryFrame:Show()
         return
     end
     StopMissingRetry()
-    if missingRetryFrame then missingRetryFrame._totalWaited = 0 end
     if missingChild.loadingLabel then
         missingChild.loadingLabel:Hide()
     end

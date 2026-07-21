@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/StarterBuildPolicy.lua
 -- Compatibility boundary for callers that still provide the old selection map.
 

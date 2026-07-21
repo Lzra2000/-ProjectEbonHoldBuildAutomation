@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/TalentCatalog.lua
 -- Restores presentation metadata for schema-1 character snapshots. The
 -- compact catalog contains only stable 3.3.5a spell IDs and layout facts;

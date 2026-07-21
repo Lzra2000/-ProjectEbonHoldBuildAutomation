@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/gear/GearScore.lua
 -- Scores gear against per-class/spec stat priorities (a "gearscore"-style
 -- system), so builds can show equipped gear quality and AutoSell/Missing

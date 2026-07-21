@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BuildWizard.lua
 -- Confidence-aware, player-owned Build Wizard. Uses pooled rows, the shared
 -- Echo catalog, the unified theme, and bounded community recommendation data.
@@ -759,6 +761,12 @@ local function CreateScoringCard(parent, style, description)
     card:SetScript("OnLeave", function(self)
         if self._selected then SetScoringCardSelected(self, true) else Theme.SetCardHovered(self, false) end
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(card, function(self)
+            if self._selected then SetScoringCardSelected(self, true) else SetScoringCardSelected(self, false) end
+            GameTooltip:Hide()
+        end)
+    end
     Theme.AttachTooltip(card, "Scoring profile", "The cyan line shows priority values. The quality-colored line shows Common, Uncommon, Rare, and Epic bonuses added on top of that priority.")
     return card
 end

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BuildForm.lua
 -- Responsibility: create/edit build form with class, spec, title, comments,
 -- and configurable locked-Echo slots. Declarative/widget-layout heavy:

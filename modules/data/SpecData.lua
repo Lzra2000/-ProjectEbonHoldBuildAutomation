@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/SpecData.lua
 -- Static spec metadata per class token. Template file: declarative only.
 

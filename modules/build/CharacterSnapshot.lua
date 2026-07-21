@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/CharacterSnapshot.lua
 -- Responsibility: capturing the character's current state -- equipped
 -- gear per slot, all three talent trees in full (every talent, not just

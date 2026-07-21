@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/WizardPresets.lua
 -- Deterministic player-intent presets for the Build Wizard. Presets only
 -- transform the local draft; they never fabricate separate community cohorts.

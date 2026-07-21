@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/StatsView.lua
 -- Connected analytics workspace for the Build Overview Stats tab.
 -- Stats identifies patterns; SessionHistory provides the supporting evidence.
@@ -577,21 +579,14 @@ local function WeightedCoverage(build)
         if ok and type(groups) == "table" then ownedGroups = groups end
     end
     if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
-    if type(build.echoWeightsByRef) == "table" then
-        for refKey, values in pairs(build.echoWeightsByRef) do
-            if EbonBuilds.Weights.HasNonZero(values) then
-                total = total + 1
-                local definition = EbonBuilds.EchoCatalog.GetByRef(refKey)
-                local canonical = definition and NormalizeEchoName(definition.canonicalName or definition.sourceName)
-                if (canonical and ownedNames[canonical])
-                    or (definition and definition.groupId and ownedGroups[definition.groupId]) then learned = learned + 1 end
-            end
-        end
-    else
-        for name, values in pairs(build.echoWeights or {}) do
-            if EbonBuilds.Weights.HasNonZero(values) then
-                total = total + 1
-                if ownedNames[NormalizeEchoName(name)] then learned = learned + 1 end
+    for refKey, values in EbonBuilds.Weights.IterateResolved(build) do
+        if EbonBuilds.Weights.HasNonZero(values) then
+            total = total + 1
+            local definition = EbonBuilds.EchoCatalog.GetByRef(refKey)
+            local canonical = definition and NormalizeEchoName(definition.canonicalName or definition.sourceName)
+            if (canonical and ownedNames[canonical])
+                or (definition and definition.groupId and ownedGroups[definition.groupId]) then
+                learned = learned + 1
             end
         end
     end
@@ -603,13 +598,6 @@ local function ConfidenceLabel(samples)
     if samples >= 15 then return "High", "success" end
     if samples >= 5 then return "Medium", "warning" end
     return "Low", "danger"
-end
-
-local function CatalogByName()
-    if EbonBuilds.EchoTableRows and EbonBuilds.EchoTableRows.BuildBestByName then
-        return EbonBuilds.EchoTableRows.BuildBestByName()
-    end
-    return {}
 end
 
 local function BestRankData(build, storageKey, entry, isRef)
@@ -628,7 +616,7 @@ local function BestRankData(build, storageKey, entry, isRef)
 end
 
 local function BuildEchoRows(build, manualSuggestions, performanceStats, appearanceStats)
-    local rows, catalog = {}, CatalogByName()
+    local rows = {}
     local picks = (build.stats and build.stats.mostPicked) or {}
     local totalPicks = tonumber(build.stats and build.stats.picks) or 0
     local trainingByName = {}
@@ -637,18 +625,18 @@ local function BuildEchoRows(build, manualSuggestions, performanceStats, appeara
         if not old or suggestion.count > old.count then trainingByName[suggestion.name] = suggestion end
     end
 
-    local function Add(storageKey, values, entry, isRef)
+    local function Add(storageKey, values, entry)
         if not EbonBuilds.Weights.HasNonZero(values) then return end
         local displayName = entry and (entry.displayName or entry.canonicalName or entry.sourceName)
             or VisibleEchoName(storageKey)
         displayName = VisibleEchoName(displayName)
-        local quality, weight, score = BestRankData(build, storageKey, entry, isRef)
+        local quality, weight, score = BestRankData(build, storageKey, entry, true)
         local appearance = appearanceStats and (appearanceStats[displayName] or appearanceStats[storageKey])
         local performance = performanceStats and (performanceStats[displayName] or performanceStats[storageKey])
         local pickCount = picks[displayName] or picks[storageKey] or 0
         local recommendation = trainingByName[displayName] or trainingByName[storageKey]
         rows[#rows + 1] = {
-            refKey = isRef and storageKey or (entry and entry.refKey),
+            refKey = storageKey,
             name = displayName ~= "" and displayName or "Unknown Echo",
             internalName = storageKey, sortName = LowerVisibleEchoName(displayName),
             quality = quality, weight = weight, score = score,
@@ -665,17 +653,10 @@ local function BuildEchoRows(build, manualSuggestions, performanceStats, appeara
     end
 
     if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
-    if type(build.echoWeightsByRef) == "table" then
-        for refKey, values in pairs(build.echoWeightsByRef) do
-            local entry = EbonBuilds.EchoProjection and EbonBuilds.EchoProjection.GetAnyEntry(build.class, refKey)
-                or EbonBuilds.EchoCatalog.GetByRef(refKey)
-            Add(refKey, values, entry, true)
-        end
-    else
-        for name, values in pairs(build.echoWeights or {}) do
-            local entry = catalog[name] or catalog[VisibleEchoName(name)]
-            Add(name, values, entry, false)
-        end
+    for refKey, values in EbonBuilds.Weights.IterateResolved(build) do
+        local entry = EbonBuilds.EchoProjection and EbonBuilds.EchoProjection.GetAnyEntry(build.class, refKey)
+            or EbonBuilds.EchoCatalog.GetByRef(refKey)
+        Add(refKey, values, entry)
     end
     return rows
 end
@@ -1278,6 +1259,12 @@ local function EnsureEchoRow(index)
         ApplyEchoRowBaseStyle(self)
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(row, function(self)
+            ApplyEchoRowBaseStyle(self)
+            GameTooltip:Hide()
+        end)
+    end
     if echoScroll and echoBar then Theme.BindScrollWheel(echoScroll, echoBar, 36, row) end
     echoRows[index] = row
     return row
@@ -1857,6 +1844,12 @@ local function EnsureRecommendationRow(index)
         Theme.SetCardHovered(self, false)
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(card, function(self)
+            Theme.SetCardHovered(self, false)
+            GameTooltip:Hide()
+        end)
+    end
 
     Theme.BindScrollWheel(recScroll, recBar, 48, card)
     recommendationRows[index] = card
@@ -2026,6 +2019,12 @@ local function AttachDynamicTooltip(frame)
         Theme.SetCardHovered(self, false)
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(frame, function(self)
+            Theme.SetCardHovered(self, false)
+            GameTooltip:Hide()
+        end)
+    end
 end
 
 local function CreateSummaryMetricCard(parent, titleText, tooltipText)
@@ -2371,6 +2370,12 @@ local function CreateActionMetricCard(parent, action)
         Theme.SetCardHovered(card, false)
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(hit, function()
+            Theme.SetCardHovered(card, false)
+            GameTooltip:Hide()
+        end)
+    end
 
     card.value = value
     card.share = share
@@ -2466,6 +2471,17 @@ local function CreateQualityDistributionRow(parent, action, rowIndex)
         end
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(row, function(self)
+            if self._alternate then
+                self:SetBackdropColor(0.105, 0.105, 0.132, 0.985)
+                self:SetBackdropBorderColor(unpack(Theme.BORDER_DIM))
+            else
+                Theme.SetCardHovered(self, false)
+            end
+            GameTooltip:Hide()
+        end)
+    end
     row.count = count
     row.bar = bar
     row.noData = noData
@@ -2580,6 +2596,12 @@ local function BuildActions(parent)
         Theme.SetCardHovered(self, false)
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(insights, function(self)
+            Theme.SetCardHovered(self, false)
+            GameTooltip:Hide()
+        end)
+    end
 end
 
 local function BuildRecommendationsPanel(parent)
@@ -2779,6 +2801,8 @@ View._EarlyEpicObservation = EarlyEpicObservation
 View._AggregateSessionMetrics = AggregateSessionMetrics
 View._BuildActionAnalytics = BuildActionAnalytics
 View._TargetChoice = TargetChoice
+View._BuildEchoRowsForTest = BuildEchoRows
+View._WeightedCoverageForTest = WeightedCoverage
 View._SortEchoRowsForTest = function(rows, key, desc)
     SortEchoes(rows, key, desc)
     return rows

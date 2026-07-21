@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/automation/DebugLog.lua
 -- Captures automation decision traces into an in-memory buffer and shows
 -- them in a copyable window, so problems can be pasted into a report

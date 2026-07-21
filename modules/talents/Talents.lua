@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/talents/Talents.lua
 -- Reads a WoW 3.3.5a talent allocation (the standard 51-point class talent
 -- trees, NOT Echoes) either from the player's own character or from an
@@ -55,7 +57,7 @@ end
 
 local INSPECT_TIMEOUT = 5
 local pending = nil -- { unit, class, callback, elapsed } or nil
-local watcherFrame
+local watcherToken
 
 local function FinishPending(talents, err)
     local cb = pending and pending.callback
@@ -66,17 +68,12 @@ local function FinishPending(talents, err)
 end
 
 local function EnsureWatcher()
-    if watcherFrame then return end
-    watcherFrame = CreateFrame("Frame")
-    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-        EbonBuilds.Debug.ProtectScript(watcherFrame, "Talents.WatcherFrame")
-    end
-    watcherFrame:RegisterEvent("INSPECT_TALENT_READY")
-    watcherFrame:SetScript("OnEvent", function()
+    if watcherToken then return end
+    watcherToken = EbonBuilds.WoWEvents.On("INSPECT_TALENT_READY", function()
         if not pending then return end
         local talents = { class = pending.class, tabs = ScanTabs(true) }
         FinishPending(talents, nil)
-    end)
+    end, "Talents")
 end
 
 -- Requests the given unit's talents and calls callback(talents, err) once

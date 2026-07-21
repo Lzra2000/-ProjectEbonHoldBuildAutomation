@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/Filters.lua
 -- Search/filter state and an accessible compact filter bar.
 
@@ -216,6 +218,9 @@ local function CreateSearchBox(bar)
     x:SetTextColor(0.72, 0.72, 0.76)
     clear:SetScript("OnEnter", function() x:SetTextColor(1, 0.82, 0) end)
     clear:SetScript("OnLeave", function() x:SetTextColor(0.72, 0.72, 0.76) end)
+    if EbonBuilds.Theme.BindHoverReset then
+        EbonBuilds.Theme.BindHoverReset(clear, function() x:SetTextColor(0.72, 0.72, 0.76) end)
+    end
     clear:SetScript("OnClick", function()
         edit:SetText("")
         edit:ClearFocus()

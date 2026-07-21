@@ -1,85 +1,93 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/Init.lua
--- Responsibility: addon bootstrap, saved-variable initialisation, module wiring.
+-- Private bootstrap. The TOC-provided addon table is the only module namespace;
+-- no internal service is published through the global environment.
 
-EbonBuilds = EbonBuilds or {}
+EbonBuilds.NAME = addonName
 EbonBuilds.VERSION = "3.53"
+EbonBuilds.Runtime = EbonBuilds.Runtime or {}
 
-local eventFrame = CreateFrame("Frame")
+local started = false
 
-local function OnAddonLoaded(addonName)
-    if addonName ~= "EbonBuilds" then return end
+local function RegisterModules()
+    local M = EbonBuilds.Modules
 
-    if not ProjectEbonhold then
+    M.RegisterLegacy("database", M.DATABASE, "Database", "Init")
+
+    M.RegisterLegacy("locale", M.CORE, "Locale", "Init", { "database" })
+    M.RegisterLegacy("debugLog", M.CORE, "DebugLog", "Init", { "database", "locale" })
+    M.RegisterLegacy("clickTrace", M.CORE, "ClickTrace", "Init", { "database" })
+    M.RegisterLegacy("projectAPI", M.CORE, "ProjectAPI", "Init", { "database" })
+    M.RegisterLegacy("echoCatalog", M.CORE, "EchoCatalog", "Init", { "database", "projectAPI" })
+    M.RegisterLegacy("echoEligibility", M.CORE, "EchoEligibilityEvidence", "Init", { "echoCatalog" })
+    M.RegisterLegacy("buildMigration", M.CORE, "Build", "Migrate", { "database", "echoCatalog" })
+    M.RegisterLegacy("recommendations", M.CORE, "RecommendationService", "Init", { "buildMigration" })
+
+    M.RegisterLegacy("aggregates", M.RUNTIME, "Aggregates", "Init", { "database", "buildMigration" })
+    M.RegisterLegacy("session", M.RUNTIME, "Session", "Init", { "database", "aggregates" })
+    M.RegisterLegacy("weights", M.RUNTIME, "Weights", "Init", { "buildMigration" })
+    M.RegisterLegacy("automation", M.RUNTIME, "Automation", "Init", { "session", "weights", "echoEligibility" })
+    M.RegisterLegacy("sync", M.RUNTIME, "Sync", "Init", { "database", "buildMigration" })
+    M.RegisterLegacy("tomeAtlas", M.RUNTIME, "TomeAtlas", "Init", { "database" })
+    M.RegisterLegacy("affix", M.RUNTIME, "Affix", "Init", { "database" })
+    M.RegisterLegacy("chatLink", M.RUNTIME, "ChatLink", "Init", { "sync" })
+    M.RegisterLegacy("talentAutoLearn", M.RUNTIME, "TalentAutoLearn", "Init", { "buildMigration" })
+    M.RegisterLegacy("bagAffixDots", M.RUNTIME, "BagAffixDots", "Init", { "affix" })
+    M.RegisterLegacy("autoSell", M.RUNTIME, "AutoSell", "Init", { "database" })
+    M.RegisterLegacy("echoPerformance", M.RUNTIME, "EchoPerformance", "Init", { "session" })
+    M.RegisterLegacy("gearTooltip", M.RUNTIME, "GearTooltip", "Init", { "database" })
+    M.RegisterLegacy("manualTraining", M.RUNTIME, "ManualTraining", "Init", { "session" })
+    M.RegisterLegacy("calibration", M.RUNTIME, "Calibration", "Init", { "session", "weights" })
+
+    M.RegisterLegacy("toast", M.UI_SHELL, "Toast", "Init", { "locale" })
+    M.RegisterLegacy("minimap", M.UI_SHELL, "MinimapButton", "Init", { "database", "toast" })
+    M.RegisterLegacy("mainWindow", M.UI_SHELL, "MainWindow", "Init", { "database", "buildMigration", "toast" })
+    M.RegisterLegacy("loginPanel", M.UI_SHELL, "LoginPanel", "Init", { "mainWindow" })
+    M.RegisterLegacy("worldIntegration", M.UI_SHELL, "WorldIntegration", "Init", { "mainWindow" })
+
+    M.RegisterLegacy("sessionHistory", M.UI_DEFERRED, "SessionHistory", "Init", { "session", "mainWindow" })
+    M.RegisterLegacy("welcomeView", M.UI_DEFERRED, "WelcomeView", "Init", { "mainWindow" })
+    M.RegisterLegacy("bonusView", M.UI_DEFERRED, "BonusView", "Init", { "mainWindow" })
+    M.RegisterLegacy("buildWizard", M.UI_DEFERRED, "BuildWizard", "Init", { "mainWindow", "recommendations" })
+
+    M.Register("faqAnnouncement", {
+        phase = M.BACKGROUND,
+        dependencies = { "mainWindow" },
+        start = function()
+            if EbonBuilds.FAQ and EbonBuilds.FAQ.MaybeAnnounceUpdate then
+                EbonBuilds.FAQ.MaybeAnnounceUpdate()
+            end
+        end,
+    })
+    M.Register("firstLoginShowcase", {
+        phase = M.BACKGROUND,
+        dependencies = { "mainWindow" },
+        start = function()
+            if EbonBuilds.ShowcaseView and EbonBuilds.ShowcaseView.MaybeShowFirstLogin then
+                EbonBuilds.ShowcaseView.MaybeShowFirstLogin()
+            end
+        end,
+    })
+end
+
+local function MissingDependency()
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
         DEFAULT_CHAT_FRAME:AddMessage(
             "|cffff4444EbonBuilds:|r ProjectEbonhold not found -- EbonBuilds requires it and will stay disabled. " ..
             "Make sure ProjectEbonhold (or ProjectEbonholdEnhanced) is installed and enabled.")
-        return
     end
-
-    -- Each module's Init() runs isolated: this file is the one place where
-    -- a single module failing to initialize could otherwise take every
-    -- module listed after it down with it (an uncaught error here doesn't
-    -- just skip one handler call like ProtectScript -- it stops this
-    -- whole function). EbonBuilds.Debug is guaranteed loaded by the time
-    -- this runs (ADDON_LOADED only fires after the full TOC has loaded),
-    -- even though core/Init.lua itself is always the first file loaded.
-    local function SafeInit(name, fn)
-        local ok, err = pcall(fn)
-        if not ok and EbonBuilds.ErrorLog then
-            EbonBuilds.ErrorLog.Record("Init." .. name, err)
-        end
-    end
-
-    SafeInit("Database", function() EbonBuilds.Database.Init() end)
-    EbonBuildsDB.minimapAngle = EbonBuildsDB.minimapAngle or 220
-    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
-    EbonBuildsDB.globalSettings.evalDelay     = EbonBuildsDB.globalSettings.evalDelay     or 2
-    EbonBuildsDB.globalSettings.toastDuration = EbonBuildsDB.globalSettings.toastDuration or 3
-    EbonBuildsDB.globalSettings.uiScale       = EbonBuildsDB.globalSettings.uiScale       or 1
-
-    SafeInit("Locale", function() EbonBuilds.Locale.Init() end)
-    SafeInit("DebugLog", function() EbonBuilds.DebugLog.Init() end)
-    SafeInit("ClickTrace", function() EbonBuilds.ClickTrace.Init() end)
-
-    if EbonBuilds.EchoCatalog and EbonBuilds.EchoCatalog.Init then
-        SafeInit("EchoCatalog", function() EbonBuilds.EchoCatalog.Init() end)
-    end
-    if EbonBuilds.EchoEligibilityEvidence and EbonBuilds.EchoEligibilityEvidence.Init then
-        SafeInit("EchoEligibilityEvidence", function() EbonBuilds.EchoEligibilityEvidence.Init() end)
-    end
-    SafeInit("Build.Migrate", function() EbonBuilds.Build.Migrate() end)
-    SafeInit("RecommendationService", function() EbonBuilds.RecommendationService.Init() end)
-    SafeInit("Aggregates", function() EbonBuilds.Aggregates.Init() end)
-    SafeInit("Session", function() EbonBuilds.Session.Init() end)
-    SafeInit("SessionHistory", function() EbonBuilds.SessionHistory.Init() end)
-    SafeInit("Weights", function() EbonBuilds.Weights.Init() end)
-    SafeInit("Toast", function() EbonBuilds.Toast.Init() end)
-    SafeInit("WelcomeView", function() EbonBuilds.WelcomeView.Init() end)
-    SafeInit("BonusView", function() EbonBuilds.BonusView.Init() end)
-    SafeInit("BuildWizard", function() EbonBuilds.BuildWizard.Init() end)
-    SafeInit("MinimapButton", function() EbonBuilds.MinimapButton.Init() end)
-    SafeInit("MainWindow", function() EbonBuilds.MainWindow.Init() end)
-    SafeInit("Automation", function() EbonBuilds.Automation.Init() end)
-    SafeInit("Sync", function() EbonBuilds.Sync.Init() end)
-    SafeInit("TomeAtlas", function() EbonBuilds.TomeAtlas.Init() end)
-    SafeInit("Affix", function() EbonBuilds.Affix.Init() end)
-    SafeInit("ChatLink", function() EbonBuilds.ChatLink.Init() end)
-    SafeInit("TalentAutoLearn", function() EbonBuilds.TalentAutoLearn.Init() end)
-    SafeInit("BagAffixDots", function() EbonBuilds.BagAffixDots.Init() end)
-    SafeInit("AutoSell", function() EbonBuilds.AutoSell.Init() end)
-    SafeInit("EchoPerformance", function() EbonBuilds.EchoPerformance.Init() end)
-    SafeInit("GearTooltip", function() EbonBuilds.GearTooltip.Init() end)
-    SafeInit("LoginPanel", function() EbonBuilds.LoginPanel.Init() end)
-    SafeInit("WorldIntegration", function() EbonBuilds.WorldIntegration.Init() end)
-    SafeInit("ManualTraining", function() EbonBuilds.ManualTraining.Init() end)
-    SafeInit("Calibration", function() EbonBuilds.Calibration.Init() end)
-    SafeInit("FAQ.MaybeAnnounceUpdate", function() EbonBuilds.FAQ.MaybeAnnounceUpdate() end)
-    SafeInit("ShowcaseView.MaybeShowFirstLogin", function() EbonBuilds.ShowcaseView.MaybeShowFirstLogin() end)
 end
 
-eventFrame:RegisterEvent("ADDON_LOADED")
-eventFrame:SetScript("OnEvent", function(self, event, ...)
-    if event == "ADDON_LOADED" then
-        OnAddonLoaded(...)
+function EbonBuilds.Start()
+    if started then return false end
+    started = true
+
+    if not ProjectEbonhold then
+        MissingDependency()
+        return false
     end
-end)
+
+    RegisterModules()
+    return EbonBuilds.InitPipeline.Start()
+end

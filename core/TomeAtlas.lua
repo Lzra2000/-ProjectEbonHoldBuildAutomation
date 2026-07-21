@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/TomeAtlas.lua
 -- Community drop database for echo tomes: records where tomes drop (mob +
 -- zone), shares observations with other players over the existing sync
@@ -311,19 +313,10 @@ local function OnSelfLoot(msg)
 end
 
 function EbonBuilds.TomeAtlas.Init()
-    local f = CreateFrame("Frame")
-    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-        EbonBuilds.Debug.ProtectScript(f, "TomeAtlas.EventFrame")
-    end
-    f:RegisterEvent("LOOT_OPENED")
-    f:RegisterEvent("CHAT_MSG_LOOT")
-    f:SetScript("OnEvent", function(_, event, arg1)
-        if event == "LOOT_OPENED" then
-            NotePossibleSource()
-        elseif event == "CHAT_MSG_LOOT" then
-            if arg1 and arg1:find("^You receive") then
-                OnSelfLoot(arg1)
-            end
-        end
-    end)
+    EbonBuilds.WoWEvents.On("LOOT_OPENED", function()
+        NotePossibleSource()
+    end, "TomeAtlas")
+    EbonBuilds.WoWEvents.On("CHAT_MSG_LOOT", function(_, message)
+        if message and message:find("^You receive") then OnSelfLoot(message) end
+    end, "TomeAtlas")
 end

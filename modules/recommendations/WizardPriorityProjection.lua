@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/WizardPriorityProjection.lua
 -- Generation-safe projection for the grouped Build Wizard Echo selector.
 -- Static canonical membership is cached per class/catalog revision; dynamic

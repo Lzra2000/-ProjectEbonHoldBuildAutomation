@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoGrouping.lua
 -- Deterministic, provenance-aware navigation taxonomy for Build Wizard Echoes.
 -- Grouping is presentation metadata only; canonical Echo identity remains refKey.

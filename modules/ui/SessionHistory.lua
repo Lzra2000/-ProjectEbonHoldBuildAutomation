@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/SessionHistory.lua
 -- Decision-first Logbook for WoW 3.3.5a.
 -- The page keeps run context, filters, a sortable recycled timeline, and one
@@ -60,7 +62,6 @@ local detailCopyButton
 local relevantSessionCache = {}
 local selectedSessionId
 local selectedEntry
-local durationTimer
 local visible = false
 local lastBuildKey
 
@@ -1140,6 +1141,12 @@ local function CreateRunBrowserRow(parent)
         ApplyRunBrowserRowVisual(self, false)
         GameTooltip:Hide()
     end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(row, function(self)
+            if self._session then ApplyRunBrowserRowVisual(self, false) end
+            GameTooltip:Hide()
+        end)
+    end
     row:SetScript("OnClick", function(self)
         if self._session then
             SelectSession(self._session.id)
@@ -1532,6 +1539,12 @@ local function BuildTimelineRow(parent)
     row:SetScript("OnClick", function(self) if self._entry then H.ShowDecisionDetail(self._entry) end end)
     row:SetScript("OnEnter", function(self) self._hovered = true; SetRowVisual(self) end)
     row:SetScript("OnLeave", function(self) self._hovered = false; SetRowVisual(self) end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(row, function(self)
+            self._hovered = false
+            SetRowVisual(self)
+        end)
+    end
     return row
 end
 
@@ -2035,6 +2048,7 @@ local function BuildHeaderButton(parent, key)
         button:SetScript("OnClick", function() SetSort(key) end)
         button:SetScript("OnEnter", function(self) if key ~= sortColumn then self._label:SetTextColor(unpack(Theme.TEXT_PRIMARY)) end end)
         button:SetScript("OnLeave", function(self) UpdateHeaderVisuals() end)
+        if Theme.BindHoverReset then Theme.BindHoverReset(button, UpdateHeaderVisuals) end
         Theme.AttachTooltip(button, "Sort by " .. key, "Click the active column again to reverse the sort direction.")
     else
         button:EnableMouse(false)
@@ -2432,14 +2446,12 @@ function H.OnHistoryChanged()
     H.RefreshLogView()
 end
 
-local function DurationTick(self, elapsed)
-    self._elapsed = (self._elapsed or 0) + elapsed
-    if self._elapsed < 1 then return end
-    self._elapsed = 0
+local function DurationTick()
     local session = SelectedSession()
-    if not session or GetRunCompletionState(session) ~= "active" then self:Hide(); return end
+    if not visible or not session or GetRunCompletionState(session) ~= "active" then return false end
     RefreshRunNavigatorText()
     UpdateSummary(session)
+    return 1
 end
 
 function H.Show(container)
@@ -2474,17 +2486,10 @@ function H.Show(container)
 
     local session = SelectedSession()
     if session and GetRunCompletionState(session) == "active" then
-        if not durationTimer then
-            durationTimer = CreateFrame("Frame")
-            if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-                EbonBuilds.Debug.ProtectScript(durationTimer, "SessionHistory.DurationTimer")
-            end
-            durationTimer:SetScript("OnUpdate", DurationTick)
-        end
-        durationTimer._elapsed = 0
-        durationTimer:Show()
-    elseif durationTimer then
-        durationTimer:Hide()
+        EbonBuilds.Scheduler.Every("sessionHistory.duration", 1, DurationTick,
+            EbonBuilds.Scheduler.INTERACTIVE, true, "SessionHistory")
+    else
+        EbonBuilds.Scheduler.Cancel("sessionHistory.duration")
     end
 end
 
@@ -2496,7 +2501,7 @@ function H.Hide()
     if detailPanel then detailPanel:Hide() end
     if exportDialog then exportDialog:Hide() end
     CloseRunBrowser()
-    if durationTimer then durationTimer:Hide() end
+    EbonBuilds.Scheduler.Cancel("sessionHistory.duration")
     selectedEntry = nil
 end
 

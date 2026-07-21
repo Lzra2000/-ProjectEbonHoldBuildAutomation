@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/i18n/locales/deDE.lua
 -- German translation. Game/addon terms (Echo, Build, Autopilot, and the
 -- automation actions Banish/Reroll/Freeze/Select) are kept in English,

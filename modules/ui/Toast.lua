@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/Toast.lua
 -- Responsibility: queue-based toast notifications. Supports simple text
 -- messages and rich automation-action summaries (3 echoes inline + scores).

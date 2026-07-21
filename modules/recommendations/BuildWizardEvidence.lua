@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/BuildWizardEvidence.lua
 -- Converts bounded integer community counts into honest player-facing labels.
 

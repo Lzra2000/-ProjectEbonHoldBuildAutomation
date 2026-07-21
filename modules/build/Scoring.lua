@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/Scoring.lua
 -- Responsibility: compute echo scores and the class peak from a settings
 -- table. Pure — no UI, no SavedVariables mutation.

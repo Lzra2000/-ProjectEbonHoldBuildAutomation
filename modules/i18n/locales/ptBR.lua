@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/i18n/locales/ptBR.lua
 -- Brazilian Portuguese translation. "build" and "echo" stay as loanwords,
 -- automation actions (Banish/Reroll/Freeze/Select) and Autopilot stay in

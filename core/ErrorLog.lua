@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/ErrorLog.lua
 -- System-wide error monitoring, separate from the opt-in DebugLog
 -- (modules/automation/DebugLog.lua). DebugLog only captures anything

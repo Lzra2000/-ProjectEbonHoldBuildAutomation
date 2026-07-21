@@ -1,7 +1,14 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/integration/ProjectEbonholdAPI.lua
--- Narrow, defensive adapter around the ProjectEbonhold public API surface.
--- Do not register server handlers here: ProjectEbonhold.onEventReceived stores
--- one handler per event and a second registration would replace its own handler.
+-- Read-only compatibility adapter around the ProjectEbonhold globals that are
+-- already exposed by the installed addon. EbonBuilds never replaces a
+-- ProjectEbonhold handler and never calls onEventReceived(), because that API
+-- stores one callback per event and would overwrite ProjectEbonhold's owner.
+--
+-- Actions use the request methods exposed by ProjectEbonhold.PerkService.
+-- The unmodified addon does not expose a safe multi-listener acknowledgement
+-- API, so EbonBuilds must never block later automation on inferred UI events.
 
 EbonBuilds.ProjectAPI = {}
 
@@ -11,10 +18,46 @@ local CLASS_BITS = {
     DEATHKNIGHT = 32, SHAMAN = 64, MAGE = 128, WARLOCK = 256, DRUID = 1024,
 }
 
+local initialized = false
+local observationHooksInstalled = false
+local choiceGeneration = 0
+local showGeneration = 0
+local hideGeneration = 0
+local resetGeneration = 0
+local replacementGeneration = 0
+local requestSequence = 0
+
 local function Service()
     return ProjectEbonhold and ProjectEbonhold.PerkService
 end
 
+local function Emit(signal, ...)
+    if EbonBuilds.EventHub and EbonBuilds.EventHub.Bump then
+        EbonBuilds.EventHub.Bump(signal, ...)
+    end
+end
+
+local function BeginAction(action, target, invoker)
+    if type(invoker) ~= "function" then return false end
+
+    requestSequence = requestSequence + 1
+    local requestId = requestSequence
+    local ok, accepted = pcall(invoker)
+    if not ok then
+        if EbonBuilds.ErrorLog and EbonBuilds.ErrorLog.Record then
+            EbonBuilds.ErrorLog.Record("ProjectAPI." .. tostring(action), accepted)
+        end
+        return false
+    end
+    if accepted == false then return false end
+
+    -- The installed ProjectEbonhold build exposes request methods but no safe
+    -- multi-listener acknowledgement API. Return local request acceptance and
+    -- let its own pending flags/server handlers remain authoritative. Blocking
+    -- all later automation behind inferred UI transitions caused permanent
+    -- stalls when one transition was absent or reordered.
+    return true, requestId, choiceGeneration
+end
 
 function API.GetPlayerClassToken()
     local _, classToken = UnitClass("player")
@@ -88,7 +131,6 @@ function API.IsPerkAvailableForClass(spellId, classToken)
     return availableMask ~= 0 and bit.band(availableMask, classMask) ~= 0
 end
 
-
 function API.GetTotalPerkCount()
     if ProjectEbonhold and type(ProjectEbonhold.GetTotalPerkCount) == "function" then
         local ok, result = pcall(ProjectEbonhold.GetTotalPerkCount)
@@ -102,7 +144,8 @@ end
 function API.RequestEchoDiscovery()
     local service = Service()
     if not service or type(service.RequestEchoDiscovery) ~= "function" then return false end
-    return pcall(service.RequestEchoDiscovery)
+    local ok, result = pcall(service.RequestEchoDiscovery)
+    return ok and result ~= false
 end
 
 function API.IsSpellInActiveEchoLoadout(spellId)
@@ -143,8 +186,92 @@ end
 function API.RequestSharedEchoLoadouts(classToken)
     local service = Service()
     if not service or type(service.RequestSharedEchoLoadouts) ~= "function" then return false end
-    local ok = pcall(service.RequestSharedEchoLoadouts, tostring(classToken or ""):upper())
-    return ok
+    local ok, result = pcall(service.RequestSharedEchoLoadouts, tostring(classToken or ""):upper())
+    return ok and result ~= false
+end
+
+function API.GetChoiceGeneration()
+    return choiceGeneration
+end
+
+function API.GetPendingAction()
+    return nil
+end
+
+function API.HasActionObservers()
+    -- No reliable acknowledgement fan-out is exposed by the unmodified base
+    -- addon. Kept only as a compatibility query for older EbonBuilds modules.
+    return false
+end
+
+function API.RequestSelect(spellId)
+    local service = Service()
+    if not service or type(service.SelectPerk) ~= "function" then return false end
+    spellId = tonumber(spellId)
+    return BeginAction("select", spellId, function() return service.SelectPerk(spellId) end)
+end
+
+function API.RequestBanish(index)
+    local service = Service()
+    if not service or type(service.BanishPerk) ~= "function" then return false end
+    index = tonumber(index)
+    return BeginAction("banish", index, function() return service.BanishPerk(index) end)
+end
+
+function API.RequestFreeze(index)
+    local service = Service()
+    if not service or type(service.FreezePerk) ~= "function" then return false end
+    index = tonumber(index)
+    return BeginAction("freeze", index, function() return service.FreezePerk(index) end)
+end
+
+function API.RequestReroll()
+    local service = Service()
+    if not service or type(service.RequestReroll) ~= "function" then return false end
+    return BeginAction("reroll", nil, function() return service.RequestReroll() end)
+end
+
+local function InstallObservationHooks()
+    if observationHooksInstalled then return true end
+    local ui = ProjectEbonhold and ProjectEbonhold.PerkUI
+    if not ui or type(hooksecurefunc) ~= "function" then return false end
+
+    if type(ui.Show) == "function" then
+        hooksecurefunc(ui, "Show", function(choices)
+            showGeneration = showGeneration + 1
+            choiceGeneration = choiceGeneration + 1
+            Emit("PROJECT_CHOICE_CHANGED", choiceGeneration, choices or API.GetCurrentChoice())
+        end)
+    end
+
+    if type(ui.Hide) == "function" then
+        hooksecurefunc(ui, "Hide", function()
+            hideGeneration = hideGeneration + 1
+        end)
+    end
+
+    if type(ui.ResetSelection) == "function" then
+        hooksecurefunc(ui, "ResetSelection", function()
+            resetGeneration = resetGeneration + 1
+        end)
+    end
+
+    if type(ui.UpdateSinglePerk) == "function" then
+        hooksecurefunc(ui, "UpdateSinglePerk", function()
+            replacementGeneration = replacementGeneration + 1
+            choiceGeneration = choiceGeneration + 1
+            Emit("PROJECT_CHOICE_CHANGED", choiceGeneration, API.GetCurrentChoice())
+        end)
+    end
+
+    observationHooksInstalled = true
+    return true
+end
+
+function API.Init()
+    if not initialized then initialized = true end
+    InstallObservationHooks()
+    return Service() ~= nil
 end
 
 function API.GetCapabilities()
@@ -160,5 +287,6 @@ function API.GetCapabilities()
         activeLoadout = service and type(service.SetActiveEchoLoadout) == "function" or false,
         sharedLoadouts = service and type(service.RequestSharedEchoLoadouts) == "function"
             and type(service.GetSharedEchoLoadouts) == "function" or false,
+        actionConfirmation = service and "request_only" or "unavailable",
     }
 end

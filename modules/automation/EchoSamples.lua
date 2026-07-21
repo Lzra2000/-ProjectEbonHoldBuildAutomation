@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/automation/EchoSamples.lua
 -- Responsibility: sample-based DPS attribution. The old model credited
 -- every active echo with the loadout's whole DPS (per-echo sum/count),

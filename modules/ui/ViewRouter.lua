@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/ViewRouter.lua
 -- Responsibility: register named views and swap which one fills the right panel.
 -- A view is a table with Show(container, context) and Hide() methods.

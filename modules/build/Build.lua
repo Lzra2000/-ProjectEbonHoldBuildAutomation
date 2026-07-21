@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/Build.lua
 -- Responsibility: build CRUD, UUID generation, active-build tracking,
 -- one-time migration from the legacy single-weight-table shape.

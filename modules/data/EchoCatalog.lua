@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoCatalog.lua
 -- Versioned Echo identity/catalog service. It reconciles bundled MPQ identity
 -- data with the live ProjectEbonhold database, exposes strict class-scoped
@@ -31,17 +33,6 @@ local runtimeDatabaseRef, runtimeAddonVersion, runtimeModVersion, runtimePerkCou
 local reconcileFailed = false
 local diagnostics = {}
 local reconcileState
-local lifecycleFrame = CreateFrame("Frame")
-if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-    -- spam-exempt: SPELLS_CHANGED legitimately fires 120+ times/sec during
-    -- login/zoning bursts (that's what triggered 3.63's debounce fix in
-    -- the first place) -- the debounce made the actual WORK cheap
-    -- (Scheduler.After bookkeeping only), but the handler itself still
-    -- gets called once per fire, same as the event's real frequency. The
-    -- spam warning was flagging call volume this handler can't reduce
-    -- further, not a bug still left to fix.
-    EbonBuilds.Debug.ProtectScript(lifecycleFrame, "EchoCatalog.LifecycleFrame", true)
-end
 local staticGroupByNormalizedName
 
 -- ProjectEbonhold has shipped more than one PerkDatabase layout.  Most builds
@@ -677,10 +668,7 @@ function Catalog.IsAvailableForClass(entryOrSpellId, classToken)
         or Catalog.GetAvailability(variant, classToken) == Identity.CONFLICTED
 end
 
-lifecycleFrame:RegisterEvent("PLAYER_LOGIN")
-lifecycleFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-lifecycleFrame:RegisterEvent("SPELLS_CHANGED")
-lifecycleFrame:SetScript("OnEvent", function(_, event)
+local function OnCatalogLifecycleEvent(event)
     if not initialized then return end
     if event == "PLAYER_LOGIN" then
         Catalog.Refresh("PLAYER_LOGIN")
@@ -707,4 +695,13 @@ lifecycleFrame:SetScript("OnEvent", function(_, event)
             ClearTable(descriptionCache)
         end, EbonBuilds.Scheduler.BACKGROUND)
     end
-end)
+end
+
+if EbonBuilds.WoWEvents then
+    EbonBuilds.WoWEvents.On("PLAYER_LOGIN", OnCatalogLifecycleEvent, "EchoCatalog")
+    EbonBuilds.WoWEvents.On("PLAYER_ENTERING_WORLD", OnCatalogLifecycleEvent, "EchoCatalog")
+    -- spam-exempt: SPELLS_CHANGED legitimately fires 120+ times/sec during
+    -- login/zoning bursts (this is exactly what triggered 3.63's debounce
+    -- fix and 3.66's spam-exempt fix in the pre-WoWEvents version).
+    EbonBuilds.WoWEvents.On("SPELLS_CHANGED", OnCatalogLifecycleEvent, "EchoCatalog", false, true)
+end

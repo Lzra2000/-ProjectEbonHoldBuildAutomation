@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/automation/EchoPerformance.lua
 -- Responsibility: correlate currently-active echoes with real combat
 -- performance (DPS), using Details! damage meter's public API, if

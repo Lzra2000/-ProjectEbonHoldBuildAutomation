@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/app/Readiness.lua
 -- Derived Plan/Run/Review state. Nothing in this projection is persisted.
 

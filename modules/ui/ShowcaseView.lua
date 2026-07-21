@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/ShowcaseView.lua
 -- Responsibility: a one-time "welcome to EbonBuilds" popup shown on first
 -- login (account-wide, not per-character -- the command list is the same

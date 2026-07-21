@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BuildTabs.lua
 -- Accessible, high-contrast tab container for editing a build.
 

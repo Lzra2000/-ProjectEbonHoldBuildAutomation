@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/build/EchoPolicy.lua
 -- Responsibility: build-level conditional Echo policies and current-run state.
 

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/EchoPicker.lua
 -- Class-scoped, alias-aware Echo picker with a fixed recycled row pool.
 
@@ -216,6 +218,12 @@ local function CreateRow(parent)
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function(self) Theme.SetCardHovered(self, false); GameTooltip:Hide() end)
+    if Theme.BindHoverReset then
+        Theme.BindHoverReset(row, function(self)
+            Theme.SetCardHovered(self, false)
+            GameTooltip:Hide()
+        end)
+    end
     row:SetScript("OnClick", function(self) Pick(self._entry) end)
     return row
 end

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/BuildWizardSummary.lua
 -- Bounded, revision-cached summaries for the Build Wizard shell and review.
 

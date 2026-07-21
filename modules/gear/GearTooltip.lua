@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/gear/GearTooltip.lua
 -- Responsibility: item-tooltip upgrade line. Appends one line to item
 -- tooltips saying whether the hovered item scores as an upgrade over

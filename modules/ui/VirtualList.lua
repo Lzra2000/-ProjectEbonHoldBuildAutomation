@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/VirtualList.lua
 -- Shared fixed-row virtualization helpers for WoW 3.3.5a. Feature modules
 -- own their row visuals; this utility centralizes viewport math and recycled

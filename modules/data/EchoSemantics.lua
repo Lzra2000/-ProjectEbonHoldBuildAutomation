@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/data/EchoSemantics.lua
 -- Compact runtime access to description-derived Echo classifications.
 

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- Generated from WoW 3.3.5a build 12340 Talent.dbc and TalentTab.dbc.
 -- Fields per talent: spellID, tier, column, maxRank, then prerequisite index/rank pairs.
 EbonBuilds.TalentCatalogData = {

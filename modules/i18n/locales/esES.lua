@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/i18n/locales/esES.lua
 -- Spanish translation. "build" stays as a loanword, "Echo" translates to
 -- "eco", automation actions (Banish/Reroll/Freeze/Select) and Autopilot

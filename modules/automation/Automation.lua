@@ -1,8 +1,10 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/automation/Automation.lua
 -- Responsibility: evaluate offered echo choices against the active build's
 -- automation thresholds and execute the optimal action (banish -> reroll ->
--- freeze -> select). Pre-hooks PerkUI.Show so automation runs before the
--- native UI appears.
+-- freeze -> select). Secure post-hooks suppress the native choice surface only
+-- while Autopilot owns the board and restore it on every fallback path.
 
 EbonBuilds.Automation = {}
 
@@ -20,17 +22,200 @@ end
 
 local pendingChoices    = nil
 local trainingNoticeShown = false -- once-per-session Manual Training notice (see the eval timer)
-local origPerkUIShow    = nil
+local hookInstalled       = false
 local freezeRoundActive    = false  -- true after freeze batch, cleared on select
 local locallyFrozenIndices = {}     -- indices frozen this round, for penalty tracking
 local cachedPeak           = nil    -- locked at first evaluation of the run
 local lastNoActionReason    = nil
 
 ------------------------------------------------------------------------
+-- Native ProjectEbonhold choice-surface guard
+------------------------------------------------------------------------
+
+-- The native ProjectEbonhold choice UI can expose either its compact entry
+-- button or its hide/show button depending on the installed build.  Treat the
+-- whole surface as one unit instead of relying on one label or one frame name.
+-- This guard is presentation-only: it never decides whether automation may
+-- run and it never waits for an action acknowledgement.
+local nativeChoiceSuppressed = false
+local nativeFallbackInProgress = false
+local guardedNativeButtons = {}
+local REQUEST_FALLBACK_ID = "automation.requestFallback"
+local REQUEST_FALLBACK_DELAY = 6
+local REPLACEMENT_RESET_CLEAR_ID = "automation.replacementResetClear"
+local replacementResetPending = false
+
+local function GetNativeFrame(name)
+    local frame = _G and _G[name]
+    if not frame or type(frame.Hide) ~= "function" then return nil end
+    return frame
+end
+
+local function IsNativeEchoTooltipOwner(owner)
+    if not owner then return false end
+    local chooseButton = GetNativeFrame("PerkChooseButton")
+    local hideButton = GetNativeFrame("PerkHideButton")
+    local root = GetNativeFrame("ProjectEbonholdPerkFrame")
+    local current = owner
+    for _ = 1, 10 do
+        if current == chooseButton or current == hideButton or current == root then return true end
+        if type(current.GetParent) ~= "function" then break end
+        local ok, parent = pcall(current.GetParent, current)
+        if not ok or not parent or parent == current then break end
+        current = parent
+    end
+    return false
+end
+
+local function HideNativeEchoTooltip()
+    local tooltip = _G and _G.GameTooltip
+    if not tooltip or type(tooltip.Hide) ~= "function" then return end
+    local owner
+    if type(tooltip.GetOwner) == "function" then
+        local ok, value = pcall(tooltip.GetOwner, tooltip)
+        if ok then owner = value end
+    end
+    if IsNativeEchoTooltipOwner(owner) then tooltip:Hide() end
+end
+
+local function HasCurrentChoice()
+    local api = EbonBuilds.ProjectAPI
+    local choices = api and type(api.GetCurrentChoice) == "function" and api.GetCurrentChoice() or nil
+    return type(choices) == "table" and #choices > 0
+end
+
+local function ShouldSuppressNativeChoice()
+    if nativeFallbackInProgress then return false end
+    local build = EbonBuilds.Build and EbonBuilds.Build.GetActive and EbonBuilds.Build.GetActive() or nil
+    if not build or not EbonBuilds.Build.IsAutomationEnabled(build) then return false end
+    if EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.IsEnabled(build) then return false end
+    return true
+end
+
+local function HideNativeFrame(frame)
+    if not frame then return end
+    if type(frame.EnableMouse) == "function" then frame:EnableMouse(false) end
+    frame:Hide()
+end
+
+local function InstallNativeButtonGuard(frame)
+    if not frame or guardedNativeButtons[frame] then return end
+    guardedNativeButtons[frame] = true
+    local function OnNativeButtonShown(self)
+        if nativeChoiceSuppressed and ShouldSuppressNativeChoice() then
+            HideNativeFrame(self)
+            HideNativeEchoTooltip()
+        end
+    end
+    if type(frame.HookScript) == "function" then
+        frame:HookScript("OnShow", OnNativeButtonShown)
+    elseif type(hooksecurefunc) == "function" and type(frame.Show) == "function" then
+        hooksecurefunc(frame, "Show", OnNativeButtonShown)
+    end
+end
+
+local function SuppressNativeChoiceSurface()
+    if not ShouldSuppressNativeChoice() then return false end
+    nativeChoiceSuppressed = true
+
+    local chooseButton = GetNativeFrame("PerkChooseButton")
+    local hideButton = GetNativeFrame("PerkHideButton")
+    local root = GetNativeFrame("ProjectEbonholdPerkFrame")
+    InstallNativeButtonGuard(chooseButton)
+    InstallNativeButtonGuard(hideButton)
+    HideNativeFrame(chooseButton)
+    HideNativeFrame(hideButton)
+
+    -- The root can stay allocated, but hiding it guarantees that card mouse
+    -- regions and stale tooltips cannot remain reachable below the Autopilot
+    -- banner. ProjectEbonhold rebuilds it normally for a manual fallback.
+    if root and type(root.Hide) == "function" then root:Hide() end
+    HideNativeEchoTooltip()
+    return true
+end
+
+local function ShowNativeChoiceFallback()
+    nativeChoiceSuppressed = false
+    local choices = EbonBuilds.ProjectAPI and EbonBuilds.ProjectAPI.GetCurrentChoice
+        and EbonBuilds.ProjectAPI.GetCurrentChoice() or nil
+    local ui = ProjectEbonhold and ProjectEbonhold.PerkUI
+    if type(choices) ~= "table" or #choices == 0 or not ui or type(ui.Show) ~= "function" then
+        return false
+    end
+
+    -- Use ProjectEbonhold's own renderer so the correct button/card variant is
+    -- restored even when a server build uses a different label or frame.
+    nativeFallbackInProgress = true
+    local ok, err = pcall(ui.Show, choices)
+    nativeFallbackInProgress = false
+    if not ok then
+        if EbonBuilds.ErrorLog and EbonBuilds.ErrorLog.Record then
+            EbonBuilds.ErrorLog.Record("Automation.NativeFallback", err)
+        end
+        return false
+    end
+
+    local chooseButton = GetNativeFrame("PerkChooseButton")
+    local hideButton = GetNativeFrame("PerkHideButton")
+    if chooseButton and type(chooseButton.EnableMouse) == "function" then chooseButton:EnableMouse(true) end
+    if hideButton and type(hideButton.EnableMouse) == "function" then hideButton:EnableMouse(true) end
+    return true
+end
+
+local function RefreshNativeChoiceGuard()
+    if not HasCurrentChoice() then
+        nativeChoiceSuppressed = false
+        HideNativeEchoTooltip()
+        return
+    end
+    if ShouldSuppressNativeChoice() then
+        SuppressNativeChoiceSurface()
+    else
+        ShowNativeChoiceFallback()
+    end
+end
+
+local function CancelRequestFallback()
+    if EbonBuilds.Scheduler then EbonBuilds.Scheduler.Cancel(REQUEST_FALLBACK_ID) end
+end
+
+local function ClearReplacementResetPending()
+    replacementResetPending = false
+    if EbonBuilds.Scheduler then
+        EbonBuilds.Scheduler.Cancel(REPLACEMENT_RESET_CLEAR_ID)
+    end
+end
+
+local function ExpectReplacementReset()
+    replacementResetPending = true
+    if not EbonBuilds.Scheduler then return end
+
+    -- ProjectEbonhold currently calls ResetSelection immediately after a
+    -- successful banish replacement. Keep the marker narrowly scoped so an
+    -- unrelated later reset can never be mistaken for that success path.
+    EbonBuilds.Scheduler.After(REPLACEMENT_RESET_CLEAR_ID, 0.50, function()
+        replacementResetPending = false
+    end, EbonBuilds.Scheduler.INTERACTIVE, true, "Automation")
+end
+
+local function ArmRequestFallback()
+    if not EbonBuilds.Scheduler then return end
+    EbonBuilds.Scheduler.After(REQUEST_FALLBACK_ID, REQUEST_FALLBACK_DELAY, function()
+        if HasCurrentChoice() and ShouldSuppressNativeChoice() then
+            ShowNativeChoiceFallback()
+            if EbonBuilds.Toast and EbonBuilds.Toast.Show then
+                EbonBuilds.Toast.Show("Autopilot request is still pending -- native Echo controls restored")
+            end
+        end
+    end, EbonBuilds.Scheduler.INTERACTIVE, true, "Automation")
+end
+
+------------------------------------------------------------------------
 -- Internal helpers
 ------------------------------------------------------------------------
 
 local function StartEvalTimer()
+    RefreshNativeChoiceGuard()
     EbonBuilds.Scheduler.After("automation.evaluate", GetEvalDelay(), function()
         local build = EbonBuilds.Build.GetActive()
         local wasActive = build and EbonBuilds.Build.IsAutomationEnabled(build)
@@ -40,22 +225,24 @@ local function StartEvalTimer()
             lastNoActionReason = nil
             return
         end
-        -- Automation couldn't act, show the native perk UI. Manual Training
-        -- gets one explanatory notice per login; normal manual use stays quiet.
-        if pendingChoices and origPerkUIShow then
+
+        -- No request was accepted. Rebuild the native choice surface through
+        -- ProjectEbonhold itself so the player always has a working fallback.
+        CancelRequestFallback()
+        ShowNativeChoiceFallback()
+        if pendingChoices then
             if wasActive and isTraining then
                 if not trainingNoticeShown then
                     trainingNoticeShown = true
                     EbonBuilds.Toast.Show("Automation paused: Manual Training is ON for this build (its toggle on the build overview turns it off)")
                 end
-            elseif wasActive then
-                EbonBuilds.Toast.Show(lastNoActionReason or "Automation: no rule matched, choose manually")
+            elseif wasActive and lastNoActionReason then
+                EbonBuilds.Toast.Show(lastNoActionReason)
             end
-            origPerkUIShow(pendingChoices)
         end
         pendingChoices = nil
         lastNoActionReason = nil
-    end, EbonBuilds.Scheduler.CRITICAL, true)
+    end, EbonBuilds.Scheduler.CRITICAL, true, "Automation")
 end
 
 -- Returns the cached peak (computed at first evaluation of the current run).
@@ -253,6 +440,66 @@ local function LogAndToast(scored, action, targetIndex)
     EbonBuilds.Session.LogAction(scored, action, targetIndex)
 end
 
+local function CommitDecision(decision)
+    if not decision then return end
+    local action = decision.action
+    if action == "select" then
+        RecordPick(decision.build, decision.entry)
+        locallyFrozenIndices = {}
+        freezeRoundActive = false
+    elseif action == "banish" then
+        RecordBanish(decision.build, decision.entry)
+    elseif action == "reroll" then
+        UpdateStat(decision.build, "rerollsUsed")
+    elseif action == "freeze" then
+        UpdateStat(decision.build, "freezesUsed")
+        locallyFrozenIndices[decision.targetIndex] = true
+        freezeRoundActive = true
+        local runData = GetRunData()
+        if runData and runData.usedFreezes ~= nil then
+            runData.usedFreezes = runData.usedFreezes + 1
+        end
+    end
+
+    LogAndToast(decision.scored, decision.displayAction, decision.targetIndex or 0)
+    if action == "freeze" then StartEvalTimer() end
+end
+
+local function SubmitAction(action, build, scored, targetIndex, entry, displayAction)
+    local api = EbonBuilds.ProjectAPI
+    if not api then return false end
+
+    local accepted
+    if action == "select" then
+        accepted = api.RequestSelect(entry and entry.spellId)
+    elseif action == "banish" then
+        accepted = api.RequestBanish((targetIndex or 1) - 1)
+    elseif action == "reroll" then
+        accepted = api.RequestReroll()
+    elseif action == "freeze" then
+        accepted = api.RequestFreeze((targetIndex or 1) - 1)
+    end
+    if not accepted then return false end
+
+    -- ProjectEbonhold's public service return value means the request was
+    -- accepted locally and sent. Do not hold the automation engine behind a
+    -- speculative acknowledgement watcher: older server builds expose no
+    -- reliable multi-listener result API, and a missed transition would block
+    -- every later level-up. Native service pending flags still prevent duplicate
+    -- requests, while the watchdog below restores manual controls if the server
+    -- never advances the board.
+    CommitDecision({
+        action = action,
+        build = build,
+        scored = scored,
+        targetIndex = targetIndex or 0,
+        entry = entry,
+        displayAction = displayAction or action,
+    })
+    ArmRequestFallback()
+    return true
+end
+
 ------------------------------------------------------------------------
 -- Action attempts (called in priority order)
 ------------------------------------------------------------------------
@@ -300,9 +547,10 @@ local function TrySelect(scored, settings, build)
         pick = candidates[1]
     end
 
-    ProjectEbonhold.PerkService.SelectPerk(pick.spellId)
-    RecordPick(build, pick)
-    return true, pick
+    if SubmitAction("select", build, scored, pick.index, pick, "Select") then
+        return true, pick
+    end
+    return false, nil
 end
 
 local function AnnotateScored(scored, settings, lockedList, selectedNames)
@@ -473,11 +721,10 @@ function EbonBuilds.Automation.Evaluate()
         for _, s in ipairs(scored) do
             for _, lockedId in ipairs(lockedList) do
                 if lockedId and lockedId == s.spellId and not s.policyBlocked then
-                    ProjectEbonhold.PerkService.SelectPerk(s.spellId)
-                    RecordPick(build, s)
-                    EbonBuilds.DebugLog.AddF("-> SELECT locked-match [%d] %s", s.index, s.name)
-                    LogAndToast(scored, "Select (Locked)", s.index)
-                    return true
+                    if SubmitAction("select", build, scored, s.index, s, "Select (Locked)") then
+                        EbonBuilds.DebugLog.AddF("-> REQUEST SELECT locked-match [%d] %s", s.index, s.name)
+                        return true
+                    end
                 end
             end
         end
@@ -495,12 +742,9 @@ function EbonBuilds.Automation.Evaluate()
             for _, s in ipairs(scored) do
                 if IsActionable(s) == false and s.policyEffect == "banish"
                     and not s.isFrozen and not s.isCarried and not locallyFrozenIndices[s.index] then
-                    local ok = ProjectEbonhold.PerkService.BanishPerk(s.index - 1)
-                    if ok then
-                        RecordBanish(build, s)
-                        table.sort(scored, function(a, b) return a.index < b.index end)
-                        EbonBuilds.DebugLog.AddF("-> BANISH policy [%d] %s (%s)", s.index, s.name, tostring(s.policy))
-                        LogAndToast(scored, "Banish", s.index)
+                    table.sort(scored, function(a, b) return a.index < b.index end)
+                    if SubmitAction("banish", build, scored, s.index, s, "Banish") then
+                        EbonBuilds.DebugLog.AddF("-> REQUEST BANISH policy [%d] %s (%s)", s.index, s.name, tostring(s.policy))
                         return true
                     end
                 end
@@ -510,12 +754,9 @@ function EbonBuilds.Automation.Evaluate()
             for _, s in ipairs(scored) do
                 if IsActionable(s) and s.isBanned then
                     if not s.isProtected then
-                        local ok = ProjectEbonhold.PerkService.BanishPerk(s.index - 1)
-                        if ok then
-                            RecordBanish(build, s)
-                            table.sort(scored, function(a, b) return a.index < b.index end)
-                            EbonBuilds.DebugLog.AddF("-> BANISH [%d] %s (score %.0f)", s.index, s.name, s.score or 0)
-                            LogAndToast(scored, "Banish", s.index)
+                        table.sort(scored, function(a, b) return a.index < b.index end)
+                        if SubmitAction("banish", build, scored, s.index, s, "Banish") then
+                            EbonBuilds.DebugLog.AddF("-> REQUEST BANISH [%d] %s (score %.0f)", s.index, s.name, s.score or 0)
                             return true
                         end
                     end
@@ -539,12 +780,9 @@ function EbonBuilds.Automation.Evaluate()
             for _, s in ipairs(scored) do
                 if IsActionable(s) and s.score < threshold then
                     if not s.isProtected then
-                        local ok = ProjectEbonhold.PerkService.BanishPerk(s.index - 1)
-                        if ok then
-                            RecordBanish(build, s)
-                            table.sort(scored, function(a, b) return a.index < b.index end)
-                            EbonBuilds.DebugLog.AddF("-> BANISH [%d] %s (score %.0f)", s.index, s.name, s.score or 0)
-                            LogAndToast(scored, "Banish", s.index)
+                        table.sort(scored, function(a, b) return a.index < b.index end)
+                        if SubmitAction("banish", build, scored, s.index, s, "Banish") then
+                            EbonBuilds.DebugLog.AddF("-> REQUEST BANISH [%d] %s (score %.0f)", s.index, s.name, s.score or 0)
                             return true
                         end
                     end
@@ -594,11 +832,8 @@ function EbonBuilds.Automation.Evaluate()
                 EbonBuilds.DebugLog.AddF("reroll check (EV): best=%.0f vs %.0f (EV %.0f x %d%% x pacing %.2f)",
                     best, threshold, ev, settings.rerollEVPct or 95, pacing)
                 if best < threshold then
-                    local ok = ProjectEbonhold.PerkService.RequestReroll()
-                    if ok then
-                        UpdateStat(build, "rerollsUsed")
-                        EbonBuilds.DebugLog.Add("-> REROLL (EV)")
-                        LogAndToast(scored, "Reroll", 0)
+                    if SubmitAction("reroll", build, scored, 0, nil, "Reroll") then
+                        EbonBuilds.DebugLog.Add("-> REQUEST REROLL (EV)")
                         return true
                     end
                 end
@@ -636,11 +871,8 @@ function EbonBuilds.Automation.Evaluate()
                     local rerollThreshold = peakScore * settings.autoRerollPct / 100 * pacing
                     EbonBuilds.DebugLog.AddF("reroll check: sum=%.0f vs threshold=%.0f (pacing %.2f)", sum, rerollThreshold, pacing)
                     if sum < rerollThreshold then
-                        local ok = ProjectEbonhold.PerkService.RequestReroll()
-                        if ok then
-                            UpdateStat(build, "rerollsUsed")
-                            EbonBuilds.DebugLog.Add("-> REROLL")
-                            LogAndToast(scored, "Reroll", 0)
+                        if SubmitAction("reroll", build, scored, 0, nil, "Reroll") then
+                            EbonBuilds.DebugLog.Add("-> REQUEST REROLL")
                             return true
                         end
                     end
@@ -703,21 +935,8 @@ function EbonBuilds.Automation.Evaluate()
                 -- Freeze the single lowest-scored echo above the threshold.
                 -- (Multiple would race the server; one-per-eval is reliable.)
                 local lowest = aboveChoices[#aboveChoices]
-                local ok = ProjectEbonhold.PerkService.FreezePerk(lowest.index - 1)
-                if ok then
-                    UpdateStat(build, "freezesUsed")
-                    locallyFrozenIndices[lowest.index] = true
-
-                    -- Optimistically update runData so the toast and session log
-                    -- reflect the correct remaining freeze count immediately.
-                    if runData and runData.usedFreezes ~= nil then
-                        runData.usedFreezes = runData.usedFreezes + 1
-                    end
-
-                    EbonBuilds.DebugLog.AddF("-> FREEZE [%d] %s (score %.0f)", lowest.index, lowest.name, lowest.score or 0)
-                    LogAndToast(scored, "Freeze", lowest.index)
-                    freezeRoundActive = true
-                    StartEvalTimer()
+                if SubmitAction("freeze", build, scored, lowest.index, lowest, "Freeze") then
+                    EbonBuilds.DebugLog.AddF("-> REQUEST FREEZE [%d] %s (score %.0f)", lowest.index, lowest.name, lowest.score or 0)
                     return true
                 end
             end
@@ -730,11 +949,8 @@ function EbonBuilds.Automation.Evaluate()
         -- can exclude the echo frozen this round. It gets cleared after the
         -- pick (a select ends this choice screen).
         local ok, pick, failureReason = TrySelect(scored, settings, build)
-        locallyFrozenIndices = {}
-        freezeRoundActive = false
         if ok and pick then
-            EbonBuilds.DebugLog.AddF("-> SELECT [%d] %s (score %.0f)", pick.index, pick.name, pick.score or 0)
-            LogAndToast(scored, "Select", pick.index)
+            EbonBuilds.DebugLog.AddF("-> REQUEST SELECT [%d] %s (score %.0f)", pick.index, pick.name, pick.score or 0)
         elseif not ok then
             if failureReason == "policy_blocked" then
                 lastNoActionReason = "Autopilot paused: all current offers are blocked by Echo policies"
@@ -746,8 +962,15 @@ function EbonBuilds.Automation.Evaluate()
         return ok
     end
 
-    local result = body()
+    local ok, result = pcall(body)
     evalInProgress = false
+    if not ok then
+        if EbonBuilds.ErrorLog and EbonBuilds.ErrorLog.Record then
+            EbonBuilds.ErrorLog.Record("Automation.Evaluate", result)
+        end
+        lastNoActionReason = "Automation error: choose manually"
+        return false
+    end
     return result
 end
 
@@ -756,47 +979,111 @@ end
 ------------------------------------------------------------------------
 
 function EbonBuilds.Automation.Init()
-    if not ProjectEbonhold or not ProjectEbonhold.PerkUI then return end
-    if ProjectEbonhold.PerkUI._ebonBuildsHooked then return end
+    if hookInstalled then return true end
+    if not ProjectEbonhold or not ProjectEbonhold.PerkUI then return false end
 
     local PerkUI = ProjectEbonhold.PerkUI
+    if type(PerkUI.Show) ~= "function" or type(hooksecurefunc) ~= "function" then return false end
 
-    -- Pre-hook Show: suppress the native UI and start a delayed evaluation.
-    -- A timer gives the game time to fully set up the choice data before
-    -- automation tries to act on it, preventing race conditions that cause
-    -- the perk window to disappear without any action being taken.
-    origPerkUIShow = PerkUI.Show
-    PerkUI.Show = function(choices)
+    -- ProjectEbonhold is allowed to build its ordinary choice surface first;
+    -- the post-hook then suppresses the complete surface in the same frame.
+    -- This avoids replacing ProjectEbonhold code while remaining compatible
+    -- with builds that use either PerkChooseButton or PerkHideButton.
+    hooksecurefunc(PerkUI, "Show", function(choices)
+        if nativeFallbackInProgress then return end
+        ClearReplacementResetPending()
+        CancelRequestFallback()
         if EbonBuilds.EchoEligibilityEvidence then
             EbonBuilds.EchoEligibilityEvidence.ObserveChoiceBoard(
                 choices, EbonBuilds.EchoEligibilityEvidence.FLAG_OFFERED)
         end
         pendingChoices = choices
-        -- Stats: every genuinely new choice screen counts its offered echoes.
         local build = EbonBuilds.Build.GetActive()
         if build and build.stats and type(choices) == "table" then
             build.stats.echoesSeen = (build.stats.echoesSeen or 0) + #choices
         end
-        -- New choice screen: server state (isFrozen/isCarried) is now the
-        -- source of truth. Stale local freeze markers from the previous
-        -- screen would penalize and freeze-block whatever new echo happens
-        -- to sit at the same index.
         locallyFrozenIndices = {}
         freezeRoundActive = false
-        StartEvalTimer()
-    end
 
-    -- Post-hook UpdateSinglePerk: called after a banish replacement animates
-    -- the card. Start a fresh timer so automation can chain actions (e.g.
-    -- banish the replacement if it is also below threshold).
-    hooksecurefunc(PerkUI, "UpdateSinglePerk", function(perkIndex, perkData)
-        if EbonBuilds.EchoEligibilityEvidence then
-            EbonBuilds.EchoEligibilityEvidence.ObserveReplacement(perkIndex, perkData)
+        if ShouldSuppressNativeChoice() then
+            SuppressNativeChoiceSurface()
+            StartEvalTimer()
+        else
+            nativeChoiceSuppressed = false
         end
-        StartEvalTimer()
     end)
 
-    PerkUI._ebonBuildsHooked = true
+    if type(PerkUI.UpdateSinglePerk) == "function" then
+        hooksecurefunc(PerkUI, "UpdateSinglePerk", function(perkIndex, perkData)
+            if EbonBuilds.EchoEligibilityEvidence then
+                EbonBuilds.EchoEligibilityEvidence.ObserveReplacement(perkIndex, perkData)
+            end
+            CancelRequestFallback()
+            if ShouldSuppressNativeChoice() and HasCurrentChoice() then
+                -- A successful banish updates the card and then immediately
+                -- calls ResetSelection. That reset only re-enables the native
+                -- card controls; it is not a request failure. Mark the paired
+                -- reset so it cannot cancel the next Autopilot evaluation.
+                ExpectReplacementReset()
+                SuppressNativeChoiceSurface()
+                StartEvalTimer()
+            else
+                ClearReplacementResetPending()
+            end
+        end)
+    end
+
+    if type(PerkUI.Hide) == "function" then
+        hooksecurefunc(PerkUI, "Hide", function()
+            ClearReplacementResetPending()
+            CancelRequestFallback()
+            if EbonBuilds.Scheduler then EbonBuilds.Scheduler.Cancel("automation.evaluate") end
+            pendingChoices = nil
+            nativeChoiceSuppressed = false
+            HideNativeEchoTooltip()
+        end)
+    end
+
+    if type(PerkUI.ResetSelection) == "function" then
+        hooksecurefunc(PerkUI, "ResetSelection", function()
+            if replacementResetPending then
+                -- Successful banish sequence:
+                --   UpdateSinglePerk -> ResetSelection
+                -- Keep the evaluation scheduled by UpdateSinglePerk and undo
+                -- the mouse re-enable performed by the native reset. The old
+                -- implementation treated this as a rejection, exposed the
+                -- Show Echoes button, and cancelled Autopilot after one action.
+                ClearReplacementResetPending()
+                if ShouldSuppressNativeChoice() and HasCurrentChoice() then
+                    SuppressNativeChoiceSurface()
+                end
+                return
+            end
+
+            -- A reset without a preceding replacement is the public failure
+            -- path for a rejected select/banish request. Avoid an endless retry
+            -- loop and return the current board to the player.
+            CancelRequestFallback()
+            if EbonBuilds.Scheduler then EbonBuilds.Scheduler.Cancel("automation.evaluate") end
+            if HasCurrentChoice() then ShowNativeChoiceFallback() end
+        end)
+    end
+
+    if EbonBuilds.EventHub then
+        local function OnRuntimeChanged()
+            RefreshNativeChoiceGuard()
+            if HasCurrentChoice() and ShouldSuppressNativeChoice() then
+                pendingChoices = EbonBuilds.ProjectAPI.GetCurrentChoice()
+                StartEvalTimer()
+            else
+                CancelRequestFallback()
+            end
+        end
+        EbonBuilds.EventHub.On("BUILD_RUNTIME_CHANGED", OnRuntimeChanged, "Automation")
+        EbonBuilds.EventHub.On("ACTIVE_BUILD_CHANGED", OnRuntimeChanged, "Automation")
+    end
+    hookInstalled = true
+    return true
 end
 
 -- Exported for unit testing
@@ -810,4 +1097,8 @@ EbonBuilds.Automation._ResetFreezeRound  = function()
 end
 EbonBuilds.Automation._SetLocallyFrozenForTests = function(index)
     locallyFrozenIndices[index] = true
+end
+EbonBuilds.Automation._RefreshNativeChoiceGuardForTests = RefreshNativeChoiceGuard
+EbonBuilds.Automation._IsNativeChoiceSuppressedForTests = function()
+    return nativeChoiceSuppressed
 end

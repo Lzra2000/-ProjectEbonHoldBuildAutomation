@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/i18n/locales/ruRU.lua
 -- Russian translation. "build" translates to "билд", "Echo" to "эхо",
 -- automation actions (Banish/Reroll/Freeze/Select) and Autopilot stay in

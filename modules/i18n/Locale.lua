@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/i18n/Locale.lua
 -- Responsibility: string translation registry and lookup.
 --

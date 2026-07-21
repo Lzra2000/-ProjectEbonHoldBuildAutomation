@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/analytics/Aggregates.lua
 -- Incremental per-build/per-strategy summaries. Raw logs remain bounded.
 
@@ -125,20 +127,52 @@ end
 
 function Aggregates.Init()
     EbonBuildsDB.buildAggregates = EbonBuildsDB.buildAggregates or {}
-    local cursor = 1
-    local function Backfill()
-        local sessions = EbonBuildsDB.sessions or {}
-        local processed = 0
-        while cursor <= #sessions and processed < 8 do
-            local session = sessions[cursor]
-            if session and session.endTime then Aggregates.OnRunEnded(session) end
-            cursor = cursor + 1
-            processed = processed + 1
+    local started = false
+    local complete = false
+    local databaseReadyToken
+
+    local function Finish()
+        if complete then return false end
+        complete = true
+        if databaseReadyToken and EbonBuilds.EventHub then
+            EbonBuilds.EventHub.Off(databaseReadyToken)
+            databaseReadyToken = nil
         end
-        if cursor <= #sessions then return 0.05 end
         if EbonBuilds.Database then EbonBuilds.Database.SchedulePrune() end
+        if EbonBuilds.EventHub then
+            EbonBuilds.EventHub.Bump("ANALYTICS_BACKFILL_COMPLETE")
+        end
         return false
     end
-    EbonBuilds.Scheduler.Every("aggregates.backfill", 0.2, Backfill,
-        EbonBuilds.Scheduler.MAINTENANCE, false)
+
+    local function StartBackfill()
+        if started then return end
+        started = true
+        local cursor = 1
+        local function Backfill()
+            local sessions = EbonBuildsDB.sessions or {}
+            local processed = 0
+            while cursor <= #sessions and processed < 8 do
+                local session = sessions[cursor]
+                if session and session.endTime then Aggregates.OnRunEnded(session) end
+                cursor = cursor + 1
+                processed = processed + 1
+            end
+            if cursor <= #sessions then return 0.05 end
+            return Finish()
+        end
+        EbonBuilds.Scheduler.Every("aggregates.backfill", 0.2, Backfill,
+            EbonBuilds.Scheduler.MAINTENANCE, false, "Aggregates")
+    end
+
+    Aggregates.IsBackfillComplete = function() return complete end
+
+    if EbonBuilds.Database and EbonBuilds.Database.IsReady and EbonBuilds.Database.IsReady() then
+        StartBackfill()
+    elseif EbonBuilds.EventHub then
+        databaseReadyToken = EbonBuilds.EventHub.On("DATABASE_READY", function()
+            StartBackfill()
+        end, "Aggregates")
+    end
+    return true
 end

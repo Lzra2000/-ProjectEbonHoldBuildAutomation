@@ -67,8 +67,8 @@ EbonBuilds.Build = {
 }
 EbonBuilds.ExportImport = { DecodeBuild = function() return nil, "fuzz" end, ImportBuild = function() return nil, "fuzz" end }
 
-dofile("core/RingBuffer.lua")
-dofile("modules/sync/Sync.lua")
+assert(loadfile("core/RingBuffer.lua"))("EbonBuilds", EbonBuilds)
+assert(loadfile("modules/sync/Sync.lua"))("EbonBuilds", EbonBuilds)
 
 local dispatch = EbonBuilds.Sync._DispatchAddonForTests
 local channel  = EbonBuilds.Sync._HandleChannelMessageForTests

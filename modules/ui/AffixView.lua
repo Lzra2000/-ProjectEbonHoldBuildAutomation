@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/AffixView.lua
 -- Shows the character's learned-affix status, fed by the server (see
 -- core/AffixServer.lua + modules/affix/Affix.lua) rather than guessed from

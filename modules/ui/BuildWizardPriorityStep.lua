@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/BuildWizardPriorityStep.lua
 -- Grouped, virtualized Echo priority selector for WoW 3.3.5a.
 -- One fixed row pool, one authoritative view state, no frame creation in

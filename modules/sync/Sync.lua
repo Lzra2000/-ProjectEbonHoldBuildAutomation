@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/sync/Sync.lua
 -- Responsibility: peer-to-peer build synchronisation.
 -- Discovery via hidden chat channel + known-peers fallback.
@@ -74,8 +76,8 @@ function EbonBuilds.Sync.SetVerboseLogEnabled(enabled)
     end
 end
 
-local syncFrame
 local syncChannelIndex
+local RefreshChannel
 local inflight = {}
 local sendQueue = EbonBuilds.RingBuffer.New(MAX_QUEUE_SIZE)
 local nextSendTime = 0
@@ -117,8 +119,30 @@ local function SyncTrace(msg)
     end
 end
 
-local function Log(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ccff[EbonBuilds Sync]|r " .. msg)
+local function ChatMessagesEnabled()
+    local settings = EbonBuildsDB and EbonBuildsDB.globalSettings
+    return not settings or settings.syncChatMessages ~= false
+end
+
+function EbonBuilds.Sync.IsChatMessagesEnabled()
+    return ChatMessagesEnabled()
+end
+
+function EbonBuilds.Sync.SetChatMessagesEnabled(enabled)
+    EbonBuildsDB = EbonBuildsDB or {}
+    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
+    EbonBuildsDB.globalSettings.syncChatMessages = enabled and true or false
+end
+
+local function Log(msg, force)
+    if not force and not ChatMessagesEnabled() then return end
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ccff[EbonBuilds Sync]|r " .. msg)
+    end
+end
+
+local function CommandLog(msg)
+    Log(msg, true)
 end
 
 local function VerboseLog(msg)
@@ -265,7 +289,7 @@ local function HideChannelFromChat()
     end
 end
 
-local function RefreshChannel()
+RefreshChannel = function()
     local idx = FindSyncChannel()
     if idx and idx > 0 then
         if syncChannelIndex ~= idx then
@@ -358,21 +382,17 @@ local function AssembleBuild(sender, buildId, base64)
 
     EbonBuildsDB.remoteBuilds = EbonBuildsDB.remoteBuilds or {}
 
-    -- If the user already owns this build by UUID (e.g. they are the author),
-    -- update it in-place.
-    local existing = EbonBuildsDB.builds[buildId]
-    if existing then
-        local incomingDate = imported.lastModified or ""
-        local localDate   = existing.lastModified or ""
-        if incomingDate > localDate then
-            EbonBuilds.Build.UpdateFromPublic(existing, imported)
-            VerboseLog("Build " .. buildId .. " updated (incoming=" .. incomingDate .. " > local=" .. localDate .. ")")
-        end
-        return
-    end
+    -- Network data never mutates the local build collection. A UUID collision
+    -- is stored under a sender-qualified remote key and requires an explicit
+    -- user import/merge from the Public Builds view.
+    local localCollision = EbonBuildsDB.builds[buildId] ~= nil
+    local remoteKey = localCollision and (NormalizeName(sender) .. ":" .. buildId) or buildId
+    imported._sourceBuildId = buildId
+    imported._transportSender = sender
+    imported._claimedAuthor = imported.author
 
-    -- Store in remote builds (market), not in local collection
-    local rb = EbonBuildsDB.remoteBuilds[buildId]
+    -- Store in remote builds (market), not in local collection.
+    local rb = EbonBuildsDB.remoteBuilds[remoteKey]
     if rb then
         rb._lastSeenAt = time()
         local incomingDate = imported.lastModified or ""
@@ -380,13 +400,13 @@ local function AssembleBuild(sender, buildId, base64)
         if incomingDate > storedDate then
             imported.id = buildId
             imported._lastSeenAt = time()
-            EbonBuildsDB.remoteBuilds[buildId] = imported
+            EbonBuildsDB.remoteBuilds[remoteKey] = imported
             VerboseLog("Build " .. buildId .. " updated in remote (incoming=" .. incomingDate .. ")")
         end
     else
         imported.id = buildId
         imported._lastSeenAt = time()
-        EbonBuildsDB.remoteBuilds[buildId] = imported
+        EbonBuildsDB.remoteBuilds[remoteKey] = imported
         VerboseLog("Build " .. buildId .. " stored in remote (author: " .. (imported.author or "?") .. ")")
     end
     EbonBuilds.Scheduler.After("database.pruneRemoteBuilds", 0.5,
@@ -625,7 +645,7 @@ local function HandleChannelMessage(msg, sender, _, channelName, _, _, _, channe
         end
     end
 
-    local ok, err = pcall(HandleRequest, parts[2], parts[3])
+    local ok, err = pcall(HandleRequest, sender, parts[3])
     if not ok then Log("HandleRequest error: " .. tostring(err)) end
 end
 
@@ -636,7 +656,7 @@ end
 local function HandleAddonREQ(payload, sender)
     local parts = {strsplit("|", payload)}
     if parts[1] ~= "REQ" then return end
-    local ok, err = pcall(HandleRequest, parts[2], parts[3])
+    local ok, err = pcall(HandleRequest, sender, parts[3])
     if not ok then Log("HandleAddonREQ error: " .. tostring(err)) end
 end
 
@@ -793,7 +813,7 @@ local function HandleEnd(payload, sender)
     EbonBuildsDB.lastSyncDate = SortableNow()
 
     local c = tonumber(count) or 0
-    if c > 0 then
+    if c > 0 and ChatMessagesEnabled() then
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
             "|cff19ff19EbonBuilds|r: Received %d build(s) from %s.", c, snd))
     end
@@ -940,9 +960,11 @@ local function HandleVersionPing(payload, sender)
     local mine = ParseVersion(OwnVersion())
     if not theirs or not mine or theirs <= mine then return end
     updateNoticeShown = true
-    DEFAULT_CHAT_FRAME:AddMessage(string.format(
-        "|cffffd100EbonBuilds:|r a newer version (%s) is in use around you. Download: |cff6ea3d9github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/releases|r",
-        payload:sub(5)))
+    if ChatMessagesEnabled() then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+            "|cffffd100EbonBuilds:|r a newer version (%s) is in use around you. Download: |cff6ea3d9github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/releases|r",
+            payload:sub(5)))
+    end
 end
 EbonBuilds.Sync._HandleVersionPingForTests = function(...) return HandleVersionPing(...) end
 
@@ -1109,40 +1131,26 @@ function EbonBuilds.Sync.Init()
     if EbonBuilds.Database and EbonBuilds.Database.GetCharacterPreference then
         VERBOSE_LOG = EbonBuilds.Database.GetCharacterPreference("syncVerboseLogEnabled")
     end
-    syncFrame = CreateFrame("Frame")
-    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-        -- spam-exempt: this frame's OnEvent legitimately fires very often
-        -- during active sync with many nearby players (every CHAT_MSG_ADDON
-        -- on the client reaches it, not just ours, plus real BLD/WNT/RTX
-        -- traffic) -- that's the feature working, not a bug.
-        EbonBuilds.Debug.ProtectScript(syncFrame, "Sync.EventFrame", true)
-    end
-    syncFrame:RegisterEvent("CHAT_MSG_ADDON")
-    syncFrame:RegisterEvent("CHAT_MSG_CHANNEL")
-    syncFrame:RegisterEvent("CHAT_MSG_SYSTEM")
-    syncFrame:RegisterEvent("PLAYER_LEVEL_UP")
-    syncFrame:SetScript("OnEvent", function(_, event, ...)
-        if event == "CHAT_MSG_ADDON" then
-            DispatchAddon(...)
-        elseif event == "CHAT_MSG_CHANNEL" then
-            HandleChannelMessage(...)
-        elseif event == "CHAT_MSG_SYSTEM" then
-            HandleSystemMessage(...)
-        elseif event == "PLAYER_LEVEL_UP" then
-            local newLevel = ...
-            if newLevel == 80 then
-                local build = EbonBuilds.Build.GetActive()
-                local session = EbonBuilds.Session and EbonBuilds.Session.GetActiveSession()
-                local sameStrategy = build and session and session.buildId == build.id
-                    and not session.mixedStrategy
-                    and (tonumber(session.strategyRevision) or 1) == (tonumber(build.strategyRevision) or 1)
-                if build and sameStrategy and not build.validated then
-                    build.validated = true
-                    VerboseLog("Build \"" .. (build.title or "?") .. "\" marked locally run-tested (reached level 80)")
-                end
+    -- spam-exempt (5th arg): both events legitimately fire very often during
+    -- active sync with many nearby players (every CHAT_MSG_ADDON on the
+    -- client reaches this listener, not just ours, plus real BLD/WNT/RTX
+    -- traffic) -- that's the feature working, not over-broad registration.
+    EbonBuilds.WoWEvents.On("CHAT_MSG_ADDON", function(_, ...) DispatchAddon(...) end, "Sync", false, true)
+    EbonBuilds.WoWEvents.On("CHAT_MSG_CHANNEL", function(_, ...) HandleChannelMessage(...) end, "Sync", false, true)
+    EbonBuilds.WoWEvents.On("CHAT_MSG_SYSTEM", function(_, ...) HandleSystemMessage(...) end, "Sync")
+    EbonBuilds.WoWEvents.On("PLAYER_LEVEL_UP", function(_, newLevel)
+        if newLevel == 80 then
+            local build = EbonBuilds.Build.GetActive()
+            local session = EbonBuilds.Session and EbonBuilds.Session.GetActiveSession()
+            local sameStrategy = build and session and session.buildId == build.id
+                and not session.mixedStrategy
+                and (tonumber(session.strategyRevision) or 1) == (tonumber(build.strategyRevision) or 1)
+            if build and sameStrategy and not build.validated then
+                build.validated = true
+                VerboseLog("Build \"" .. (build.title or "?") .. "\" marked locally run-tested (reached level 80)")
             end
         end
-    end)
+    end, "Sync")
     local function TickSync()
         local now = Now()
 
@@ -1280,29 +1288,29 @@ SLASH_EBBSYNC1 = "/ebbsync"
 SlashCmdList["EBBSYNC"] = function(cmd)
     cmd = strtrim(cmd or "")
     if cmd == "join" then
-        Log("To enable sync discovery, type: /join " .. SYNC_CHANNEL)
-        Log("After joining, reload with /reload or click Reload on Public Builds.")
+        CommandLog("To enable sync discovery, type: /join " .. SYNC_CHANNEL)
+        CommandLog("After joining, reload with /reload or click Reload on Public Builds.")
     elseif cmd == "status" then
         RefreshChannel()
         if syncChannelIndex and syncChannelIndex > 0 then
             local name = GetChannelName(syncChannelIndex)
-            Log("Sync channel: index=" .. syncChannelIndex .. " name=" .. tostring(name))
+            CommandLog("Sync channel: index=" .. syncChannelIndex .. " name=" .. tostring(name))
         else
-            Log("Sync channel not joined. Type /ebbsync join for help.")
+            CommandLog("Sync channel not joined. Type /ebbsync join for help.")
         end
     elseif cmd == "reset" then
         lastRequestTime = 0
         EbonBuildsDB.lastSyncDate = nil
         EbonBuildsDB.remoteBuilds = {}
-        Log("Sync cooldown and lastSyncDate reset. Remote builds cleared.")
+        CommandLog("Sync cooldown and lastSyncDate reset. Remote builds cleared.")
     elseif cmd == "verbose" then
         EbonBuilds.Sync.SetVerboseLogEnabled(not VERBOSE_LOG)
-        Log("Verbose logging " .. (VERBOSE_LOG and "enabled" or "disabled") .. ".")
+        CommandLog("Verbose logging " .. (VERBOSE_LOG and "enabled" or "disabled") .. ".")
     else
-        Log("EbonBuilds Sync commands:")
-        Log("  /ebbsync join    - Show how to join the sync channel")
-        Log("  /ebbsync status  - Show current sync channel status")
-        Log("  /ebbsync reset   - Reset sync cooldown timer")
-        Log("  /ebbsync verbose - Toggle verbose logging")
+        CommandLog("EbonBuilds Sync commands:")
+        CommandLog("  /ebbsync join    - Show how to join the sync channel")
+        CommandLog("  /ebbsync status  - Show current sync channel status")
+        CommandLog("  /ebbsync reset   - Reset sync cooldown timer")
+        CommandLog("  /ebbsync verbose - Toggle verbose logging")
     end
 end

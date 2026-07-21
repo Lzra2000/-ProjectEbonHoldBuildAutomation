@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/FAQView.lua
 -- In-game FAQ / "what's new" (/ebb faq): clean paginated window with one
 -- topic per page, plus a one-time chat notice when the version changes.

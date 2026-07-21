@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/recommendations/WizardDraft.lua
 -- Runtime-only, revisioned Build Wizard state keyed by versioned Echo refs.
 

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/ui/LoginPanel.lua
 -- Responsibility: the one-time panel shown after logging in. Two jobs:
 -- ask the DPS-tracking consent question introduced in 3.23 (existing
@@ -186,13 +188,9 @@ function EbonBuilds.LoginPanel.Show()
 end
 
 function EbonBuilds.LoginPanel.Init()
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_ENTERING_WORLD")
-    f:SetScript("OnEvent", function()
+    EbonBuilds.WoWEvents.On("PLAYER_ENTERING_WORLD", function()
         if shownThisSession then return end
         shownThisSession = true
-        if EbonBuilds.LoginPanel.ShouldShow() then
-            EbonBuilds.LoginPanel.Show()
-        end
-    end)
+        if EbonBuilds.LoginPanel.ShouldShow() then EbonBuilds.LoginPanel.Show() end
+    end, "LoginPanel")
 end

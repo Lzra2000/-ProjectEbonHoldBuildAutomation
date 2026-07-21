@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: core/Debug.lua
 -- Responsibility: ergonomic error-isolation, timing, and contract helpers
 -- built on core/ErrorLog.lua, plus a lightweight self-test registry so
@@ -99,21 +101,46 @@ end
 -- exempt since firing every frame is exactly what it's for.
 local SPAM_THRESHOLD = 120
 local SPAM_EXEMPT = { OnUpdate = true }
+local spamCounters = {} -- [key] = { windowStart, count, warned }
+
+-- CheckSpam(key): shared per-second call counter, keyed by any string the
+-- caller chooses to identify "this specific handler". Returns true exactly
+-- once per one-second window, the moment that key's call count first
+-- crosses SPAM_THRESHOLD -- callers record to the Error Log themselves,
+-- since the right message/source naming differs by caller (ProtectScript's
+-- frame+scriptType vs. core/WoWEvents.lua's event+owner). This is the one
+-- place the counting logic itself lives, so ProtectScript and WoWEvents
+-- (or any future dispatcher) can't drift into two different definitions of
+-- "too often".
+function D.CheckSpam(key)
+    local c = spamCounters[key]
+    if not c then
+        c = { windowStart = 0, count = 0, warned = false }
+        spamCounters[key] = c
+    end
+    local now = GetTime and GetTime() or 0
+    if now - c.windowStart >= 1 then
+        c.windowStart, c.count, c.warned = now, 0, false
+    end
+    c.count = c.count + 1
+    if c.count == SPAM_THRESHOLD and not c.warned then
+        c.warned = true
+        spamWarningCount = spamWarningCount + 1
+        return true
+    end
+    return false
+end
 
 -- Wraps an already-Protect()'d handler with per-second call counting.
 -- Warns (once per window, not once per call) the first time a window
--- crosses SPAM_THRESHOLD.
-local function WrapWithSpamDetection(protectedHandler, source, scriptType)
-    local windowStart, count, warned = 0, 0, false
+-- crosses SPAM_THRESHOLD. Keyed per-frame (not just per source string) --
+-- many unrelated frames share the same generic source, e.g. every
+-- Theme.CreateButton uses "Theme.Button", and those must not share a
+-- counter or one busy button would falsely implicate every other button.
+local function WrapWithSpamDetection(protectedHandler, source, scriptType, frameKey)
+    local key = frameKey .. "." .. source .. "." .. scriptType
     return function(...)
-        local now = GetTime and GetTime() or 0
-        if now - windowStart >= 1 then
-            windowStart, count, warned = now, 0, false
-        end
-        count = count + 1
-        if count == SPAM_THRESHOLD and not warned then
-            warned = true
-            spamWarningCount = spamWarningCount + 1
+        if D.CheckSpam(key) then
             EbonBuilds.ErrorLog.Record(source .. "." .. scriptType .. ".spam",
                 "fired " .. SPAM_THRESHOLD .. "+ times within 1 second -- check event registration scope")
         end
@@ -137,7 +164,7 @@ function D.ProtectScript(frame, source, spamExempt)
             local protectedHandler = EbonBuilds.ErrorLog.Protect(
                 (source or "?") .. "." .. tostring(scriptType), handler)
             if not spamExempt and not SPAM_EXEMPT[scriptType] then
-                protectedHandler = WrapWithSpamDetection(protectedHandler, source or "?", tostring(scriptType))
+                protectedHandler = WrapWithSpamDetection(protectedHandler, source or "?", tostring(scriptType), tostring(self))
             end
             handler = protectedHandler
         end

@@ -1,3 +1,5 @@
+local addonName, EbonBuilds = ...
+
 -- EbonBuilds: modules/app/Review.lua
 -- Lazy, evidence-bound post-run summary. It never invents causal prose.
 
