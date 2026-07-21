@@ -286,6 +286,14 @@ The dialog scrolls if it ever grows past the window (same fix as the FAQ window 
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
 ## Changelog
 
+### 3.71 (2026-07-21) -- New check: module dependency graph validated in CI, not just at runtime
+
+3.70's `core/Modules.lua` catches an unknown or circular module dependency the moment it's actually started -- but only at real runtime, module by module, as the boot pipeline reaches it. A typo'd dependency name could sit unnoticed until a player happened to load the addon and trigger that exact path.
+
+- `Modules.ValidateGraph()`: a pure, side-effect-free walk of the whole registered dependency graph (no module's `start` function is ever called), returning every unknown-reference or circular-dependency problem it finds.
+- New self-test calls the real `EbonBuilds.Start()` (the actual `core/Init.lua` registration list, not a hand-written stand-in) and validates the resulting graph -- runs in CI via `tests/test_selftests.lua` and live in-game via the Error Log window's Self-Tests button. Confirmed it actually catches a real problem by deliberately introducing a typo'd dependency name during testing, then reverting.
+- 22/22 self-tests now (was 21).
+
 ### 3.70 (2026-07-21) -- Core architecture refactor merged (PR #13), with unified spam detection
 
 A substantial contribution from ha99dfs and Juriz V, reviewed and integrated with the existing framework rather than merged as-is.

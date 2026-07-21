@@ -127,6 +127,46 @@ function Modules.IsFrozen()
     return frozen
 end
 
+-- ValidateGraph(): pure structural check over every currently-registered
+-- module's dependency list -- unknown dependency names and circular
+-- chains, with NO side effects (never calls a module's start function).
+-- Start()'s own cycle/unknown-dependency detection only fires at real
+-- runtime, module by module, as each one is actually started -- this
+-- exists so the whole graph can be checked once, headlessly, in CI,
+-- instead of a typo'd dependency name only surfacing when a player
+-- happens to load the addon.
+function Modules.ValidateGraph()
+    local problems = {}
+    local visitState = {} -- [name] = "visiting" | "done"
+
+    local function Visit(name, chain)
+        if visitState[name] == "done" then return end
+        if visitState[name] == "visiting" then
+            problems[#problems + 1] = "circular dependency: " .. table.concat(chain, " -> ") .. " -> " .. name
+            return
+        end
+        local descriptor = registry[name]
+        if not descriptor then
+            problems[#problems + 1] = "unknown module referenced as a dependency: " .. tostring(name)
+            return
+        end
+        visitState[name] = "visiting"
+        chain[#chain + 1] = name
+        local dependencies = descriptor.dependencies or {}
+        for index = 1, #dependencies do
+            Visit(dependencies[index], chain)
+        end
+        chain[#chain] = nil
+        visitState[name] = "done"
+    end
+
+    for index = 1, #order do
+        Visit(order[index], {})
+    end
+
+    return { ok = #problems == 0, problems = problems }
+end
+
 function Modules.ResetForTests()
     for key in pairs(registry) do registry[key] = nil end
     for key in pairs(state) do state[key] = nil end

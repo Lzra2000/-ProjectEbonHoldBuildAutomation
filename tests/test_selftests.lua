@@ -330,6 +330,24 @@ EbonBuilds.Debug.RegisterTest("Theme.CreateButton buttons are auto-protected", f
     if not ok then error("a Theme.CreateButton OnClick handler was not auto-protected") end
 end)
 
+-- core/Modules.lua's Start() only catches an unknown/circular dependency
+-- at real runtime, module by module, as each one actually gets started --
+-- a typo'd dependency name could otherwise go unnoticed until a player
+-- happens to load the addon. EbonBuilds.Start() runs the real
+-- RegisterModules() registration (core/Init.lua) against the real
+-- module list, so this checks the actual production graph, not a
+-- hand-written stand-in for it.
+EbonBuilds.Debug.RegisterTest("Module dependency graph has no unknown or circular dependencies", function()
+    if not (EbonBuilds.Start and EbonBuilds.Modules and EbonBuilds.Modules.ValidateGraph) then
+        error("EbonBuilds.Start/Modules.ValidateGraph not available -- can't validate the module graph")
+    end
+    EbonBuilds.Start()
+    local result = EbonBuilds.Modules.ValidateGraph()
+    if not result.ok then
+        error("module dependency graph problems:\n  " .. table.concat(result.problems, "\n  "))
+    end
+end)
+
 local summary = EbonBuilds.Debug.RunSelfTests()
 for _, result in ipairs(summary.results) do
     if not result.ok then
