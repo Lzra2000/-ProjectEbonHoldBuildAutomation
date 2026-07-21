@@ -436,18 +436,20 @@ do
 end
 print("Verified Logbook search and filter controls use unclipped shared dimensions.")
 
--- The collapsed Autopilot scroll child must extend below the advanced toggle.
--- A 560 px child clipped the bottom four pixels of the 24 px button anchored
--- at y=-540, making its lower border and text appear cut off at the bottom.
+-- The collapsed Autopilot scroll child must expose both addon-wide feature
+-- toggles and the advanced-controls button without clipping.
 do
     local file = assert(io.open("modules/ui/SettingsView.lua", "r"))
     local source = NormalizeNewlines(file:read("*a"))
     file:close()
     local required = {
         "local ADVANCED_TOGGLE_H = 26",
-        "local COLLAPSED_HEIGHT = 580",
+        "local COLLAPSED_HEIGHT = 732",
+        'BuildGlobalFeaturesPanel(scrollChild, -540)',
+        'Theme.CreateCheckbox(panel, "Sync chat messages")',
+        'Theme.CreateCheckbox(panel, "Tome Atlas map integration")',
         "advancedButton:SetSize(190, ADVANCED_TOGGLE_H)",
-        'advancedButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -540)',
+        'advancedButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -692)',
     }
     for _, token in ipairs(required) do
         if not source:find(token, 1, true) then
@@ -456,7 +458,7 @@ do
         end
     end
 end
-print("Verified the collapsed Autopilot view fully exposes the advanced-controls toggle.")
+print("Verified the Settings tab exposes addon-wide feature toggles and the advanced-controls button.")
 
 -- All long-form panels use the shared 3.3.5a-safe wheel router. It must
 -- move away from both boundaries, and the affected panels must bind their

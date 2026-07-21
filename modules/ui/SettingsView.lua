@@ -77,6 +77,7 @@ local statLabels = {}
 local actionControls = {}
 local modelButtons = {}
 local advancedButton, advancedPanel
+local syncChatMessagesCheckbox, tomeAtlasMapCheckbox
 local guardControl, penaltyControl
 local familyButtons = {}
 local familyWarning
@@ -87,8 +88,8 @@ local suppressWrite = false
 local cachedStats = { peak = 0, peakName = nil, mean = 0, evBest3 = 0 }
 
 local ADVANCED_TOGGLE_H = 26
-local COLLAPSED_HEIGHT = 580 -- toggle bottom at 566 plus visible bottom padding
-local EXPANDED_HEIGHT = 1035
+local COLLAPSED_HEIGHT = 732 -- includes the addon-wide feature controls above Advanced
+local EXPANDED_HEIGHT = 1187
 
 ------------------------------------------------------------------------
 -- State helpers
@@ -96,6 +97,43 @@ local EXPANDED_HEIGHT = 1035
 
 local function Settings()
     return EbonBuilds.BuildForm.GetEditingSettings()
+end
+
+local function GlobalSettings()
+    EbonBuildsDB = EbonBuildsDB or {}
+    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
+    local settings = EbonBuildsDB.globalSettings
+    if settings.syncChatMessages == nil then settings.syncChatMessages = true end
+    if settings.tomeAtlasMapEnabled == nil then settings.tomeAtlasMapEnabled = true end
+    return settings
+end
+
+local function SyncChatMessagesEnabled()
+    if EbonBuilds.Sync and EbonBuilds.Sync.IsChatMessagesEnabled then
+        return EbonBuilds.Sync.IsChatMessagesEnabled() ~= false
+    end
+    return GlobalSettings().syncChatMessages ~= false
+end
+
+local function TomeAtlasMapEnabled()
+    if EbonBuilds.WorldIntegration and EbonBuilds.WorldIntegration.IsMapEnabled then
+        return EbonBuilds.WorldIntegration.IsMapEnabled() ~= false
+    end
+    return GlobalSettings().tomeAtlasMapEnabled ~= false
+end
+
+local function SetSyncChatMessagesEnabled(enabled)
+    GlobalSettings().syncChatMessages = enabled and true or false
+    if EbonBuilds.Sync and EbonBuilds.Sync.SetChatMessagesEnabled then
+        EbonBuilds.Sync.SetChatMessagesEnabled(enabled)
+    end
+end
+
+local function SetTomeAtlasMapEnabled(enabled)
+    GlobalSettings().tomeAtlasMapEnabled = enabled and true or false
+    if EbonBuilds.WorldIntegration and EbonBuilds.WorldIntegration.SetMapEnabled then
+        EbonBuilds.WorldIntegration.SetMapEnabled(enabled)
+    end
 end
 
 local function EditingBuild()
@@ -696,6 +734,35 @@ local function AddBannedEcho(name, spellId)
     PersistSettings()
 end
 
+local function BuildGlobalFeaturesPanel(parent, y)
+    local panel = Theme.CreateSection(parent, "Addon-wide features",
+        "These controls affect the whole addon, not only the build currently being edited.")
+    panel:SetPoint("TOPLEFT", parent, "TOPLEFT", 4, y)
+    panel:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -4, y)
+    panel:SetHeight(132)
+
+    syncChatMessagesCheckbox = Theme.CreateCheckbox(panel, "Sync chat messages")
+    syncChatMessagesCheckbox:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -54)
+    syncChatMessagesCheckbox:SetScript("OnClick", function(self)
+        SetSyncChatMessagesEnabled(self:GetChecked() and true or false)
+    end)
+    Theme.AttachTooltip(syncChatMessagesCheckbox, "Sync chat messages",
+        "Shows passive EbonBuilds Sync status, transfer, and update notices in chat. Explicit slash-command replies remain visible.")
+
+    tomeAtlasMapCheckbox = Theme.CreateCheckbox(panel, "Tome Atlas map integration")
+    tomeAtlasMapCheckbox:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -88)
+    tomeAtlasMapCheckbox:SetScript("OnClick", function(self)
+        SetTomeAtlasMapEnabled(self:GetChecked() and true or false)
+    end)
+    Theme.AttachTooltip(tomeAtlasMapCheckbox, "Tome Atlas map integration",
+        "Shows Tome Atlas highlights, source lists, pins, and legends on the world map. The Tome Atlas window and collected data remain available.")
+end
+
+local function RefreshGlobalFeatureControls()
+    if syncChatMessagesCheckbox then syncChatMessagesCheckbox:SetChecked(SyncChatMessagesEnabled()) end
+    if tomeAtlasMapCheckbox then tomeAtlasMapCheckbox:SetChecked(TomeAtlasMapEnabled()) end
+end
+
 local function BuildAdvancedPanel(parent, y)
     local panel = Theme.CreateSection(parent, "Advanced controls", "Smart is right for virtually everyone -- these exist for builds tuned before Smart existed, or genuine exceptions.")
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", 4, y)
@@ -870,6 +937,7 @@ function View.Refresh()
     RefreshStatsDisplay()
     RefreshProfileDisplay()
     RefreshActionControls()
+    RefreshGlobalFeatureControls()
     RefreshAdvanced()
     RefreshAdvancedVisibility()
 end
@@ -939,9 +1007,11 @@ local function BuildViewFrame(parent)
     actionControls.reroll = CreatePercentControl(scrollChild, ACTIONS[2], -362)
     actionControls.freeze = CreatePercentControl(scrollChild, ACTIONS[3], -452)
 
+    BuildGlobalFeaturesPanel(scrollChild, -540)
+
     advancedButton = Theme.CreateButton(scrollChild)
     advancedButton:SetSize(190, ADVANCED_TOGGLE_H)
-    advancedButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -540)
+    advancedButton:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 4, -692)
     advancedButton:SetText("Show advanced controls")
     advancedButton:SetScript("OnClick", function()
         advancedExpanded = not advancedExpanded
@@ -949,7 +1019,7 @@ local function BuildViewFrame(parent)
     end)
     Theme.AttachTooltip(advancedButton, "Advanced controls", "Reveal the decision model, classic guard, freeze penalty, protected families, explicit bans, and fallback behavior.")
 
-    BuildAdvancedPanel(scrollChild, -572)
+    BuildAdvancedPanel(scrollChild, -724)
     Theme.BindScrollWheel(scrollFrame, scrollBar, 30, scrollChild)
     scrollChild:SetWidth(math.max(610, scrollFrame:GetWidth() or 0))
     return frame
