@@ -2,21 +2,27 @@ name: Checks
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
-    branches: ["**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install toolchain
         run: sh scripts/dev-setup.sh
 
-      - name: Run scripts/check.sh (syntax, test suite, .toc verification, 3.3.5a API check)
+      - name: Run scripts/check.sh (syntax, test suite, .toc verification, 3.3.5a API check, file headers)
         run: sh scripts/check.sh
 
-      - name: Verify dist/EbonBuilds.zip builds cleanly
+      - name: Verify dist zip builds cleanly
         run: sh scripts/build-dist.sh
