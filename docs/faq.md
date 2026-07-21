@@ -1,6 +1,6 @@
 # EbonBuilds — FAQ
 
-*This file is updated with every release. Latest version: 3.73 — also available in-game via Settings (gear icon) under Windows & Tools. Release history lives in [CHANGELOG.md](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CHANGELOG.md).*
+*This file is updated with every release. Latest version: 3.74 — also available in-game via Settings (gear icon) under Windows & Tools. Release history lives in [CHANGELOG.md](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CHANGELOG.md).*
 
 ---
 
