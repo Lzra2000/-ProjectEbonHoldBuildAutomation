@@ -3,6 +3,9 @@
 
 unpack = unpack or table.unpack
 
+EbonBuildsDB = EbonBuildsDB or {}
+EbonBuildsCharDB = EbonBuildsCharDB or {}
+
 local function Noop() end
 local function NewObject()
     return setmetatable({}, {
@@ -117,7 +120,7 @@ local function Bor(a, b)
     return result
 end
 
-bit = { band = Band, bor = Bor }
+bit = { band = Band, bor = Bor, bnot = function(value) return 4294967295 - (tonumber(value) or 0) end }
 ProjectEbonhold = {
     PerkDatabase = {},
     PerkService = {},
@@ -691,15 +694,19 @@ do
 
     local originalDatabase = ProjectEbonhold.PerkDatabase
     local originalOwned = EbonBuilds.BuildOverview.GetOwnedEchoSets
+    local originalAfter = EbonBuilds.Scheduler.After
+    EbonBuilds.Scheduler.After = function(_, _, fn) fn(); return true end
     ProjectEbonhold.PerkDatabase = {
-        [100] = { quality = 2, classMask = 128, requiredSpell = 100100, families = {} },
-        [101] = { quality = 2, classMask = 128, requiredSpell = 100101, families = {} },
-        [102] = { quality = 2, classMask = 128, requiredSpell = 100102, families = {} },
+        [100] = { groupId = 9100, comment = "Spell 100 - Rare", quality = 2, classMask = 128, requiredSpell = 100100, families = {} },
+        [101] = { groupId = 9101, comment = "Spell 101 - Rare", quality = 2, classMask = 128, requiredSpell = 100101, families = {} },
+        [102] = { groupId = 9102, comment = "Spell 102 - Rare", quality = 2, classMask = 128, requiredSpell = 100102, families = {} },
     }
+    EbonBuilds.EchoCatalog.Refresh("test_missing_view")
     EbonBuilds.BuildOverview.GetOwnedEchoSets = function()
         return { ["spell 101"] = true }, {}, { [101] = true }
     end
-    local fixtureBuild = {
+    local fixtureBuild = EbonBuilds.Build.NewObject({
+        title = "Missing view fixture",
         class = "MAGE",
         echoWeights = {
             ["Spell 100"] = { [2] = 5 },
@@ -708,7 +715,8 @@ do
         },
         settings = EbonBuilds.Build.DefaultSettings(),
         lockedEchoes = {},
-    }
+    })
+    EbonBuilds.Weights.MigrateBuild(fixtureBuild)
     local weightedCatalog = EbonBuilds.BuildOverview._ComputeMissingEchoes(fixtureBuild, false, true, true)
     local weightedMissingOnly = EbonBuilds.BuildOverview._ComputeMissingEchoes(fixtureBuild, false, false, true)
     if not weightedCatalog or #weightedCatalog ~= 2 or not weightedMissingOnly or #weightedMissingOnly ~= 1 then
@@ -720,6 +728,8 @@ do
         os.exit(1)
     end
     ProjectEbonhold.PerkDatabase = originalDatabase
+    EbonBuilds.EchoCatalog.Refresh("restore_missing_view")
+    EbonBuilds.Scheduler.After = originalAfter
     EbonBuilds.BuildOverview.GetOwnedEchoSets = originalOwned
 end
 print("Verified weighted-missing default and alternate Missing views.")
@@ -1153,6 +1163,16 @@ print("Initialized primary UI with WoW API stubs successfully.")
 
 -- Exercise the redesigned views once with representative build/session data.
 local analyticsOK, analyticsErr = xpcall(function()
+    local analyticsOriginalDatabase = ProjectEbonhold.PerkDatabase
+    local analyticsOriginalAfter = EbonBuilds.Scheduler.After
+    EbonBuilds.Scheduler.After = function(_, _, fn) fn(); return true end
+    ProjectEbonhold.PerkDatabase = {
+        [1] = { groupId = 9201, displayName = "Spell 1", comment = "Spell 1 - Epic", quality = 3, classMask = 128, requiredSpell = 0, families = { "Caster" } },
+        [2] = { groupId = 9202, displayName = "Iron Constitution", comment = "Iron Constitution" .. string.char(0) .. "2", quality = 0, classMask = 128, requiredSpell = 0, families = { "Tank" } },
+    }
+    EbonBuilds.EchoCatalog.Refresh("test_analytics_view")
+    EbonBuilds.Scheduler.After = analyticsOriginalAfter
+
     local build = EbonBuilds.Build.Create({
         title = "Analytics Test",
         class = "MAGE",
@@ -1163,6 +1183,7 @@ local analyticsOK, analyticsErr = xpcall(function()
         },
         settings = EbonBuilds.Build.NewBuildSettings(),
     })
+    EbonBuilds.Weights.MigrateBuild(build)
     EbonBuilds.Build.SetActive(build.id)
     EbonBuildsDB.sessions = {
         {
@@ -1272,15 +1293,15 @@ local analyticsOK, analyticsErr = xpcall(function()
     EbonBuilds.StatsView._SetRecommendationSectionForTest("echo")
     local applied, applyError = EbonBuilds.StatsView._ApplyRecommendation(manualRecommendation)
     if not applied then error("Recommendation apply failed: " .. tostring(applyError)) end
-    if EbonBuilds.Weights.GetFromWeights(build.echoWeights, "Spell 1", 3) ~= 22 then
-        error("Recommendation apply did not update the intended rank")
+    if EbonBuilds.Weights.GetForRef(build, "g:9201", 3) ~= 22 then
+        error("Recommendation apply did not update the intended canonical rank")
     end
     local stillMatches = EbonBuilds.StatsView._CurrentRecommendationMatches(manualRecommendation, build)
     if stillMatches then error("Applied recommendation was not detected as stale") end
     local undone, undoError = EbonBuilds.StatsView._UndoRecentRecommendation()
     if not undone then error("Recommendation undo failed: " .. tostring(undoError)) end
-    if EbonBuilds.Weights.GetFromWeights(build.echoWeights, "Spell 1", 3) ~= 12 then
-        error("Recommendation undo did not restore the prior rank value")
+    if EbonBuilds.Weights.GetForRef(build, "g:9201", 3) ~= 12 then
+        error("Recommendation undo did not restore the prior canonical rank value")
     end
 
     local refreshedRecommendations = EbonBuilds.StatsView._EnsureRecommendations()
@@ -1500,6 +1521,11 @@ local analyticsOK, analyticsErr = xpcall(function()
     EbonBuilds.SessionHistory.RefreshLogView()
     EbonBuilds.SessionHistory.ShowDecisionDetail(EbonBuildsDB.sessions[1].logs[2])
     EbonBuilds.SessionHistory.OpenWithFilters({ echoName = "Spell 1", action = "Select", importantOnly = false })
+
+    EbonBuilds.Scheduler.After = function(_, _, fn) fn(); return true end
+    ProjectEbonhold.PerkDatabase = analyticsOriginalDatabase
+    EbonBuilds.EchoCatalog.Refresh("restore_analytics_view")
+    EbonBuilds.Scheduler.After = analyticsOriginalAfter
 end, debug.traceback)
 if not analyticsOK then
     io.stderr:write("ANALYTICS UI FAIL: " .. tostring(analyticsErr) .. "\n")
