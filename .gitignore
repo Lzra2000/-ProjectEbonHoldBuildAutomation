@@ -17,3 +17,4 @@ SavedVariables/
 *.zip
 /dist/
 /build/
+site/

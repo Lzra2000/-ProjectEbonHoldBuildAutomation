@@ -4,11 +4,11 @@
 #
 # Included: EbonBuilds.toc, core/, modules/, media/ -- everything the .toc
 # actually loads plus custom textures. The in-game FAQ ships as the
-# generated modules/data/FAQContent.lua; the 178 KB FAQ.md source stays
-# repo-only.
+# generated modules/data/FAQContent.lua; its sources (docs/faq.md,
+# CHANGELOG.md) stay repo-only.
 # Excluded: repo/dev-only files that don't belong in an installed addon --
-# FAQ.md, READMEs (all locales), tests/, .github/, .gitignore, .git,
-# dist/ itself, and scripts/.
+# docs/, CHANGELOG.md, READMEs (all locales), tests/, .github/,
+# .gitignore, .git, dist/ itself, and scripts/.
 set -eu
 cd "$(dirname "$0")/.."
 

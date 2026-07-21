@@ -3,7 +3,8 @@ local addonName, EbonBuilds = ...
 -- EbonBuilds: modules/ui/FAQView.lua
 -- In-game FAQ / "what's new" (/ebb faq): clean paginated window with one
 -- topic per page, plus a one-time chat notice when the version changes.
--- Content is generated from FAQ.md at release time (build-faq-pages.sh).
+-- Content is generated from docs/faq.md + CHANGELOG.md at release time
+-- (scripts/build-faq-pages.sh).
 
 EbonBuilds.FAQ = {}
 
@@ -14,11 +15,12 @@ local R = "|r"
 -- Pages (one topic each, kept short enough to fit without scrolling)
 ------------------------------------------------------------------------
 
--- Pages are GENERATED from FAQ.md by scripts/build-faq-pages.sh (run
+-- Pages are GENERATED from docs/faq.md + CHANGELOG.md by
+-- scripts/build-faq-pages.sh (run
 -- by release.sh), so the in-game FAQ can no longer drift from the
 -- shipped document -- it had been showing 2.99 content at 3.30.
 local PAGES = (EbonBuilds.FAQContent and EbonBuilds.FAQContent.PAGES) or {
-    { title = "FAQ unavailable", lines = { "FAQ content failed to load; see FAQ.md on GitHub." } },
+    { title = "FAQ unavailable", lines = { "FAQ content failed to load; see docs/faq.md on GitHub." } },
 }
 local CATEGORIES = (EbonBuilds.FAQContent and EbonBuilds.FAQContent.CATEGORIES) or {}
 

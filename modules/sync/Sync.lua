@@ -962,7 +962,7 @@ local function HandleVersionPing(payload, sender)
     updateNoticeShown = true
     if ChatMessagesEnabled() then
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
-            "|cffffd100EbonBuilds:|r a newer version (%s) is in use around you. Download: |cff6ea3d9github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/releases|r",
+            "|cffffd100EbonBuilds:|r a newer version (%s) is in use around you. Download: |cff6ea3d9github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases|r",
             payload:sub(5)))
     end
 end

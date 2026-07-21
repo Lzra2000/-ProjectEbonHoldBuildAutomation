@@ -4,8 +4,9 @@
 #
 #   sh scripts/check.sh
 #
-# Requires: lua5.1 (syntax check), texlua from texlive-binaries (test suite).
-# See scripts/dev-setup.sh to install both.
+# Requires: lua5.1 (syntax check AND test suite -- the tests run on the
+# same Lua version as the WoW 3.3.5a client, so version-semantics bugs
+# can't hide behind a different runtime). See scripts/dev-setup.sh.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -27,11 +28,7 @@ done < /tmp/ebb_lua_files.txt
 if [ "$fail" -eq 0 ]; then echo "OK: no syntax errors"; else overall_fail=1; fi
 
 echo ""
-echo "== 2/5  Test suite (tests/run.sh) =="
-if ! command -v texlua >/dev/null 2>&1; then
-    echo "texlua not found -- run: sh scripts/dev-setup.sh" >&2
-    exit 1
-fi
+echo "== 2/5  Test suite (tests/run.sh, on lua5.1 -- the client's runtime) =="
 if sh tests/run.sh; then
     echo "OK: test suite passed"
 else

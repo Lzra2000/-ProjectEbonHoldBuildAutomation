@@ -8,8 +8,8 @@
 #   GITHUB_TOKEN=ghp_xxx sh scripts/publish-github-release.sh 3.06
 #
 # Pulls the release title/notes straight from the matching "### <version>"
-# section of FAQ.md, so run this after scripts/release.sh (which requires
-# that section to exist) and after pushing the tag.
+# section of CHANGELOG.md, so run this after scripts/release.sh (which
+# requires that section to exist) and after pushing the tag.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -46,10 +46,10 @@ NOTES="$(awk -v ver="^### $VERSION " '
     $0 ~ ver { found=1; print; next }
     found && /^### / { exit }
     found { print }
-' FAQ.md)"
+' CHANGELOG.md)"
 
 if [ -z "$NOTES" ]; then
-    echo "No '### $VERSION' section found in FAQ.md -- add a changelog entry first." >&2
+    echo "No '### $VERSION' section found in CHANGELOG.md -- add a changelog entry first." >&2
     exit 1
 fi
 

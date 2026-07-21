@@ -1,0 +1,36 @@
+site_name: EbonBuilds
+site_description: WoW 3.3.5a addon for ProjectEbonhold -- echo pick automation
+site_url: https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/
+repo_url: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation
+repo_name: Lzra2000/ProjectEbonHoldBuildAutomation
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: teal
+      accent: amber
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - content.action.edit
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Settings: settings.md
+  - FAQ: faq.md
+  - Localization: localization.md
+  - Development: development.md
+  - Troubleshooting: troubleshooting.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true

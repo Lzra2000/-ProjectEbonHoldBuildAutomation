@@ -1,6 +1,6 @@
 ## Something visibly failed
 
-Settings -> Windows & Tools -> **Error log**. If an error was caught, it's there with a stack trace -- paste it into a [bug report](https://github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/issues/new/choose). An empty error log next to something clearly broken is useful information too: say so in the report, it may point at a handler that isn't error-wrapped yet.
+Settings -> Windows & Tools -> **Error log**. If an error was caught, it's there with a stack trace -- paste it into a [bug report](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/new/choose). An empty error log next to something clearly broken is useful information too: say so in the report, it may point at a handler that isn't error-wrapped yet.
 
 ## A button does nothing
 

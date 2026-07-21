@@ -2,7 +2,7 @@ name: Release
 
 # Publishes the GitHub Release for a pushed v* tag: runs the full check
 # suite, builds dist/EbonBuilds.zip, pulls the release notes from the
-# matching "### <version>" section of FAQ.md (same convention
+# matching "### <version>" section of CHANGELOG.md (same convention
 # scripts/release.sh enforces), and uploads the zip as a release asset.
 # Replaces the local publish step that used a personal token
 # (scripts/publish-github-release.sh remains as a manual fallback).
@@ -32,16 +32,16 @@ jobs:
       - name: Build dist zip
         run: sh scripts/build-dist.sh
 
-      - name: Extract release notes from FAQ.md
+      - name: Extract release notes from CHANGELOG.md
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v ver="^### $VERSION " '
               $0 ~ ver { found=1; print; next }
               found && /^### / { exit }
               found { print }
-          ' FAQ.md > /tmp/notes_raw.md
+          ' CHANGELOG.md > /tmp/notes_raw.md
           if [ ! -s /tmp/notes_raw.md ]; then
-              echo "::error::No '### $VERSION' section found in FAQ.md -- add a changelog entry before tagging." >&2
+              echo "::error::No '### $VERSION' section found in CHANGELOG.md -- add a changelog entry before tagging." >&2
               exit 1
           fi
           head -1 /tmp/notes_raw.md | sed 's/^### //' > /tmp/title.txt

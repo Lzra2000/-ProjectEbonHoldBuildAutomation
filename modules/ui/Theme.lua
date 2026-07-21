@@ -65,13 +65,17 @@ end
 -- screen position. Keep the decision centralized for every themed control.
 local function CurrentRasterScale(frame)
     if frame and frame.GetEffectiveScale then
-        local effective = tonumber(frame:GetEffectiveScale())
+        -- Extra parens truncate to exactly one value: a stub or API quirk
+        -- returning zero values would otherwise crash Lua 5.1's tonumber()
+        -- ("value expected") -- 5.3 tolerated it, which is how the texlua
+        -- test runtime masked this for so long.
+        local effective = tonumber((frame:GetEffectiveScale()))
         if effective and effective > 0 then return effective end
     end
 
     local parentScale = 1
     if UIParent and UIParent.GetEffectiveScale then
-        parentScale = tonumber(UIParent:GetEffectiveScale()) or 1
+        parentScale = tonumber((UIParent:GetEffectiveScale())) or 1
     end
     return CurrentAddonScale() * parentScale
 end

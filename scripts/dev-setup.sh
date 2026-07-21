@@ -15,9 +15,9 @@ if [ "$(id -u)" != "0" ]; then
     fi
 fi
 
-echo "Installing lua5.1 (matches WotLK 3.3.5a's runtime), texlive-binaries (provides texlua, used by the test suite for Lua 5.3-style bitwise operators), and zip (dist packaging)..."
+echo "Installing lua5.1 (matches WotLK 3.3.5a's runtime -- syntax check, test suite, and FAQ page generation all run on it) and zip (dist packaging)..."
 $need_sudo apt-get update -qq
-$need_sudo apt-get install -y -qq lua5.1 texlive-binaries zip
+$need_sudo apt-get install -y -qq lua5.1 zip
 
 echo ""
 echo "Done. Verify with: sh scripts/check.sh"

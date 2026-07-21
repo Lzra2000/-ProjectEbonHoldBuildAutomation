@@ -1,6 +1,6 @@
 ## Install
 
-1. Download the latest `EbonBuilds.zip` from the [releases page](https://github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/releases/latest).
+1. Download the latest `EbonBuilds.zip` from the [releases page](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest).
 2. Extract it and put the `EbonBuilds` folder into `Interface/AddOns/`.
 3. Restart the game or `/reload`.
 

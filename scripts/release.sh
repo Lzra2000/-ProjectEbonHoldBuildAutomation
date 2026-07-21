@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Release helper enforcing the project's standing convention: every release
-# bumps EbonBuilds.toc's version, updates FAQ.md, passes the full check
-# suite, and is committed + tagged.
+# bumps EbonBuilds.toc's version, documents itself in CHANGELOG.md, passes
+# the full check suite, and is committed + tagged.
 #
 #   sh scripts/release.sh 3.06
 #
@@ -25,27 +25,27 @@ fi
 LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
 
 if [ -n "$LAST_TAG" ]; then
-    if git diff --quiet "$LAST_TAG" -- FAQ.md; then
-        echo "FAQ.md has not changed since $LAST_TAG." >&2
-        echo "Convention: every release documents its changes in FAQ.md (in-game via /ebb faq). Update it before releasing." >&2
+    if git diff --quiet "$LAST_TAG" -- CHANGELOG.md 2>/dev/null; then
+        echo "CHANGELOG.md has not changed since $LAST_TAG." >&2
+        echo "Convention: every release documents its changes in a '### <version>' CHANGELOG.md entry (shown in-game as What's New). Update it before releasing." >&2
         exit 1
     fi
 fi
 
-echo "== Bumping version: EbonBuilds.toc, FAQ.md header =="
+echo "== Bumping version: EbonBuilds.toc, docs/faq.md header =="
 if ! grep -q "^## Version:" EbonBuilds.toc; then
     echo "Could not find '## Version:' line in EbonBuilds.toc" >&2
     exit 1
 fi
 sed -i.bak "s/^## Version: .*/## Version: $NEW_VERSION/" EbonBuilds.toc && rm -f EbonBuilds.toc.bak
 
-if grep -q "Latest version: " FAQ.md; then
-    sed -i.bak "s/Latest version: [^ ]*/Latest version: $NEW_VERSION/" FAQ.md && rm -f FAQ.md.bak
+if grep -q "Latest version: " docs/faq.md; then
+    sed -i.bak "s/Latest version: [^ ]*/Latest version: $NEW_VERSION/" docs/faq.md && rm -f docs/faq.md.bak
 fi
 
 echo ""
 echo "== Running full check suite =="
-echo "== Regenerating in-game FAQ pages from FAQ.md =="
+echo "== Regenerating in-game FAQ pages from docs/faq.md + CHANGELOG.md =="
 sh scripts/build-faq-pages.sh
 sh scripts/check.sh
 
@@ -55,7 +55,7 @@ sh scripts/build-dist.sh
 
 echo ""
 echo "== Committing and tagging =="
-git add EbonBuilds.toc FAQ.md modules/data/FAQContent.lua
+git add EbonBuilds.toc CHANGELOG.md docs/faq.md modules/data/FAQContent.lua
 git commit -q -m "chore(release): bump version to $NEW_VERSION"
 git tag "v$NEW_VERSION" -m "v$NEW_VERSION"
 
