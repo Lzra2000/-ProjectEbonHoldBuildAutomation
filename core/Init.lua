@@ -5,7 +5,10 @@ local addonName, EbonBuilds = ...
 -- no internal service is published through the global environment.
 
 EbonBuilds.NAME = addonName
-EbonBuilds.VERSION = "3.53"
+-- Single source of truth for the version is EbonBuilds.toc (bumped by
+-- scripts/release.sh). The old hardcoded string here drifted 19 releases
+-- behind the TOC because release.sh never touched it.
+EbonBuilds.VERSION = (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) or "unknown"
 EbonBuilds.Runtime = EbonBuilds.Runtime or {}
 
 local started = false
