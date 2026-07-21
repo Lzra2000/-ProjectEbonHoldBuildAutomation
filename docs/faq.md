@@ -222,6 +222,12 @@ The build editor's **Character** tab has three focused views:
 The gear score is directional build guidance, not a best-in-slot verdict. Uncached saved items remain pending instead of being counted as zero or replaced with current equipment. **Adopt current snapshot** copies current gear, the complete talent-tree presentation/allocation, and glyphs into the editor draft only when the current character and edited build have the same class; a mismatch disables the action and explains why. Save commits the staged snapshot and Cancel discards it. Older rank-only snapshots are expanded automatically from the built-in 3.3.5a talent catalog, restoring their native names, icons, full trees, backgrounds, and prerequisite lines without changing the stored build.
 
 ## Sync, Sharing & Public Builds
+
+### Does shared community DPS data actually affect my recommendations now?
+Yes, since 3.76 -- and only in a specific, honest way. Previously, shared performance data was raw per-echo DPS averages pooled across players, which mixes everyone's gear, skill, and fight types together; it was collected but deliberately never allowed to influence anything. The addon now shares each player's **with/without deltas** instead: "my runs with this Echo average X more DPS than my runs without it." A delta is measured within one player, so their gear and skill sit on both sides of the comparison -- combining deltas across players is defensible in a way pooled raw DPS never was.
+
+Guardrails: only deltas that are reliable on the sender's own data get broadcast at all; community evidence needs at least two distinct players and the same per-side sample floors your local data must clear; it is only used for Echoes where you have **no reliable local samples yet** (your own data always wins); and any recommendation built on it says so explicitly, including how many players it came from. Sharing remains opt-in via the same consent setting as before.
+
 Sharing builds with other EbonBuilds players.
 
 ### What changed about syncing in 2.3?

@@ -110,6 +110,7 @@ modules/automation/DebugLog.lua
 modules/vendor/AutoSell.lua
 modules/automation/Calibration.lua
 modules/automation/EchoSamples.lua
+modules/automation/EchoDeltaSync.lua
 modules/automation/EchoPerformance.lua
 modules/automation/Automation.lua
 modules/automation/ManualTraining.lua

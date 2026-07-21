@@ -721,6 +721,14 @@ local function BuildRecommendations(build, manualSuggestions)
             else
                 reason = "Recorded DPS differs materially from similarly weighted Echoes."
             end
+            -- Community-sourced evidence is labeled as such: the player
+            -- should always be able to tell "my runs say" from "other
+            -- players' runs say".
+            if suggestion.evidence == "community-delta" then
+                local peers = tonumber(suggestion.peers)
+                reason = reason .. string.format(" Based on community data%s -- you have no reliable local samples for this Echo yet.",
+                    peers and string.format(" from %d players", peers) or "")
+            end
             AddRecommendation(out, {
                 kind = suggested > current and "RAISE PRIORITY" or "LOWER PRIORITY",
                 target = VisibleEchoName(suggestion.name) ~= "" and VisibleEchoName(suggestion.name) or "Echo priority",

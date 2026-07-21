@@ -628,6 +628,13 @@ local function HandleChannelMessage(msg, sender, _, channelName, _, _, _, channe
         end
         return
     end
+    if code == "PRD" then
+        if EbonBuilds.EchoDeltaSync and EbonBuilds.EchoDeltaSync.HandleBroadcast then
+            local ok, err = pcall(EbonBuilds.EchoDeltaSync.HandleBroadcast, decoded, sender)
+            if not ok then Log("EchoDeltaSync.HandleBroadcast error: " .. tostring(err)) end
+        end
+        return
+    end
     if code == "APR" then
         if EbonBuilds.Calibration and EbonBuilds.Calibration.HandleAppearanceBroadcast then
             local ok, err = pcall(EbonBuilds.Calibration.HandleAppearanceBroadcast, decoded, sender)

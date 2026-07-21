@@ -113,6 +113,9 @@ end
 function EbonBuilds.EchoPerformance.Clear()
     EbonBuildsCharDB.echoPerformance = {}
     EbonBuildsCharDB.echoPerformanceCommunity = {}
+    if EbonBuilds.EchoDeltaSync and EbonBuilds.EchoDeltaSync.Clear then
+        EbonBuilds.EchoDeltaSync.Clear()
+    end
     normalizedStoreRef = nil
     BumpRevision()
 end
@@ -408,6 +411,13 @@ local function SendOneBatch()
     local payload = EbonBuilds.EchoPerformance.SerializeBatch(build.class, batch)
     if not payload then return false end
     EbonBuilds.Sync.BroadcastPerfBatch(payload)
+    -- Transition dual-broadcast: one PRD batch (locally-reliable deltas
+    -- only) rides along with every legacy PRF batch. Old clients ignore
+    -- the unknown code; new clients prefer the delta evidence. PRF and
+    -- the legacy community store retire once the population upgrades.
+    if EbonBuilds.EchoDeltaSync and EbonBuilds.EchoDeltaSync.SendOneBatch then
+        EbonBuilds.EchoDeltaSync.SendOneBatch(BROADCAST_BATCH_SIZE)
+    end
     return true
 end
 
@@ -479,7 +489,7 @@ local WEIGHT_NUDGE = 10                      -- fixed, modest suggested adjustme
 -- an echo appears at all only when the evidence is reliable AND the
 -- echo is DPS-relevant (pure-utility echoes -- the mount-speed case --
 -- are excluded from attribution by design).
-function EbonBuilds.EchoPerformance.GetEvidenceStats()
+function EbonBuilds.EchoPerformance.GetEvidenceStats(class)
     local out = {}
     if not (EbonBuilds.EchoTableRows and EbonBuilds.EchoTableRows.BuildBestByName) then return out end
     for name in pairs(EbonBuilds.EchoTableRows.BuildBestByName()) do
@@ -492,6 +502,21 @@ function EbonBuilds.EchoPerformance.GetEvidenceStats()
                 nWith = d.nWith,
                 nWithout = d.nWithout,
             }
+        elseif class and kind == "insufficient" and EbonBuilds.EchoDeltaSync then
+            -- Local evidence isn't there yet -- the exact gap community
+            -- deltas exist to fill. Same reliability bar, and honestly
+            -- labeled so downstream/UI can tell the sources apart.
+            local c = EbonBuilds.EchoDeltaSync.CommunityDelta(class, name)
+            if c and c.reliable then
+                out[name] = {
+                    avgDPS = c.delta,
+                    sampleCount = math.min(c.nWith, c.nWithout),
+                    evidence = "community-delta",
+                    nWith = c.nWith,
+                    nWithout = c.nWithout,
+                    peers = c.peers,
+                }
+            end
         end
     end
     return out
@@ -499,7 +524,7 @@ end
 
 function EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
     if not build or not build.class or not EbonBuilds.EchoProjection then return {} end
-    local allStats = EbonBuilds.EchoPerformance.GetEvidenceStats()
+    local allStats = EbonBuilds.EchoPerformance.GetEvidenceStats(build.class)
 
     -- The canonical class projection is the only eligibility universe.
     local signatureCounts = {}
@@ -524,6 +549,8 @@ function EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
                 qualities = info.qualities,
                 avgDPS = perf.avgDPS,
                 sampleCount = perf.sampleCount,
+                evidence = perf.evidence,
+                peers = perf.peers,
                 sig = sig,
             }
         end
@@ -563,6 +590,8 @@ function EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
                         currentWeight = e.weight,
                         suggestedWeight = math.max(EbonBuilds.Weights.MIN_VALUE, math.min(EbonBuilds.Weights.MAX_VALUE, e.weight + delta)),
                         deviationPct = deviation * 100,
+                        evidence = e.evidence,
+                        peers = e.peers,
                         tierAvgDPS = tierAvg,
                         avgDPS = e.avgDPS,
                         sampleCount = e.sampleCount,
@@ -611,7 +640,7 @@ local BONUS_NUDGE = 3
 -- enough data across enough distinct tiers to say anything.
 function EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment(build)
     if not build or not build.class or not EbonBuilds.EchoProjection then return {} end
-    local allStats = EbonBuilds.EchoPerformance.GetEvidenceStats()
+    local allStats = EbonBuilds.EchoPerformance.GetEvidenceStats(build.class)
 
     local signatureCounts = {}
     local raw = {}
