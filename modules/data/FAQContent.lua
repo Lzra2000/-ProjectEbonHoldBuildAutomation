@@ -7,16 +7,19 @@ local addonName, EbonBuilds = ...
 
 EbonBuilds.FAQContent = { PAGES = {
 {
-    title = "What's new: 3.78 (2026-07-21) -- Internal: minimap icon now has a real source (no visible change)",
+    title = "What's new: 3.79 (2026-07-21) -- Fix: Inspect showed the build list through it, and only 8 priorities",
     category = "What's New",
     lines = {
         "",
-        "The minimap icon's pixels are unchanged -- this is repo housekeeping.",
-        "media/minimap_icon.tga existed only as a binary file with no source,",
-        "generated from scripts/generate-media.py now instead, using the exact",
-        "ring geometry the website's logo already defines. Also fixed two leftover",
-        "mentions of texlive-binaries in the setup docs, dropped from the",
-        "toolchain back in 3.73.",
+        "Reported right after 3.78 with a screenshot: opening Inspect on a public",
+        "build left the list visibly showing through underneath, and the",
+        "priorities section was capped at 8 flat text lines.",
+        "",
+        "- The Inspect panel now sits on a properly opaque top layer -- no more",
+        "list content bleeding through behind it.",
+        "- Priorities are shown the way the build editor shows them: an icon, the",
+        "name in its quality color, and the weight, for every configured priority",
+        "-- not just the top 8, and scrollable.",
     },
 },
 {
