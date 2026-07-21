@@ -52,6 +52,7 @@ local function SpecKeyForContext()
 end
 
 local function StoredSnapshot()
+    if mountedContext and mountedContext.readOnly then return mountedContext.snapshot end
     return EbonBuilds.BuildForm and EbonBuilds.BuildForm.GetEditingCharacterSnapshot
         and EbonBuilds.BuildForm.GetEditingCharacterSnapshot() or nil
 end
@@ -66,6 +67,7 @@ local function CurrentClassToken()
 end
 
 local function EditingClassToken()
+    if mountedContext and mountedContext.readOnly then return mountedContext.snapshotClass end
     return EbonBuilds.BuildForm and EbonBuilds.BuildForm.GetEditingClass
         and EbonBuilds.BuildForm.GetEditingClass() or nil
 end
@@ -76,6 +78,7 @@ local function ClassLabel(token)
 end
 
 local function CanAdoptCurrentCharacter()
+    if mountedContext and mountedContext.readOnly then return false, "READ_ONLY" end
     return EbonBuilds.CharacterSnapshot.CanApplyToClass(
         EditingClassToken(), CurrentClassToken())
 end
@@ -1606,6 +1609,11 @@ end
 ------------------------------------------------------------------------
 
 local function RefreshSnapshotStatus()
+    if mountedContext and mountedContext.readOnly then
+        if actionBar then actionBar:Hide() end
+        return
+    end
+    if actionBar then actionBar:Show() end
     local allowed = CanAdoptCurrentCharacter()
     if not allowed then
         adoptBtn:Disable()
@@ -1746,8 +1754,9 @@ function V.Mount(container, context)
     viewFrame:SetParent(container)
     viewFrame:ClearAllPoints()
     viewFrame:SetAllPoints(container)
-    local spec = EbonBuilds.BuildForm and EbonBuilds.BuildForm.GetEditingSpec
-        and tonumber(EbonBuilds.BuildForm.GetEditingSpec())
+    local spec = (context and context.readOnly) and tonumber(context.spec)
+        or (EbonBuilds.BuildForm and EbonBuilds.BuildForm.GetEditingSpec
+            and tonumber(EbonBuilds.BuildForm.GetEditingSpec()))
     if spec and spec >= 1 and spec <= 3 then TUI.activeTree = spec end
     TUI.selectedKey = nil
     MarkDirty("all")
@@ -1770,3 +1779,20 @@ V._AdoptForTests = function()
     if adoptBtn then adoptBtn:GetScript("OnClick")() end
 end
 V._SetSubviewForTests = function(name) ShowSubview(name) end
+V._SetMountedContextForTests = function(ctx) mountedContext = ctx end
+V._EditingClassTokenForTests = EditingClassToken
+V._StoredSnapshotForTests = StoredSnapshot
+V._CanAdoptCurrentCharacterForTests = CanAdoptCurrentCharacter
+
+if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
+    EbonBuilds.Debug.RegisterTest("CharacterView read-only mode sources class/snapshot from context, never offers Adopt", function()
+        local fakeSnapshot = { talents = {}, gear = {}, glyphs = {}, capturedAt = "test" }
+        V._SetMountedContextForTests({ readOnly = true, snapshotClass = "MAGE", snapshot = fakeSnapshot, spec = 2 })
+        if V._EditingClassTokenForTests() ~= "MAGE" then error("read-only class should come from context, not the editing session") end
+        if V._StoredSnapshotForTests() ~= fakeSnapshot then error("read-only snapshot should come from context, not the editing session") end
+        local allowed, reason = V._CanAdoptCurrentCharacterForTests()
+        if allowed ~= false or reason ~= "READ_ONLY" then error("adopting must never be offered while browsing someone else's build") end
+        V._SetMountedContextForTests(nil)
+        if V._EditingClassTokenForTests() == "MAGE" then error("context override must not leak once cleared") end
+    end)
+end

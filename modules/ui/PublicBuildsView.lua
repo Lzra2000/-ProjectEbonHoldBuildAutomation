@@ -66,7 +66,7 @@ end
 -- Filter dropdowns
 ------------------------------------------------------------------------
 
-local RefreshView, GetFilteredBuilds, ShowInspect
+local RefreshView, GetFilteredBuilds, ShowInspect, ShowCharacterDetail
 
 local function InitSpecDropdown()
     if not specDropdown then return end
@@ -535,6 +535,18 @@ local function BuildInspectFrame(parent)
     gearText:SetJustifyH("LEFT")
     f._gearText = gearText
 
+    -- Opens the full talent tree / gear paperdoll / glyphs view -- the
+    -- exact same renderer the build editor uses, mounted read-only
+    -- against this build's snapshot instead of the live character.
+    local viewCharBtn = EbonBuilds.Theme.CreateButton(f)
+    viewCharBtn:SetWidth(150)
+    viewCharBtn:SetHeight(20)
+    viewCharBtn:SetText("View full character")
+    f._viewCharBtn = viewCharBtn
+    viewCharBtn:SetScript("OnClick", function()
+        if f._build and ShowCharacterDetail then ShowCharacterDetail(f._build) end
+    end)
+
     local priLabel = EbonBuilds.Theme.CreateSectionLabel(f, "Weighted Priorities")
     f._priLabel = priLabel
 
@@ -691,6 +703,9 @@ local function LayoutInspectRows(f)
     end
     f._charLabel:ClearAllPoints()
     f._charLabel:SetPoint("TOPLEFT", f._lockedLabel, "BOTTOMLEFT", 0, -40)
+    f._viewCharBtn:ClearAllPoints()
+    f._viewCharBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, 0)
+    f._viewCharBtn:SetPoint("TOP", f._charLabel, "TOP", 0, 4)
     f._talentsText:ClearAllPoints()
     f._talentsText:SetPoint("TOPLEFT", f._charLabel, "BOTTOMLEFT", 0, -4)
     f._talentsText:SetPoint("RIGHT", f, "RIGHT", -18, 0)
@@ -699,6 +714,76 @@ local function LayoutInspectRows(f)
     f._gearText:SetPoint("RIGHT", f, "RIGHT", -18, 0)
     f._priLabel:ClearAllPoints()
     f._priLabel:SetPoint("TOPLEFT", f._gearText, "BOTTOMLEFT", 0, -14)
+end
+
+------------------------------------------------------------------------
+-- Character detail (full talent tree / gear paperdoll / glyphs)
+------------------------------------------------------------------------
+-- Mounts the SAME CharacterView the build editor uses -- not a
+-- hand-rolled approximation -- against this build's snapshot instead
+-- of the live character, via CharacterView's read-only mode (see
+-- modules/ui/CharacterView.lua: EditingClassToken/StoredSnapshot check
+-- mountedContext.readOnly first). One instance reused across opens;
+-- it's a singleton view like every other page in the addon, so Unmount
+-- on close hands it back cleanly for the next real editing session.
+
+local characterFrame, characterContainer
+
+local function BuildCharacterFrame(parent)
+    local f = CreateFrame("Frame", nil, parent)
+    EbonBuilds.Theme.ApplyBackdropDefinition(f)
+    f:SetBackdropColor(0, 0, 0, 0.94)
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel((parent:GetFrameLevel() or 0) + 40)
+
+    local closeBtn = EbonBuilds.Theme.CreateCloseButton(f)
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -8)
+    closeBtn:SetScript("OnClick", function()
+        if EbonBuilds.CharacterView and EbonBuilds.CharacterView.Unmount then
+            EbonBuilds.CharacterView.Unmount()
+        end
+        f:Hide()
+    end)
+
+    local header = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    header:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -14)
+    header:SetPoint("RIGHT", f, "RIGHT", -40, 0)
+    header:SetJustifyH("LEFT")
+    f._header = header
+
+    local container = CreateFrame("Frame", nil, f)
+    container:SetPoint("TOPLEFT", header, "BOTTOMLEFT", -4, -12)
+    container:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 12)
+    f._container = container
+
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(f, "PublicBuildsView.CharacterDetail")
+    end
+    f:Hide()
+    return f
+end
+
+ShowCharacterDetail = function(build)
+    if not (build and build.characterSnapshot and viewFrame) then return end
+    if not characterFrame then
+        characterFrame = BuildCharacterFrame(viewFrame)
+    end
+    local cc = CLASS_COLORS[build.class] or { 0.5, 0.5, 0.5 }
+    characterFrame._header:SetText((build.title or "Untitled") .. " |cff888888-- read-only|r")
+    characterFrame._header:SetTextColor(cc[1], cc[2], cc[3], 1)
+
+    if EbonBuilds.CharacterView and EbonBuilds.CharacterView.Mount then
+        EbonBuilds.CharacterView.Mount(characterFrame._container, {
+            readOnly = true,
+            snapshot = build.characterSnapshot,
+            snapshotClass = build.class,
+            spec = build.spec,
+        })
+    end
+
+    characterFrame:ClearAllPoints()
+    characterFrame:SetAllPoints(viewFrame)
+    characterFrame:Show()
 end
 
 -- ShowInspect(build): populates and shows the panel for one build.
@@ -753,13 +838,17 @@ ShowInspect = function(build)
         end
     end
 
+    inspectFrame._build = build
+
     local summary = CharacterSummary(build.characterSnapshot)
     if summary then
         inspectFrame._talentsText:SetText("|cffaaaaaaTalents:|r " .. summary.talentsText)
         inspectFrame._gearText:SetText("|cffaaaaaaGear:|r " .. summary.gearText)
+        inspectFrame._viewCharBtn:Enable()
     else
         inspectFrame._talentsText:SetText("|cff888888No character snapshot shared for this build.|r")
         inspectFrame._gearText:SetText("")
+        inspectFrame._viewCharBtn:Disable()
     end
 
     PopulateInspectPriorities(inspectFrame, build)
@@ -1186,6 +1275,16 @@ end
 
 function EbonBuilds.PublicBuildsView.Unmount()
     if viewFrame then viewFrame:Hide() end
+    -- Navigating away from Public Builds entirely while the character
+    -- detail overlay is open must hand CharacterView back cleanly --
+    -- otherwise it stays mounted read-only against a stale snapshot the
+    -- next time something else tries to use it.
+    if characterFrame and characterFrame:IsShown() then
+        if EbonBuilds.CharacterView and EbonBuilds.CharacterView.Unmount then
+            EbonBuilds.CharacterView.Unmount()
+        end
+        characterFrame:Hide()
+    end
 end
 
 local pendingRefresh = false
