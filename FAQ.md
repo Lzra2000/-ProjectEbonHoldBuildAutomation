@@ -286,6 +286,15 @@ The dialog scrolls if it ever grows past the window (same fix as the FAQ window 
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
 ## Changelog
 
+### 3.72 (2026-07-21) -- Error Log entries now capture a real call stack
+
+`core/ErrorLog.lua`'s `Protect()` only ever recorded the error message itself -- for anything more than a one-line "attempt to call a nil value", there was no way to see which chain of calls actually led there.
+
+- `Protect()` now uses `xpcall` instead of `pcall` so `debugstack()` (a WoW API function the addon had never used) can capture the real call stack from inside the error handler, before it unwinds. Lua 5.1's `xpcall` doesn't accept extra arguments for the protected function (that's a 5.2+ addition), so the call arguments are captured in a closure instead.
+- Stored separately from the message (`entry.stack`), so the compact one-line-per-error view is unchanged by default.
+- New **Stacks** checkbox in the Error Log window shows them inline, indented under each entry, when you actually want to dig in.
+- 1 new self-test (23/23 total).
+
 ### 3.71 (2026-07-21) -- New check: module dependency graph validated in CI, not just at runtime
 
 3.70's `core/Modules.lua` catches an unknown or circular module dependency the moment it's actually started -- but only at real runtime, module by module, as the boot pipeline reaches it. A typo'd dependency name could sit unnoticed until a player happened to load the addon and trigger that exact path.

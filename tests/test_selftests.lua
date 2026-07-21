@@ -89,6 +89,7 @@ function UnitClass() return "Mage", "MAGE" end
 function UnitLevel() return 80 end
 function UnitGUID() return "GUID" end
 function GetTime() return 0 end
+function debugstack(level) return "selftest stack frame at level " .. tostring(level) end
 local profileClock = 0
 function debugprofilestop()
     profileClock = profileClock + 1
@@ -328,6 +329,26 @@ EbonBuilds.Debug.RegisterTest("Theme.CreateButton buttons are auto-protected", f
         btn:GetScript("OnClick")()
     end)
     if not ok then error("a Theme.CreateButton OnClick handler was not auto-protected") end
+end)
+
+EbonBuilds.Debug.RegisterTest("ErrorLog.Protect captures a stack trace via debugstack", function()
+    local protected = EbonBuilds.ErrorLog.Protect("selftest.stacktrace", function() error("boom with stack") end)
+    pcall(protected)
+    local errors = EbonBuilds.ErrorLog.GetAll()
+    if not errors[1] or not errors[1].stack then
+        error("Protect() did not capture a stack trace on the most recent error")
+    end
+    if not errors[1].stack:find("selftest stack frame", 1, true) then
+        error("captured stack did not come from the stubbed debugstack()")
+    end
+    local compact = EbonBuilds.ErrorLog.GetText()
+    if compact:find("selftest stack frame", 1, true) then
+        error("GetText() with no argument should not include stack traces by default")
+    end
+    local verbose = EbonBuilds.ErrorLog.GetText(true)
+    if not verbose:find("selftest stack frame", 1, true) then
+        error("GetText(true) should include stack traces")
+    end
 end)
 
 -- core/Modules.lua's Start() only catches an unknown/circular dependency
