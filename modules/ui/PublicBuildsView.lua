@@ -66,7 +66,7 @@ end
 -- Filter dropdowns
 ------------------------------------------------------------------------
 
-local RefreshView, GetFilteredBuilds
+local RefreshView, GetFilteredBuilds, ShowInspect
 
 local function InitSpecDropdown()
     if not specDropdown then return end
@@ -278,6 +278,25 @@ local function CreateCard(parent)
     importBtn:SetText("Import")
     card._importBtn = importBtn
 
+    -- Vote button (top-right). Shows the distinct-voter tally this
+    -- client has heard (see BuildVotes.lua's trust model); gold when
+    -- this character's own vote is among them.
+    local voteBtn = EbonBuilds.Theme.CreateButton(card)
+    voteBtn:SetWidth(58)
+    voteBtn:SetHeight(18)
+    voteBtn:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, -8)
+    card._voteBtn = voteBtn
+    EbonBuilds.Theme.AttachTooltip(voteBtn, "Upvote",
+        "Acknowledge a well-made build. One vote per character, click again to remove it. The number is how many distinct voters this client has heard from.")
+
+    -- The whole card opens the read-only inspect view.
+    card:SetScript("OnClick", function(self)
+        if self._build and ShowInspect then ShowInspect(self._build) end
+    end)
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(card, "PublicBuildsView.Card")
+    end
+
     if scrollFrame and scrollBar then
         EbonBuilds.Theme.BindScrollWheel(scrollFrame, scrollBar, 40, card)
     end
@@ -347,11 +366,257 @@ local function UpdateLocalBuild(localBuild, publicBuild)
 end
 
 ------------------------------------------------------------------------
+-- Inspect (read-only detail view, issue #8)
+------------------------------------------------------------------------
+-- A card's whole surface opens this: class/spec, the author's intent
+-- (their comments field), locked Echoes, and top configured priorities
+-- -- enough to make an informed vote or import decision without
+-- dropping into a full editor the browsing player doesn't own.
+
+local TOP_PRIORITY_COUNT = 8
+local inspectFrame
+
+local function TopPriorities(build)
+    if not (EbonBuilds.EchoProjection and EbonBuilds.Weights and EbonBuilds.Quality) then return {} end
+    local rows = {}
+    for _, info in ipairs(EbonBuilds.EchoProjection.GetAvailable(build.class) or {}) do
+        local best = 0
+        for _, quality in ipairs(EbonBuilds.Quality.ORDER or {}) do
+            if info.qualities and info.qualities[quality] then
+                local v = EbonBuilds.Weights.GetForRef(build, info.refKey, quality) or 0
+                if v > best then best = v end
+            end
+        end
+        if best > 0 then
+            rows[#rows + 1] = { name = info.displayName or info.name, weight = best }
+        end
+    end
+    table.sort(rows, function(a, b)
+        if a.weight ~= b.weight then return a.weight > b.weight end
+        return a.name < b.name
+    end)
+    local top = {}
+    for i = 1, math.min(TOP_PRIORITY_COUNT, #rows) do top[i] = rows[i] end
+    return top
+end
+
+EbonBuilds.PublicBuildsView._TopPrioritiesForTest = TopPriorities
+
+local function BuildInspectFrame(parent)
+    local f = CreateFrame("Frame", nil, parent)
+    EbonBuilds.Theme.ApplyBackdropDefinition(f)
+    f:SetBackdropColor(0, 0, 0, 0.92)
+    f:SetFrameLevel((parent:GetFrameLevel() or 0) + 20)
+
+    local closeBtn = EbonBuilds.Theme.CreateCloseButton(f)
+    closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -8)
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    local classIcon = f:CreateTexture(nil, "ARTWORK")
+    classIcon:SetWidth(36)
+    classIcon:SetHeight(36)
+    classIcon:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -16)
+    f._classIcon = classIcon
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", classIcon, "TOPRIGHT", 10, -2)
+    title:SetPoint("RIGHT", f, "RIGHT", -100, 0)
+    title:SetJustifyH("LEFT")
+    f._title = title
+
+    local meta = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    meta:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    meta:SetPoint("RIGHT", f, "RIGHT", -100, 0)
+    meta:SetJustifyH("LEFT")
+    f._meta = meta
+
+    local voteBtn = EbonBuilds.Theme.CreateButton(f)
+    voteBtn:SetWidth(80)
+    voteBtn:SetHeight(22)
+    voteBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -40, -18)
+    f._voteBtn = voteBtn
+
+    local intentLabel = EbonBuilds.Theme.CreateSectionLabel(f, "Intent", classIcon, -18)
+    f._intentLabel = intentLabel
+
+    local intentText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    intentText:SetPoint("TOPLEFT", intentLabel, "BOTTOMLEFT", 0, -4)
+    intentText:SetPoint("RIGHT", f, "RIGHT", -18, 0)
+    intentText:SetJustifyH("LEFT")
+    intentText:SetJustifyV("TOP")
+    intentText:SetNonSpaceWrap(true)
+    f._intentText = intentText
+
+    local lockedLabel = EbonBuilds.Theme.CreateSectionLabel(f, "Locked Echoes")
+    f._lockedLabel = lockedLabel
+
+    f._lockedBtns = {}
+    for i = 1, EbonBuilds.Build.LOCKED_SLOTS do
+        local btn = CreateIconButton(f, 26)
+        f._lockedBtns[i] = btn
+    end
+
+    local priLabel = EbonBuilds.Theme.CreateSectionLabel(f, "Top Priorities")
+    f._priLabel = priLabel
+
+    f._priRows = {}
+    for i = 1, TOP_PRIORITY_COUNT do
+        local row = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row:SetJustifyH("LEFT")
+        f._priRows[i] = row
+    end
+
+    local importBtn = EbonBuilds.Theme.CreateButton(f)
+    importBtn:SetWidth(140)
+    importBtn:SetHeight(24)
+    importBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -18, 16)
+    f._importBtn = importBtn
+
+    if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
+        EbonBuilds.Debug.ProtectScript(f, "PublicBuildsView.Inspect")
+    end
+    f:Hide()
+    return f
+end
+
+local function LayoutInspectRows(f)
+    f._lockedLabel:ClearAllPoints()
+    f._lockedLabel:SetPoint("TOPLEFT", f._intentText, "BOTTOMLEFT", 0, -16)
+    local x = 0
+    for i, btn in ipairs(f._lockedBtns) do
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", f._lockedLabel, "BOTTOMLEFT", x, -6)
+        x = x + 32
+    end
+    f._priLabel:ClearAllPoints()
+    f._priLabel:SetPoint("TOPLEFT", f._lockedLabel, "BOTTOMLEFT", 0, -40)
+    local prevAnchor = f._priLabel
+    for i, row in ipairs(f._priRows) do
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -4)
+        prevAnchor = row
+    end
+end
+
+-- ShowInspect(build): populates and shows the panel for one build.
+-- Reads live so the vote count/state and locked copy stay current
+-- across repeated opens without rebuilding the frame.
+ShowInspect = function(build)
+    if not (inspectFrame and viewFrame) then return end
+    local cc = CLASS_COLORS[build.class] or { 0.5, 0.5, 0.5 }
+    SetClassIcon(inspectFrame._classIcon, build.class)
+    inspectFrame._title:SetText(build.title or "Untitled")
+    inspectFrame._title:SetTextColor(cc[1], cc[2], cc[3], 1)
+
+    local specName = ""
+    local specs = EbonBuilds.SpecData and EbonBuilds.SpecData[build.class]
+    local specEntry = specs and specs[build.spec or 1]
+    if specEntry then specName = specEntry.name end
+    local isOwn = EbonBuildsDB.builds[build.id] ~= nil
+    inspectFrame._meta:SetText(string.format("by %s%s | %s | %s",
+        build.author or "Unknown", isOwn and " |cff1eff00(You)|r" or "", specName, build.lastModified or ""))
+
+    local votes = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(build.id)) or 0
+    local voted = EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.HasVoted(build.id)
+    inspectFrame._voteBtn:SetText((voted and "|cffffd100" or "") .. "^ " .. votes .. (voted and "|r" or ""))
+    if isOwn then
+        inspectFrame._voteBtn:Disable()
+        inspectFrame._voteBtn:SetScript("OnClick", nil)
+    else
+        inspectFrame._voteBtn:Enable()
+        inspectFrame._voteBtn:SetScript("OnClick", function()
+            if EbonBuilds.BuildVotes then
+                EbonBuilds.BuildVotes.Toggle(build.id)
+                ShowInspect(build)
+            end
+        end)
+    end
+
+    local intent = build.comments
+    inspectFrame._intentText:SetText((intent and intent ~= "") and intent or "|cff888888No intent notes from the author.|r")
+
+    for i, btn in ipairs(inspectFrame._lockedBtns) do
+        local spellId = build.lockedEchoes and build.lockedEchoes[i]
+        if spellId then
+            btn._icon:SetTexture(select(3, GetSpellInfo(spellId)))
+            btn._spellId = spellId
+            btn:Show()
+        else
+            btn:Hide()
+        end
+    end
+
+    local top = TopPriorities(build)
+    for i, row in ipairs(inspectFrame._priRows) do
+        local entry = top[i]
+        if entry then
+            row:SetText(string.format("%d.  %s  |cffaaaaaa(%d)|r", i, entry.name, entry.weight))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    if #top == 0 then
+        inspectFrame._priRows[1]:SetText("|cff888888No weighted priorities configured.|r")
+        inspectFrame._priRows[1]:Show()
+    end
+
+    if isOwn then
+        inspectFrame._importBtn:SetText("Yours")
+        inspectFrame._importBtn:Disable()
+        inspectFrame._importBtn:SetScript("OnClick", nil)
+    else
+        local localCopy = FindImportedCopy(build.id)
+        if localCopy and build.lastModified ~= localCopy._importedAt then
+            inspectFrame._importBtn:SetText("Update")
+            inspectFrame._importBtn:Enable()
+            inspectFrame._importBtn:SetScript("OnClick", function()
+                UpdateLocalBuild(localCopy, build)
+                inspectFrame:Hide()
+            end)
+        else
+            inspectFrame._importBtn:SetText("Import")
+            inspectFrame._importBtn:Enable()
+            inspectFrame._importBtn:SetScript("OnClick", function()
+                ImportBuild(build)
+                inspectFrame:Hide()
+            end)
+        end
+    end
+
+    LayoutInspectRows(inspectFrame)
+    inspectFrame:ClearAllPoints()
+    inspectFrame:SetAllPoints(viewFrame)
+    inspectFrame:Show()
+end
+
+------------------------------------------------------------------------
 -- Render
 ------------------------------------------------------------------------
 
 local function PopulateCard(card, build)
+    card._build = build
     local cc = CLASS_COLORS[build.class] or { 0.5, 0.5, 0.5 }
+
+    -- Vote button: tally + own-vote state. Voting your own build is
+    -- disabled -- the credit is meant to come from others.
+    if card._voteBtn then
+        local votes = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(build.id)) or 0
+        local voted = EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.HasVoted(build.id)
+        card._voteBtn:SetText((voted and "|cffffd100" or "") .. "^ " .. votes .. (voted and "|r" or ""))
+        if EbonBuildsDB.builds[build.id] then
+            card._voteBtn:Disable()
+            card._voteBtn:SetScript("OnClick", nil)
+        else
+            card._voteBtn:Enable()
+            card._voteBtn:SetScript("OnClick", function()
+                if EbonBuilds.BuildVotes then
+                    EbonBuilds.BuildVotes.Toggle(build.id)
+                    PopulateCard(card, build)
+                end
+            end)
+        end
+    end
 
     -- Border and stripe color by class
     card:SetBackdropBorderColor(cc[1], cc[2], cc[3], 0.8)
@@ -511,6 +776,17 @@ GetFilteredBuilds = function()
             end
         end
     end
+    -- Deterministic order (the raw list comes out of pairs()): most
+    -- voted first -- the issue-#8 point of votes is exactly to sort the
+    -- cared-for builds from the experiments -- then title, then id.
+    table.sort(filtered, function(a, b)
+        local va = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(a.id)) or 0
+        local vb = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(b.id)) or 0
+        if va ~= vb then return va > vb end
+        local ta, tb = tostring(a.title or ""), tostring(b.title or "")
+        if ta ~= tb then return ta < tb end
+        return tostring(a.id or "") < tostring(b.id or "")
+    end)
     return filtered
 end
 
@@ -677,6 +953,7 @@ end
 local function EnsureBuilt(container)
     if viewFrame then return end
     viewFrame = BuildViewFrame(container)
+    inspectFrame = BuildInspectFrame(viewFrame)
 end
 
 function EbonBuilds.PublicBuildsView.Mount(container)
@@ -735,4 +1012,11 @@ function EbonBuilds.PublicBuildsView.RefreshIfMounted()
 end
 
 function EbonBuilds.PublicBuildsView.Init()
+end
+
+if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
+    EbonBuilds.Debug.RegisterTest("PublicBuildsView.TopPriorities degrades safely without catalog data", function()
+        local rows = EbonBuilds.PublicBuildsView._TopPrioritiesForTest({ class = "NONEXISTENT_CLASS_TOKEN" })
+        if type(rows) ~= "table" then error("expected a table even with no matching class data") end
+    end)
 end

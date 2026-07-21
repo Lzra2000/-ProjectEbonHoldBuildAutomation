@@ -24,6 +24,7 @@ modules/i18n/locales/plPL.lua
 modules/i18n/locales/ptBR.lua
 modules/i18n/locales/ruRU.lua
 modules/build/Build.lua
+modules/build/BuildVotes.lua
 modules/build/EchoPolicy.lua
 modules/data/Families.lua
 modules/data/TalentCatalogData.lua

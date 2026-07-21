@@ -223,6 +223,12 @@ The gear score is directional build guidance, not a best-in-slot verdict. Uncach
 
 ## Sync, Sharing & Public Builds
 
+### How do upvotes on Public Builds work? Can someone fake votes?
+Click a card in Public Builds to open a read-only inspect view -- class/spec, the author's intent notes, locked Echoes, and the top configured priorities -- so you can make an informed decision before voting or importing. The vote button (top-right of the card, or inside inspect) is one vote per character; click again to remove it.
+
+Votes are direct-witness only: your client only ever broadcasts your own vote, never a relayed list of what other people supposedly voted. WoW authenticates the sender name on every addon and channel message, so nobody can broadcast a vote as someone else. The number you see is how many distinct voters your client has personally heard from -- it grows as you play alongside more people, and two players might see slightly different counts if one has synced with more of the community than the other. Public Builds sorts by vote count first, so well-regarded builds surface above someone's experiments.
+
+
 ### Does shared community DPS data actually affect my recommendations now?
 Yes, since 3.76 -- and only in a specific, honest way. Previously, shared performance data was raw per-echo DPS averages pooled across players, which mixes everyone's gear, skill, and fight types together; it was collected but deliberately never allowed to influence anything. The addon now shares each player's **with/without deltas** instead: "my runs with this Echo average X more DPS than my runs without it." A delta is measured within one player, so their gear and skill sit on both sides of the comparison -- combining deltas across players is defensible in a way pooled raw DPS never was.
 
