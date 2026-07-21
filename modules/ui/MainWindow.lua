@@ -307,6 +307,7 @@ local function BuildSettingsPopup(ownerFrame)
             debugLog = Bool(source.debugLog),
             clickTrace = Bool(source.clickTrace),
             gearTooltip = Bool(source.gearTooltip),
+            mapZonePanel = Bool(source.mapZonePanel),
             locale = source.locale or "enUS",
             uiScale = tonumber(source.uiScale) or 1,
         }
@@ -327,6 +328,8 @@ local function BuildSettingsPopup(ownerFrame)
             debugLog = ReadModuleToggle(EbonBuilds.DebugLog),
             clickTrace = ReadModuleToggle(EbonBuilds.ClickTrace),
             gearTooltip = ReadModuleToggle(EbonBuilds.GearTooltip),
+            mapZonePanel = Bool(EbonBuilds.WorldIntegration and EbonBuilds.WorldIntegration.IsMapPanelEnabled
+                and EbonBuilds.WorldIntegration.IsMapPanelEnabled()),
             locale = (EbonBuilds.Locale and EbonBuilds.Locale.GetActiveLocale and EbonBuilds.Locale.GetActiveLocale()) or gs.localeOverride or "enUS",
             uiScale = math.max(0.9, math.min(1.2, tonumber(gs.uiScale) or 1)),
         }
@@ -349,6 +352,7 @@ local function BuildSettingsPopup(ownerFrame)
         if Bool(draft.debugLog) ~= Bool(baseline.debugLog) then count = count + 1 end
         if Bool(draft.clickTrace) ~= Bool(baseline.clickTrace) then count = count + 1 end
         if Bool(draft.gearTooltip) ~= Bool(baseline.gearTooltip) then count = count + 1 end
+        if Bool(draft.mapZonePanel) ~= Bool(baseline.mapZonePanel) then count = count + 1 end
         if tostring(draft.locale or "") ~= tostring(baseline.locale or "") then count = count + 1 end
         if not SameNumber(draft.uiScale, baseline.uiScale) then count = count + 1 end
         return count
@@ -508,6 +512,7 @@ local function BuildSettingsPopup(ownerFrame)
         if controls.debugCB then controls.debugCB:SetChecked(draft.debugLog) end
         if controls.clickTraceCB then controls.clickTraceCB:SetChecked(draft.clickTrace) end
         if controls.gearTooltipCB then controls.gearTooltipCB:SetChecked(draft.gearTooltip) end
+        if controls.mapZonePanelCB then controls.mapZonePanelCB:SetChecked(draft.mapZonePanel) end
         RefreshLocaleButtons()
         RefreshScaleButtons()
         loadingDraft = false
@@ -741,7 +746,7 @@ local function BuildSettingsPopup(ownerFrame)
             -536, "gearTooltip")
     end)
 
-    BuildCategory("interface", 238, function(panel)
+    BuildCategory("interface", 290, function(panel)
         AddSectionTitle(panel, "LANGUAGE", -2)
         local note = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         note:SetPoint("TOPLEFT", panel, "TOPLEFT", 2, -26)
@@ -788,6 +793,15 @@ local function BuildSettingsPopup(ownerFrame)
             end)
             controls.scaleButtons[#controls.scaleButtons + 1] = button
         end
+
+        local mapTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        mapTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 2, -198)
+        mapTitle:SetText("WORLD MAP")
+        mapTitle:SetTextColor(unpack(EbonBuilds.Theme.ACCENT_GOLD))
+        controls.mapZonePanelCB = AddCheckbox(panel,
+            "Show tome list on the world map",
+            "The 'Tomes in this zone' panel; can also be closed directly from its own X button on the map.",
+            -218, "mapZonePanel")
     end)
 
     BuildCategory("tools", 254, function(panel)
@@ -956,6 +970,9 @@ local function BuildSettingsPopup(ownerFrame)
         if EbonBuilds.DebugLog and EbonBuilds.DebugLog.SetEnabled then EbonBuilds.DebugLog.SetEnabled(draft.debugLog) end
         if EbonBuilds.ClickTrace and EbonBuilds.ClickTrace.SetEnabled then EbonBuilds.ClickTrace.SetEnabled(draft.clickTrace) end
         if EbonBuilds.GearTooltip and EbonBuilds.GearTooltip.SetEnabled then EbonBuilds.GearTooltip.SetEnabled(draft.gearTooltip) end
+        if EbonBuilds.WorldIntegration and EbonBuilds.WorldIntegration.SetMapPanelEnabled then
+            EbonBuilds.WorldIntegration.SetMapPanelEnabled(draft.mapZonePanel)
+        end
         local localeChanged = baseline and draft.locale ~= baseline.locale
         if localeChanged and EbonBuilds.Locale and EbonBuilds.Locale.SetLocale then
             EbonBuilds.Locale.SetLocale(draft.locale)

@@ -20,6 +20,7 @@ local CHARACTER_PREFERENCE_DEFAULTS = {
     debugLogEnabled = false,
     clickTraceEnabled = false,
     gearTooltipEnabled = true,
+    mapZonePanelEnabled = true,
 }
 
 local function CharacterKey()
