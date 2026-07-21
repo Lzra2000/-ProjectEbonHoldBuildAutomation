@@ -671,7 +671,7 @@ do
 end
 print("Verified every removed /ebb subcommand has a Settings popup replacement, and none remain in the dispatcher.")
 
--- The redesigned Settings popup has five vertical categories. Switching pages
+-- The redesigned Settings popup has six vertical categories. Switching pages
 -- uses WoW 3.3.5-safe Show/Hide calls, while every edited control writes into a
 -- shared draft that Save commits regardless of which category is visible.
 do
@@ -682,13 +682,13 @@ do
     local categoriesStart = source:find("local SETTINGS_CATEGORIES = {", 1, true)
     local categoriesEnd = categoriesStart and source:find("\n}\n\nlocal function BuildSettingsPopup", categoriesStart, true)
     local categoriesSource = categoriesStart and categoriesEnd and source:sub(categoriesStart, categoriesEnd) or ""
-    local expectedCategories = { "general", "automation", "interface", "tools", "build" }
+    local expectedCategories = { "general", "automation", "features", "interface", "tools", "build" }
     local categoryCount = 0
     for _ in categoriesSource:gmatch('key%s*=%s*"[^"]+"') do
         categoryCount = categoryCount + 1
     end
     if categoryCount ~= #expectedCategories then
-        io.stderr:write("SETTINGS CATEGORY FAIL: expected 5 categories, found " .. categoryCount .. "\n")
+        io.stderr:write("SETTINGS CATEGORY FAIL: expected 6 categories, found " .. categoryCount .. "\n")
         os.exit(1)
     end
     for _, key in ipairs(expectedCategories) do
@@ -712,6 +712,8 @@ do
         'EbonBuilds.BagAffixDots.SetEnabled(draft.bagDots)',
         'EbonBuilds.DebugLog.SetEnabled(draft.debugLog)',
         'EbonBuilds.ClickTrace.SetEnabled(draft.clickTrace)',
+        'EbonBuilds.Sync.SetChatMessagesEnabled(draft.syncChatMessages)',
+        'EbonBuilds.WorldIntegration.SetMapEnabled(draft.tomeAtlasMapEnabled)',
         'saveBtn:SetScript("OnClick", ApplyDraft)',
     }
     for _, fragment in ipairs(requiredDraftFlow) do
@@ -721,7 +723,60 @@ do
         end
     end
 end
-print("Verified the Settings popup's five categories use safe visibility and preserve staged changes across navigation.")
+print("Verified the Settings popup's six categories use safe visibility and preserve staged changes across navigation.")
+
+-- Optional feature toggles are persisted centrally, suppress only passive Sync
+-- chat output, and disable Tome Atlas map rendering without disabling the
+-- atlas database/window itself.
+do
+    local databaseFile = assert(io.open("core/Database.lua", "r"))
+    local databaseSource = NormalizeNewlines(databaseFile:read("*a"))
+    databaseFile:close()
+    local syncFile = assert(io.open("modules/sync/Sync.lua", "r"))
+    local syncSource = NormalizeNewlines(syncFile:read("*a"))
+    syncFile:close()
+    local worldFile = assert(io.open("modules/ui/WorldIntegration.lua", "r"))
+    local worldSource = NormalizeNewlines(worldFile:read("*a"))
+    worldFile:close()
+
+    local requiredDefaults = {
+        "globalSettings.syncChatMessages = true",
+        "globalSettings.tomeAtlasMapEnabled = true",
+    }
+    for _, fragment in ipairs(requiredDefaults) do
+        if not databaseSource:find(fragment, 1, true) then
+            io.stderr:write("FEATURE TOGGLE FAIL: missing SavedVariables default " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+
+    local requiredSync = {
+        "function EbonBuilds.Sync.IsChatMessagesEnabled()",
+        "function EbonBuilds.Sync.SetChatMessagesEnabled(enabled)",
+        "if not force and not ChatMessagesEnabled() then return end",
+        "local function CommandLog(msg)",
+    }
+    for _, fragment in ipairs(requiredSync) do
+        if not syncSource:find(fragment, 1, true) then
+            io.stderr:write("FEATURE TOGGLE FAIL: Sync chat toggle is missing " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+
+    local requiredMap = {
+        "function EbonBuilds.WorldIntegration.IsMapEnabled()",
+        "function EbonBuilds.WorldIntegration.SetMapEnabled(enabled)",
+        "if not MapFeatureEnabled() then",
+        "HideMapFeatures()",
+    }
+    for _, fragment in ipairs(requiredMap) do
+        if not worldSource:find(fragment, 1, true) then
+            io.stderr:write("FEATURE TOGGLE FAIL: Tome Atlas map toggle is missing " .. fragment .. "\n")
+            os.exit(1)
+        end
+    end
+end
+print("Verified independent Sync-chat and Tome-Atlas-map feature toggles.")
 
 -- Missing-tab default view and weighted-priority regression contracts.
 do

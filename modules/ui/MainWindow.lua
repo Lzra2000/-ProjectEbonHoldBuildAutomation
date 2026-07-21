@@ -230,6 +230,12 @@ local SETTINGS_CATEGORIES = {
         description = "Convenience features and diagnostics that run alongside Autopilot.",
     },
     {
+        key = "features",
+        label = "Features",
+        title = "Features",
+        description = "Enable or disable optional integrations without disabling the whole addon.",
+    },
+    {
         key = "interface",
         label = "Interface",
         title = "Interface",
@@ -281,6 +287,8 @@ local function BuildSettingsPopup(ownerFrame)
         if tonumber(gs.evalDelay) == nil then gs.evalDelay = 2 end
         if tonumber(gs.toastDuration) == nil then gs.toastDuration = 3 end
         if tonumber(gs.uiScale) == nil then gs.uiScale = 1 end
+        if gs.syncChatMessages == nil then gs.syncChatMessages = true end
+        if gs.tomeAtlasMapEnabled == nil then gs.tomeAtlasMapEnabled = true end
         if not gs.settingsCategory then gs.settingsCategory = "general" end
         return gs
     end
@@ -309,6 +317,8 @@ local function BuildSettingsPopup(ownerFrame)
             debugLog = Bool(source.debugLog),
             clickTrace = Bool(source.clickTrace),
             gearTooltip = Bool(source.gearTooltip),
+            syncChatMessages = source.syncChatMessages ~= false,
+            tomeAtlasMapEnabled = source.tomeAtlasMapEnabled ~= false,
             locale = source.locale or "enUS",
             uiScale = tonumber(source.uiScale) or 1,
         }
@@ -329,6 +339,10 @@ local function BuildSettingsPopup(ownerFrame)
             debugLog = ReadModuleToggle(EbonBuilds.DebugLog),
             clickTrace = ReadModuleToggle(EbonBuilds.ClickTrace),
             gearTooltip = ReadModuleToggle(EbonBuilds.GearTooltip),
+            syncChatMessages = EbonBuilds.Sync and EbonBuilds.Sync.IsChatMessagesEnabled
+                and EbonBuilds.Sync.IsChatMessagesEnabled() or gs.syncChatMessages ~= false,
+            tomeAtlasMapEnabled = EbonBuilds.WorldIntegration and EbonBuilds.WorldIntegration.IsMapEnabled
+                and EbonBuilds.WorldIntegration.IsMapEnabled() or gs.tomeAtlasMapEnabled ~= false,
             locale = (EbonBuilds.Locale and EbonBuilds.Locale.GetActiveLocale and EbonBuilds.Locale.GetActiveLocale()) or gs.localeOverride or "enUS",
             uiScale = math.max(0.9, math.min(1.2, tonumber(gs.uiScale) or 1)),
         }
@@ -351,6 +365,8 @@ local function BuildSettingsPopup(ownerFrame)
         if Bool(draft.debugLog) ~= Bool(baseline.debugLog) then count = count + 1 end
         if Bool(draft.clickTrace) ~= Bool(baseline.clickTrace) then count = count + 1 end
         if Bool(draft.gearTooltip) ~= Bool(baseline.gearTooltip) then count = count + 1 end
+        if Bool(draft.syncChatMessages) ~= Bool(baseline.syncChatMessages) then count = count + 1 end
+        if Bool(draft.tomeAtlasMapEnabled) ~= Bool(baseline.tomeAtlasMapEnabled) then count = count + 1 end
         if tostring(draft.locale or "") ~= tostring(baseline.locale or "") then count = count + 1 end
         if not SameNumber(draft.uiScale, baseline.uiScale) then count = count + 1 end
         return count
@@ -510,6 +526,8 @@ local function BuildSettingsPopup(ownerFrame)
         if controls.debugCB then controls.debugCB:SetChecked(draft.debugLog) end
         if controls.clickTraceCB then controls.clickTraceCB:SetChecked(draft.clickTrace) end
         if controls.gearTooltipCB then controls.gearTooltipCB:SetChecked(draft.gearTooltip) end
+        if controls.syncChatMessagesCB then controls.syncChatMessagesCB:SetChecked(draft.syncChatMessages) end
+        if controls.tomeAtlasMapCB then controls.tomeAtlasMapCB:SetChecked(draft.tomeAtlasMapEnabled) end
         RefreshLocaleButtons()
         RefreshScaleButtons()
         loadingDraft = false
@@ -743,6 +761,18 @@ local function BuildSettingsPopup(ownerFrame)
             -536, "gearTooltip")
     end)
 
+    BuildCategory("features", 166, function(panel)
+        AddSectionTitle(panel, "OPTIONAL FEATURES", -2)
+        controls.syncChatMessagesCB = AddCheckbox(panel,
+            "Sync chat messages",
+            "Shows passive EbonBuilds Sync status, transfer, and update notices in chat. Slash-command replies remain visible.",
+            -24, "syncChatMessages")
+        controls.tomeAtlasMapCB = AddCheckbox(panel,
+            "Tome Atlas map integration",
+            "Shows Tome Atlas zone highlights, source lists, pins, and legends on the world map. The Tome Atlas window and data collection remain available.",
+            -92, "tomeAtlasMapEnabled")
+    end)
+
     BuildCategory("interface", 238, function(panel)
         AddSectionTitle(panel, "LANGUAGE", -2)
         local note = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -941,6 +971,8 @@ local function BuildSettingsPopup(ownerFrame)
         gs.evalDelay = draft.evalDelay
         gs.toastDuration = draft.toastDuration
         gs.uiScale = math.max(0.9, math.min(1.2, tonumber(draft.uiScale) or 1))
+        gs.syncChatMessages = draft.syncChatMessages and true or false
+        gs.tomeAtlasMapEnabled = draft.tomeAtlasMapEnabled and true or false
         EbonBuildsDB.ui = EbonBuildsDB.ui or {}
         EbonBuildsDB.ui.scalePreset = gs.uiScale
         ApplyShellLayout(ownerFrame, gs.uiScale)
@@ -958,6 +990,12 @@ local function BuildSettingsPopup(ownerFrame)
         if EbonBuilds.DebugLog and EbonBuilds.DebugLog.SetEnabled then EbonBuilds.DebugLog.SetEnabled(draft.debugLog) end
         if EbonBuilds.ClickTrace and EbonBuilds.ClickTrace.SetEnabled then EbonBuilds.ClickTrace.SetEnabled(draft.clickTrace) end
         if EbonBuilds.GearTooltip and EbonBuilds.GearTooltip.SetEnabled then EbonBuilds.GearTooltip.SetEnabled(draft.gearTooltip) end
+        if EbonBuilds.Sync and EbonBuilds.Sync.SetChatMessagesEnabled then
+            EbonBuilds.Sync.SetChatMessagesEnabled(draft.syncChatMessages)
+        end
+        if EbonBuilds.WorldIntegration and EbonBuilds.WorldIntegration.SetMapEnabled then
+            EbonBuilds.WorldIntegration.SetMapEnabled(draft.tomeAtlasMapEnabled)
+        end
         local localeChanged = baseline and draft.locale ~= baseline.locale
         if localeChanged and EbonBuilds.Locale and EbonBuilds.Locale.SetLocale then
             EbonBuilds.Locale.SetLocale(draft.locale)

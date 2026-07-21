@@ -48,6 +48,17 @@ EbonBuilds.WorldIntegration._AugmentUnitTooltipForTests = AugmentUnitTooltip
 -- 'ShowZonePins' (a nil value)" crash this fixes.
 local ShowZonePins
 local mapPanel, mapLines
+local pinPool = {}        -- reusable pin+hit-area pairs on WorldMapDetailFrame
+local legendPanel, legendRows = nil, {}
+
+local function MapFeatureEnabled()
+    local settings = EbonBuildsDB and EbonBuildsDB.globalSettings
+    return not settings or settings.tomeAtlasMapEnabled ~= false
+end
+
+function EbonBuilds.WorldIntegration.IsMapEnabled()
+    return MapFeatureEnabled()
+end
 
 local function EnsureMapPanel()
     if mapPanel then return end
@@ -167,7 +178,33 @@ local function HideOverlays()
     if legend then legend:Hide() end
 end
 
+local function HideMapFeatures()
+    HideOverlays()
+    if mapPanel then mapPanel:Hide() end
+    if legendPanel then legendPanel:Hide() end
+    for i = 1, #pinPool do
+        local pin = pinPool[i]
+        if pin then
+            pin:Hide()
+            if pin.hit then pin.hit:Hide() end
+        end
+    end
+    if GameTooltip and GameTooltip.IsOwned then
+        for i = 1, #pinPool do
+            local pin = pinPool[i]
+            if pin and pin.hit and GameTooltip:IsOwned(pin.hit) then
+                GameTooltip:Hide()
+                break
+            end
+        end
+    end
+end
+
 local function ShowContinentOverlays()
+    if not MapFeatureEnabled() then
+        HideOverlays()
+        return
+    end
     local parent = WorldMapButton or WorldMapDetailFrame
     if not parent then return end
     local cont = GetCurrentMapContinent and GetCurrentMapContinent() or 0
@@ -222,6 +259,10 @@ end
 EbonBuilds.WorldIntegration._ShowContinentOverlaysForTests = ShowContinentOverlays
 
 local function RefreshMapPanel()
+    if not MapFeatureEnabled() then
+        HideMapFeatures()
+        return
+    end
     if not WorldMapFrame or not WorldMapFrame:IsShown() then return end
     ShowContinentOverlays()
     EnsureMapPanel()
@@ -263,8 +304,6 @@ end
 -- so a player can hide a marker they don't care about.
 
 local sourceCoords = {}   -- [zoneName] = { [sourceName] = {x=0..1, y=0..1} }
-local pinPool = {}        -- reusable pin+hit-area pairs on WorldMapDetailFrame
-local legendPanel, legendRows = nil, {}
 
 -- SetSourceCoords(zoneName, sourceName, x, y): registers where a tome
 -- source (by its display name, matching TomeAtlas's t.name) sits on the
@@ -366,6 +405,17 @@ local function EnsureLegendRow(index)
 end
 
 function ShowZonePins(zoneName)
+    if not MapFeatureEnabled() then
+        for i = 1, #pinPool do
+            local pin = pinPool[i]
+            if pin then
+                pin:Hide()
+                if pin.hit then pin.hit:Hide() end
+            end
+        end
+        if legendPanel then legendPanel:Hide() end
+        return
+    end
     local zoom = GetCurrentMapZone and GetCurrentMapZone() or 0
     if not WorldMapDetailFrame or zoom == 0 then
         for i = 1, #pinPool do pinPool[i]:Hide(); pinPool[i].hit:Hide() end
@@ -422,6 +472,20 @@ function ShowZonePins(zoneName)
     legendPanel:Show()
 end
 EbonBuilds.WorldIntegration._ShowZonePinsForTests = ShowZonePins
+
+function EbonBuilds.WorldIntegration.SetMapEnabled(enabled)
+    EbonBuildsDB = EbonBuildsDB or {}
+    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
+    EbonBuildsDB.globalSettings.tomeAtlasMapEnabled = enabled and true or false
+
+    if enabled then
+        if WorldMapFrame and WorldMapFrame.IsShown and WorldMapFrame:IsShown() then
+            RefreshMapPanel()
+        end
+    else
+        HideMapFeatures()
+    end
+end
 
 if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
     local function StubListByZone()

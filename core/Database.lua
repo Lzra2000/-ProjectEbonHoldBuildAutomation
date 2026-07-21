@@ -43,6 +43,12 @@ local function EnsureRootDefaults()
     EbonBuildsDB.globalSettings.evalDelay = EbonBuildsDB.globalSettings.evalDelay or 2
     EbonBuildsDB.globalSettings.toastDuration = EbonBuildsDB.globalSettings.toastDuration or 3
     EbonBuildsDB.globalSettings.uiScale = EbonBuildsDB.globalSettings.uiScale or 1
+    if EbonBuildsDB.globalSettings.syncChatMessages == nil then
+        EbonBuildsDB.globalSettings.syncChatMessages = true
+    end
+    if EbonBuildsDB.globalSettings.tomeAtlasMapEnabled == nil then
+        EbonBuildsDB.globalSettings.tomeAtlasMapEnabled = true
+    end
     EbonBuildsDB.minimapAngle = EbonBuildsDB.minimapAngle or 220
     EbonBuildsDB.builds = EbonBuildsDB.builds or {}
     EbonBuildsDB.remoteBuilds = EbonBuildsDB.remoteBuilds or {}

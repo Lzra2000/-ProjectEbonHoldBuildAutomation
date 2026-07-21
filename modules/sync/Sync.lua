@@ -103,8 +103,30 @@ local function SyncTrace(msg)
     end
 end
 
-local function Log(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ccff[EbonBuilds Sync]|r " .. msg)
+local function ChatMessagesEnabled()
+    local settings = EbonBuildsDB and EbonBuildsDB.globalSettings
+    return not settings or settings.syncChatMessages ~= false
+end
+
+function EbonBuilds.Sync.IsChatMessagesEnabled()
+    return ChatMessagesEnabled()
+end
+
+function EbonBuilds.Sync.SetChatMessagesEnabled(enabled)
+    EbonBuildsDB = EbonBuildsDB or {}
+    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
+    EbonBuildsDB.globalSettings.syncChatMessages = enabled and true or false
+end
+
+local function Log(msg, force)
+    if not force and not ChatMessagesEnabled() then return end
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ccff[EbonBuilds Sync]|r " .. msg)
+    end
+end
+
+local function CommandLog(msg)
+    Log(msg, true)
 end
 
 local function VerboseLog(msg)
@@ -775,7 +797,7 @@ local function HandleEnd(payload, sender)
     EbonBuildsDB.lastSyncDate = SortableNow()
 
     local c = tonumber(count) or 0
-    if c > 0 then
+    if c > 0 and ChatMessagesEnabled() then
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
             "|cff19ff19EbonBuilds|r: Received %d build(s) from %s.", c, snd))
     end
@@ -922,9 +944,11 @@ local function HandleVersionPing(payload, sender)
     local mine = ParseVersion(OwnVersion())
     if not theirs or not mine or theirs <= mine then return end
     updateNoticeShown = true
-    DEFAULT_CHAT_FRAME:AddMessage(string.format(
-        "|cffffd100EbonBuilds:|r a newer version (%s) is in use around you. Download: |cff6ea3d9github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/releases|r",
-        payload:sub(5)))
+    if ChatMessagesEnabled() then
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+            "|cffffd100EbonBuilds:|r a newer version (%s) is in use around you. Download: |cff6ea3d9github.com/Lzra2000/-ProjectEbonHoldBuildAutomation/releases|r",
+            payload:sub(5)))
+    end
 end
 EbonBuilds.Sync._HandleVersionPingForTests = function(...) return HandleVersionPing(...) end
 
@@ -1241,29 +1265,29 @@ SLASH_EBBSYNC1 = "/ebbsync"
 SlashCmdList["EBBSYNC"] = function(cmd)
     cmd = strtrim(cmd or "")
     if cmd == "join" then
-        Log("To enable sync discovery, type: /join " .. SYNC_CHANNEL)
-        Log("After joining, reload with /reload or click Reload on Public Builds.")
+        CommandLog("To enable sync discovery, type: /join " .. SYNC_CHANNEL)
+        CommandLog("After joining, reload with /reload or click Reload on Public Builds.")
     elseif cmd == "status" then
         RefreshChannel()
         if syncChannelIndex and syncChannelIndex > 0 then
             local name = GetChannelName(syncChannelIndex)
-            Log("Sync channel: index=" .. syncChannelIndex .. " name=" .. tostring(name))
+            CommandLog("Sync channel: index=" .. syncChannelIndex .. " name=" .. tostring(name))
         else
-            Log("Sync channel not joined. Type /ebbsync join for help.")
+            CommandLog("Sync channel not joined. Type /ebbsync join for help.")
         end
     elseif cmd == "reset" then
         lastRequestTime = 0
         EbonBuildsDB.lastSyncDate = nil
         EbonBuildsDB.remoteBuilds = {}
-        Log("Sync cooldown and lastSyncDate reset. Remote builds cleared.")
+        CommandLog("Sync cooldown and lastSyncDate reset. Remote builds cleared.")
     elseif cmd == "verbose" then
         VERBOSE_LOG = not VERBOSE_LOG
-        Log("Verbose logging " .. (VERBOSE_LOG and "enabled" or "disabled") .. ".")
+        CommandLog("Verbose logging " .. (VERBOSE_LOG and "enabled" or "disabled") .. ".")
     else
-        Log("EbonBuilds Sync commands:")
-        Log("  /ebbsync join    - Show how to join the sync channel")
-        Log("  /ebbsync status  - Show current sync channel status")
-        Log("  /ebbsync reset   - Reset sync cooldown timer")
-        Log("  /ebbsync verbose - Toggle verbose logging")
+        CommandLog("EbonBuilds Sync commands:")
+        CommandLog("  /ebbsync join    - Show how to join the sync channel")
+        CommandLog("  /ebbsync status  - Show current sync channel status")
+        CommandLog("  /ebbsync reset   - Reset sync cooldown timer")
+        CommandLog("  /ebbsync verbose - Toggle verbose logging")
     end
 end
