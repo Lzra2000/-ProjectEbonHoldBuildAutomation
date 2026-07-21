@@ -115,12 +115,26 @@ Depois reinicie o jogo ou dê `/reload`.
 
 Apenas `/ebb` (ou `/ebonbuilds`): abre ou fecha a janela principal. Tudo o que antes era um comando separado agora fica no ícone de engrenagem (Configurações) no cabeçalho da janela, tudo em um só lugar em vez de subcomandos para memorizar: idioma, venda automática, pontos de afixo nas bolsas, log de depuração, Click Trace, os logs de depuração/erros/Click Trace, o Tuning Advisor, o Tome Atlas, a referência de afixos, o guia de comandos, e a exportação EWL e o reset do Manual Training do build ativo.
 
+## Localização
+
+As abas, botões e tooltips do editor de builds estão traduzidos para alemão, espanhol, francês, polonês, português do Brasil e russo. O EbonBuilds escolhe o idioma automaticamente a partir do seu cliente; dá para forçar com `/ebb locale <code>`. Para adicionar um idioma: `sh scripts/new-locale.sh <code>` gera um arquivo inicial pré-preenchido — o restante dos passos está em `CONTRIBUTING.md`. Termos do jogo (Echo, Build, Banish/Reroll/Freeze/Select, Autopilot) ficam em inglês em todos os idiomas.
+
+## Documentação
+
+O [site de documentação](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/) cobre os primeiros passos, cada configuração, o FAQ completo com busca, localização, desenvolvimento e solução de problemas. Sua fonte vive em [`docs/`](../../docs/), é versionada com o código e é publicada no GitHub Pages a cada merge na `main`. Questões de segurança — payloads de sincronização hostis, strings de importação maliciosas, consentimento de compartilhamento de dados — têm seu próprio canal: veja [SECURITY.md](../../SECURITY.md).
+
 ## Relatando bugs
 
 Anexe a saída do log de erros ou do log de depuração (Configurações — ícone de engrenagem — Windows & Tools) ao seu relato: é de longe a forma mais rápida de algo ser corrigido em vez de adivinhado.
 
 ## Desenvolvimento
 
-- Lua puro, API do WotLK 3.3.5a (Interface 30300).
-- `luac5.1 -p` é usado para verificar a sintaxe de cada arquivo antes de cada release; veja `.github/workflows/lua-syntax.yml` para a mesma verificação rodando em CI.
-- Sem etapa de build — a raiz do repositório *é* a estrutura de pasta do addon esperada por `Interface/AddOns/`.
+- Lua puro, API do WotLK 3.3.5a (Interface 30300). Sem etapa de build — a raiz do repositório *é* a estrutura de pasta que `Interface/AddOns/` espera.
+- Uma única vez: `sh scripts/dev-setup.sh` instala as ferramentas (`lua5.1`, `zip`; Debian/Ubuntu — no Windows, via WSL).
+- `sh scripts/check.sh` roda as mesmas verificações do CI em um comando: sintaxe, suíte de testes, verificação do `.toc`, checagem de API 3.3.5a, cabeçalhos de arquivo.
+- Releases passam por `sh scripts/release.sh <version>`; o tag enviado publica o GitHub Release automaticamente via workflow.
+- Guia completo (em inglês): [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+
+## Licença
+
+Veja [`LICENSE`](../../LICENSE). Uso pessoal e em comunidades de servidores privados é livre; redistribuir versões modificadas sob o nome EbonBuilds, ou uso comercial, exige permissão prévia do detentor dos direitos.

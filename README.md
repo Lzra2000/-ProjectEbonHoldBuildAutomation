@@ -136,7 +136,7 @@ Attach the Error log or Debug log output (Settings -- gear icon in the main wind
 
 ## Development
 
-See `CONTRIBUTING.md` for setup, the pre-PR checklist, and project conventions. Quick version:
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, the pre-PR checklist, and project conventions. Quick version:
 
 - Pure Lua, WotLK 3.3.5a API (Interface 30300).
 - One-time setup: `sh scripts/dev-setup.sh` installs the toolchain (`lua5.1`, `texlive-binaries` for the test suite, `zip`). Debian/Ubuntu (`apt`) only — on Windows, use WSL.

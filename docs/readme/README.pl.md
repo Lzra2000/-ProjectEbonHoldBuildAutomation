@@ -115,12 +115,26 @@ Następnie zrestartuj grę lub wykonaj `/reload`.
 
 Tylko `/ebb` (lub `/ebonbuilds`) — otwiera lub zamyka główne okno. Wszystko, co wcześniej było osobną komendą, znajduje się teraz pod ikoną zębatki (Ustawienia) w nagłówku okna, wszystko w jednym miejscu zamiast podkomend do zapamiętania: język, automatyczna sprzedaż, kropki afiksów w torbach, logowanie debugowania, Click Trace, logi debugowania/błędów/Click Trace, Tuning Advisor, Tome Atlas, spis afiksów, przewodnik po komendach oraz eksport EWL i reset Manual Training aktywnego builda.
 
+## Lokalizacja
+
+Zakładki, przyciski i podpowiedzi edytora buildów są przetłumaczone na niemiecki, hiszpański, francuski, polski, portugalski (Brazylia) i rosyjski. EbonBuilds wybiera język automatycznie na podstawie klienta; można go wymusić przez `/ebb locale <code>`. Dodanie języka: `sh scripts/new-locale.sh <code>` generuje wstępnie wypełniony plik startowy — pozostałe kroki opisuje `CONTRIBUTING.md`. Terminy z gry (Echo, Build, Banish/Reroll/Freeze/Select, Autopilot) pozostają po angielsku we wszystkich językach.
+
+## Dokumentacja
+
+[Strona dokumentacji](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/) obejmuje pierwsze kroki, wszystkie ustawienia, pełne przeszukiwalne FAQ, lokalizację, rozwój i rozwiązywanie problemów. Jej źródła leżą w [`docs/`](../../docs/), są wersjonowane razem z kodem i publikowane na GitHub Pages przy każdym merge'u do `main`. Kwestie bezpieczeństwa — wrogie payloady synchronizacji, złośliwe ciągi importu, zgoda na udostępnianie danych — mają własny kanał zgłoszeń: zobacz [SECURITY.md](../../SECURITY.md).
+
 ## Zgłaszanie błędów
 
 Dołącz do zgłoszenia zawartość logu błędów lub logu debugowania (Ustawienia — ikona zębatki — Windows & Tools) — to zdecydowanie najszybszy sposób, by coś zostało naprawione, a nie zgadywane.
 
 ## Rozwój
 
-- Czysty Lua, API WotLK 3.3.5a (Interface 30300).
-- `luac5.1 -p` sprawdza składnię każdego pliku przed każdym wydaniem; zobacz `.github/workflows/lua-syntax.yml` dla tej samej kontroli działającej w CI.
-- Brak etapu budowania — katalog główny repozytorium *jest* strukturą folderu addonu oczekiwaną przez `Interface/AddOns/`.
+- Czysty Lua, API WotLK 3.3.5a (Interface 30300). Bez kroku budowania — katalog główny repo *jest* strukturą folderu oczekiwaną przez `Interface/AddOns/`.
+- Jednorazowo: `sh scripts/dev-setup.sh` instaluje narzędzia (`lua5.1`, `zip`; Debian/Ubuntu — na Windows przez WSL).
+- `sh scripts/check.sh` uruchamia te same kontrole co CI jednym poleceniem: składnia, zestaw testów, weryfikacja `.toc`, kontrola API 3.3.5a, nagłówki plików.
+- Wydania idą przez `sh scripts/release.sh <version>`; wypchnięty tag publikuje GitHub Release automatycznie przez workflow.
+- Pełny przewodnik (po angielsku): [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+
+## Licencja
+
+Zobacz [`LICENSE`](../../LICENSE). Użytek osobisty i w społecznościach serwerów prywatnych jest darmowy; rozpowszechnianie zmodyfikowanych wersji pod nazwą EbonBuilds lub użytek komercyjny wymaga uprzedniej zgody właściciela praw.

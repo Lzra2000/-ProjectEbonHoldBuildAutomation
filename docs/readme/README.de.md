@@ -115,12 +115,26 @@ Danach Spiel neu starten oder `/reload`.
 
 Nur `/ebb` (oder `/ebonbuilds`) — öffnet oder schließt das Hauptfenster. Alles, was früher ein eigener Slash-Befehl war, findet sich jetzt hinter dem Zahnrad-Symbol (Einstellungen) in der Kopfzeile des Fensters, alles an einem Ort statt auswendig zu lernender Unterbefehle: Sprache, Auto-Verkauf, Taschen-Affix-Punkte, Debug-Logging, Click Trace, die Debug-/Fehler-/Click-Trace-Logs, Tuning Advisor, Tome Atlas, Affix-Referenz, die Befehlsübersicht sowie EWL-Export und Manual-Training-Reset des aktiven Builds.
 
+## Lokalisierung
+
+Tabs, Buttons und Tooltips des Build-Editors sind auf Deutsch, Spanisch, Französisch, Polnisch, brasilianisches Portugiesisch und Russisch übersetzt. EbonBuilds wählt die Sprache automatisch anhand deines Clients; mit `/ebb locale <code>` lässt sie sich überschreiben. Eine neue Sprache hinzufügen: `sh scripts/new-locale.sh <code>` erzeugt eine vorbefüllte Startdatei — die restlichen Schritte stehen in `CONTRIBUTING.md`. Spielbegriffe (Echo, Build, Banish/Reroll/Freeze/Select, Autopilot) bleiben in allen Sprachen englisch.
+
+## Dokumentation
+
+Die [Dokumentations-Seite](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/) deckt Einstieg, alle Einstellungen, die vollständig durchsuchbare FAQ, Lokalisierung, Entwicklung und Fehlerbehebung ab. Ihre Quellen liegen in [`docs/`](../../docs/), sind mit dem Code versioniert und werden bei jedem Merge auf `main` auf GitHub Pages veröffentlicht. Sicherheitsthemen — feindliche Sync-Payloads, bösartige Import-Strings, Einwilligung zum Datenteilen — haben ihren eigenen Meldeweg: siehe [SECURITY.md](../../SECURITY.md).
+
 ## Bugs melden
 
 Häng die Ausgabe des Fehler-Logs oder Debug-Logs (Einstellungen — Zahnrad-Symbol im Hauptfenster — Windows & Tools) an deinen Report an — das ist der mit Abstand schnellste Weg, dass etwas gefixt statt geraten wird.
 
 ## Entwicklung
 
-- Reines Lua, WotLK-3.3.5a-API (Interface 30300).
-- `luac5.1 -p` prüft vor jedem Release jede Datei auf Syntaxfehler; siehe `.github/workflows/lua-syntax.yml` für denselben Check in CI.
-- Kein Build-Schritt — das Repo-Wurzelverzeichnis *ist* die Addon-Ordnerstruktur, die `Interface/AddOns/` erwartet.
+- Reines Lua, WotLK-3.3.5a-API (Interface 30300). Kein Build-Schritt — das Repo-Wurzelverzeichnis *ist* die Addon-Ordnerstruktur, die `Interface/AddOns/` erwartet.
+- Einmalig: `sh scripts/dev-setup.sh` installiert die Toolchain (`lua5.1`, `zip`; Debian/Ubuntu — unter Windows via WSL).
+- `sh scripts/check.sh` fährt dieselben Prüfungen wie CI in einem Befehl: Syntax, Testsuite, `.toc`-Verifikation, 3.3.5a-API-Check, Datei-Header.
+- Releases laufen über `sh scripts/release.sh <version>`; der gepushte Tag veröffentlicht das GitHub-Release automatisch per Workflow.
+- Vollständiger Leitfaden (englisch): [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+
+## Lizenz
+
+Siehe [`LICENSE`](../../LICENSE). Persönliche Nutzung und Nutzung in Privatserver-Communities sind frei; das Weiterverbreiten veränderter Versionen unter dem Namen EbonBuilds sowie kommerzielle Nutzung erfordern vorherige Erlaubnis des Rechteinhabers.
