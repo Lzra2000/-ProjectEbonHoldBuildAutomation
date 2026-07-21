@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="EbonBuilds" width="100%">
+  <img src="../../assets/banner.svg" alt="EbonBuilds" width="100%">
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <b>Español</b> | <a href="README.fr.md">Français</a> | <a href="README.pl.md">Polski</a>
+  <a href="../../README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <b>Español</b> | <a href="README.fr.md">Français</a> | <a href="README.pl.md">Polski</a>
 </p>
 
 Un addon de World of Warcraft (3.3.5a) para **ProjectEbonhold** que automatiza las elecciones de eco (Banish / Reroll / Freeze / Select) según un build que defines, y se autoajusta con el tiempo a partir de datos reales de juego.
@@ -35,7 +35,7 @@ Requiere **ProjectEbonhold** o **ProjectEbonhold Enhanced**. Algunas funciones u
 - **Tome Atlas**: ubicaciones de drop de tomos de eco, recopiladas por la comunidad.
 - **Public Builds**: explora e importa builds compartidos por otros jugadores.
 
-Consulta [`FAQ.md`](FAQ.md) para explicaciones detalladas de cada función y el historial completo de versiones.
+Consulta [FAQ](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/faq/) / [CHANGELOG.md](../../CHANGELOG.md) para explicaciones detalladas de cada función y el historial completo de versiones.
 
 ## Capturas de pantalla
 

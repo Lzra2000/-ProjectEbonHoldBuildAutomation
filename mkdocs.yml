@@ -4,6 +4,10 @@ site_url: https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/
 repo_url: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation
 repo_name: Lzra2000/ProjectEbonHoldBuildAutomation
 edit_uri: edit/main/docs/
+# Translated READMEs live under docs/readme/ for GitHub browsing only --
+# they are repo documents, not site pages.
+exclude_docs: |
+  readme/
 copyright: EbonBuilds — a community project for ProjectEbonhold. Not affiliated with the server owner.
 
 theme:
@@ -46,6 +50,14 @@ extra:
     - icon: material/forum
       link: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/discussions
       name: Discussions
+
+plugins:
+  - search
+  # Social cards need cairo/pillow and Google-Fonts access -- available on
+  # the CI runner, not necessarily locally. docs.yml sets MKDOCS_SOCIAL=true;
+  # local builds skip card generation and stay dependency-light.
+  - social:
+      enabled: !ENV [MKDOCS_SOCIAL, false]
 
 nav:
   - Home: index.md

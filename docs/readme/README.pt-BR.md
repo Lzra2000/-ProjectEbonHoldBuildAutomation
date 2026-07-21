@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="EbonBuilds" width="100%">
+  <img src="../../assets/banner.svg" alt="EbonBuilds" width="100%">
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <b>Português (Brasil)</b> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.pl.md">Polski</a>
+  <a href="../../README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <b>Português (Brasil)</b> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.pl.md">Polski</a>
 </p>
 
 Um addon de World of Warcraft (3.3.5a) para o **ProjectEbonhold** que automatiza as escolhas de echo (Banish / Reroll / Freeze / Select) com base em um build que você define, e se auto-ajusta ao longo do tempo com dados reais de jogo.
@@ -35,7 +35,7 @@ Requer **ProjectEbonhold** ou **ProjectEbonhold Enhanced**. Alguns recursos usam
 - **Tome Atlas**: locais de drop de tomos de echo, coletados pela comunidade.
 - **Public Builds**: navegue e importe builds compartilhados por outros jogadores.
 
-Veja [`FAQ.md`](FAQ.md) para explicações detalhadas de cada recurso e o histórico completo de versões.
+Veja [FAQ](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/faq/) / [CHANGELOG.md](../../CHANGELOG.md) para explicações detalhadas de cada recurso e o histórico completo de versões.
 
 ## Capturas de tela
 

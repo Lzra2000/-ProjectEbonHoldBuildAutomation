@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="EbonBuilds" width="100%">
+  <img src="../../assets/banner.svg" alt="EbonBuilds" width="100%">
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <b>Polski</b>
+  <a href="../../README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <b>Polski</b>
 </p>
 
 Addon do World of Warcraft (3.3.5a) dla **ProjectEbonhold**, który automatyzuje wybory echa (Banish / Reroll / Freeze / Select) na podstawie zdefiniowanego przez ciebie builda i z czasem sam się dostraja na podstawie prawdziwych danych z gry.
@@ -35,7 +35,7 @@ Wymaga **ProjectEbonhold** lub **ProjectEbonhold Enhanced**. Niektóre funkcje d
 - **Tome Atlas**: lokalizacje dropów tomów echa, zebrane przez społeczność.
 - **Public Builds**: przeglądaj i importuj buildy udostępnione przez innych graczy.
 
-Szczegółowe wyjaśnienia każdej funkcji i pełną historię wersji znajdziesz w [`FAQ.md`](FAQ.md).
+Szczegółowe wyjaśnienia każdej funkcji i pełną historię wersji znajdziesz w [FAQ](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/faq/) / [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Zrzuty ekranu
 

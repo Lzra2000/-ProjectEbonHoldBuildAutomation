@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="EbonBuilds" width="100%">
+  <img src="../../assets/banner.svg" alt="EbonBuilds" width="100%">
 </p>
 
 <p align="center">
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README.de.md">Deutsch</a> | <b>Русский</b> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.pl.md">Polski</a>
+  <a href="../../README.md">English</a> | <a href="README.de.md">Deutsch</a> | <b>Русский</b> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <a href="README.pl.md">Polski</a>
 </p>
 
 Аддон для World of Warcraft (3.3.5a), созданный для **ProjectEbonhold**, автоматизирующий выбор эхо (Banish / Reroll / Freeze / Select) на основе билда, который вы задаёте, и со временем самонастраивающийся на реальных игровых данных.
@@ -35,7 +35,7 @@
 - **Tome Atlas**: места дропа эхо-томов, собранные сообществом.
 - **Public Builds**: просмотр и импорт билдов, которыми поделились другие игроки.
 
-Подробные объяснения каждой функции и полная история версий — в [`FAQ.md`](FAQ.md).
+Подробные объяснения каждой функции и полная история версий — в [FAQ](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/faq/) / [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Скриншоты
 
