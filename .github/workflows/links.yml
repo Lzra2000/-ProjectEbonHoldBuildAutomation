@@ -3,8 +3,8 @@ name: Link check
 # Weekly external-link check across the docs and root documents.
 # mkdocs build --strict validates internal links on every PR; this covers
 # what it can't -- external targets (screenshot raw URLs, the server site,
-# CurseForge, shields.io) rotting over time. A red scheduled run is the
-# signal; nothing auto-files issues.
+# badges) rotting over time. On failure the lychee report lands in an
+# issue titled "Link check report" (updated in place, not re-filed).
 
 on:
   schedule:
@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   lychee:
@@ -30,4 +31,18 @@ jobs:
             --exclude 'curseforge\.com'
             README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md
             'docs/**/*.md'
+          output: ./lychee-report.md
           fail: true
+
+      - name: File the report as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="Link check report"
+          EXISTING="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file ./lychee-report.md
+          else
+            gh issue create --title "$TITLE" --label documentation --body-file ./lychee-report.md
+          fi
