@@ -286,6 +286,13 @@ The dialog scrolls if it ever grows past the window (same fix as the FAQ window 
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
 ## Changelog
 
+### 3.67 (2026-07-21) -- Fix: world map crashed with 'attempt to call global ShowZonePins (a nil value)'
+
+3.65's new pin system had a Lua scoping bug: `RefreshMapPanel` calls `ShowZonePins`, but `RefreshMapPanel` is defined earlier in the file than `local function ShowZonePins` -- so at the point `RefreshMapPanel`'s body was compiled, no local `ShowZonePins` existed yet, and the reference silently resolved to a nonexistent global instead. Every world-map refresh threw the error.
+
+- Fixed with a standard Lua forward declaration: `local ShowZonePins` up top, the later definition changed from `local function ShowZonePins(...)` (which would have shadowed the forward-declared upvalue with an unrelated new local) to a plain assignment.
+- The existing self-tests didn't catch this because they only exercised the pure logic function (`PinsForZone`) directly, never the actual call chain that broke. Added a cheap sanity test that just confirms `ShowZonePins` is actually a function after full load -- would have caught this specific bug directly (18/18 self-tests now).
+
 ### 3.66 (2026-07-21) -- Fix: EchoCatalog spam warning still fired after 3.63's debounce
 
 3.63 debounced the actual cache-clearing work, but missed that the spam warning is based on how often the *handler itself* gets called, not how much work it does -- `SPELLS_CHANGED` still calls the handler once per fire regardless of what's inside it, so the warning kept firing even though the underlying waste was already gone.

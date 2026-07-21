@@ -38,6 +38,13 @@ EbonBuilds.WorldIntegration._AugmentUnitTooltipForTests = AugmentUnitTooltip
 -- (2) World map: tomes of the open zone
 ------------------------------------------------------------------------
 
+-- Forward-declared: RefreshMapPanel (below) calls this, but its full
+-- definition lives down in section (4) next to the rest of the pin
+-- system it belongs with. Without this declaration, the reference inside
+-- RefreshMapPanel would resolve to a nonexistent global instead of the
+-- local defined later in the file -- exactly the "attempt to call global
+-- 'ShowZonePins' (a nil value)" crash this fixes.
+local ShowZonePins
 local mapPanel, mapLines
 
 local function EnsureMapPanel()
@@ -356,7 +363,7 @@ local function EnsureLegendRow(index)
     return row
 end
 
-local function ShowZonePins(zoneName)
+function ShowZonePins(zoneName)
     local zoom = GetCurrentMapZone and GetCurrentMapZone() or 0
     if not WorldMapDetailFrame or zoom == 0 then
         for i = 1, #pinPool do pinPool[i]:Hide(); pinPool[i].hit:Hide() end
@@ -441,6 +448,18 @@ if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
     EbonBuilds.Debug.RegisterTest("WorldIntegration.PinsForZone: a different zone's coordinate doesn't leak in", function()
         local pins = EbonBuilds.WorldIntegration.PinsForZone("Icecrown", StubListByZone)
         if #pins ~= 0 then error("a coordinate registered for a different zone leaked into this one") end
+    end)
+
+    EbonBuilds.Debug.RegisterTest("WorldIntegration: forward-declared ShowZonePins is actually assigned after full load", function()
+        -- Would have caught the "attempt to call global 'ShowZonePins'
+        -- (a nil value)" bug directly: that crash only happens when a
+        -- function using ShowZonePins as an upvalue is CALLED, which the
+        -- pure-logic tests above never exercise. This just confirms the
+        -- forward-declared local actually got assigned by the time the
+        -- file finished loading.
+        if type(EbonBuilds.WorldIntegration._ShowZonePinsForTests) ~= "function" then
+            error("ShowZonePins was never assigned -- a forward declaration without a matching assignment stays nil")
+        end
     end)
 end
 
