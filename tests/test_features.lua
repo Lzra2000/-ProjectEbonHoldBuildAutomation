@@ -214,6 +214,16 @@ do
     check(EbonBuilds.EchoProjection.ResolveSpell("WARRIOR", 990003) == nil, "Mage variant is not widened to Warrior")
 end
 
+-- Each derived class catalog is large enough to matter. Browsing classes must
+-- keep a small recent working set instead of retaining all ten projections.
+do
+    local classes = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+    for _, classToken in ipairs(classes) do EbonBuilds.EchoProjection.Get(classToken) end
+    local count, maximum = EbonBuilds.EchoProjection._CacheSizeForTests()
+    check(count <= maximum, "class projection cache stays within its bounded high-water limit")
+    equal(maximum, 3, "class projection cache retains three recently used classes")
+end
+
 -- Rank-specific values migrate to refKey storage and survive inactive eligibility.
 do
     local build = EbonBuilds.Build.NewObject({

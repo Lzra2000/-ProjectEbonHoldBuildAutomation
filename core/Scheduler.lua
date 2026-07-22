@@ -14,9 +14,10 @@ Scheduler.BACKGROUND = BACKGROUND
 Scheduler.MAINTENANCE = MAINTENANCE
 
 local frame = CreateFrame("Frame")
-if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
-    EbonBuilds.Debug.ProtectScript(frame, "Scheduler.Frame")
-end
+-- Do not route this always-active OnUpdate through Debug.ProtectScript.
+-- ErrorLog.Protect allocates argument/result tables and invocation closures on
+-- every call; repeating jobs keep the frame active even while idle. Scheduled
+-- callbacks remain error-isolated by pcall/coroutine.resume in Run().
 frame:Hide()
 
 local jobsById = {}

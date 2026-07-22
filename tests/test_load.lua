@@ -10,17 +10,46 @@ EbonBuildsCharDB = EbonBuildsCharDB or {}
 
 local function Noop() end
 
+-- Optional development-only hooks used by tests/profile_memory.lua.  The
+-- ordinary smoke test leaves this nil, so its behavior and allocation profile
+-- stay unchanged.
+local TestMemoryProfile = rawget(_G, "EBONBUILDS_TEST_MEMORY_PROFILE")
+local function MemoryProfileCall(method, ...)
+    local callback = TestMemoryProfile and TestMemoryProfile[method]
+    if callback then return callback(TestMemoryProfile, ...) end
+end
+
 local function NormalizeNewlines(value)
     return tostring(value or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
 end
-local function NewObject()
-    return setmetatable({}, {
+local function NewObject(kind)
+    local object
+    object = setmetatable({}, {
         __index = function(_, key)
             -- Frame-private state should behave like a real Lua table: an
             -- unset `_field` is nil, not a callable WoW API method.
             if type(key) == "string" and key:sub(1, 1) == "_" then return nil end
-            if key == "CreateFontString" or key == "CreateTexture" or key == "GetStatusBarTexture" then
-                return function() return NewObject() end
+            if key == "loadingLabel" or key == "emptyLabel" then return nil end
+            if key == "CreateFontString" then
+                return function() return NewObject("FontString") end
+            elseif key == "CreateTexture" then
+                return function() return NewObject("Texture") end
+            elseif key == "CreateAnimationGroup" then
+                return function() return NewObject("AnimationGroup") end
+            elseif key == "GetStatusBarTexture" then
+                return function() return NewObject("StubStatusBarTexture") end
+            elseif key == "SetScript" and TestMemoryProfile then
+                return function(self, scriptName, callback)
+                    MemoryProfileCall("SetScript", self, scriptName, callback)
+                end
+            elseif key == "GetScript" and TestMemoryProfile then
+                return function(self, scriptName)
+                    return MemoryProfileCall("GetScript", self, scriptName)
+                end
+            elseif key == "Show" and TestMemoryProfile then
+                return function(self) MemoryProfileCall("SetShown", self, true) end
+            elseif key == "Hide" and TestMemoryProfile then
+                return function(self) MemoryProfileCall("SetShown", self, false) end
             elseif key == "GetChildren" or key == "GetRegions" then
                 return function() return end
             elseif key == "GetWidth" then
@@ -35,6 +64,8 @@ local function NewObject()
                 return function() return 0 end
             elseif key == "GetText" then
                 return function() return "" end
+            elseif key == "IsShown" and TestMemoryProfile then
+                return function(self) return MemoryProfileCall("IsShown", self) end
             elseif key == "GetChecked" or key == "IsShown" then
                 return function() return false end
             elseif key == "GetStringHeight" or key == "GetStringWidth" then
@@ -45,12 +76,14 @@ local function NewObject()
             return Noop
         end,
     })
+    MemoryProfileCall("ObjectCreated", kind or "Object")
+    return object
 end
 
-function CreateFrame() return NewObject() end
-UIParent = NewObject()
-GameTooltip = NewObject()
-DEFAULT_CHAT_FRAME = NewObject()
+function CreateFrame(frameType) return NewObject("Frame:" .. tostring(frameType or "Frame")) end
+UIParent = NewObject("External:UIParent")
+GameTooltip = NewObject("External:GameTooltip")
+DEFAULT_CHAT_FRAME = NewObject("External:ChatFrame")
 StaticPopupDialogs = {}
 SlashCmdList = {}
 UISpecialFrames = {}
@@ -149,15 +182,23 @@ if #files == 0 then
 end
 
 for _, file in ipairs(files) do
+    MemoryProfileCall("BeforeFile", file)
     local ok, err = pcall(function()
         local chunk, loadErr = loadfile(file)
         if not chunk then error(loadErr) end
+        MemoryProfileCall("AfterCompile", file)
         return chunk("EbonBuilds", EbonBuilds)
     end)
     if not ok then
         io.stderr:write("LOAD FAIL " .. file .. ": " .. tostring(err) .. "\n")
         os.exit(1)
     end
+    MemoryProfileCall("AfterExecute", file)
+end
+
+if TestMemoryProfile and TestMemoryProfile.loadOnly then
+    MemoryProfileCall("AfterLoad", files)
+    return
 end
 
 local uiContracts = {
@@ -285,7 +326,7 @@ do
         { "modules/automation/Automation.lua", "not s.policyBlocked" },
         { "modules/automation/Automation.lua", 'return false, nil, "policy_blocked"' },
         { "modules/session/Session.lua", 'decision.reasonCode = "ECHO_POLICY_BANISH"' },
-        { "modules/session/Session.lua", "eligibilityRecorded = true" },
+        { "modules/session/Session.lua", "eligibilitySchema = 1" },
         { "modules/session/Session.lua", 'decision.reasonCode = "ECHO_BAN_LIST"' },
     }
     for _, definition in ipairs(requiredSources) do
@@ -1177,11 +1218,12 @@ do
     local policySelectReason = EbonBuilds.SessionHistory._ReasonSentence({
         action = "Select",
         targetIndex = 1,
+        eligibilitySchema = 1,
         choices = {
-            { index = 1, name = "Quick Hands", score = 125, eligibilityRecorded = true },
-            { index = 2, name = "Glass Canon", score = 140, eligibilityRecorded = true,
-                policy = "never_pick", policyEffect = "exclude", policyBlocked = true, isAvoided = true },
-            { index = 3, name = "Rend", score = 85, eligibilityRecorded = true },
+            { index = 1, name = "Quick Hands", score = 125 },
+            { index = 2, name = "Glass Canon", score = 140,
+                policy = "never_pick", policyEffect = "exclude" },
+            { index = 3, name = "Rend", score = 85 },
         },
         decision = { reasonCode = "HIGHEST_FINAL_SCORE" },
     })
@@ -1340,6 +1382,73 @@ do
 end
 print("Verified connected Stats metrics, reliable sorting, early-Epic and action-quality aggregation, and decision-first Logbook evidence flags.")
 
+-- Saved-data compaction keeps all rendered decision evidence while removing
+-- fields that are derivable or never consumed, and remote-cache pruning must
+-- remove only same-title records already hidden by Build.ListPublic().
+do
+    local compactSession = {
+        logs = {
+            {
+                choices = {
+                    {
+                        name = "Spell 1", spellId = 1, score = 140, baseWeight = 40,
+                        refKey = "g:1", families = { "Caster" }, modifierDelta = 100,
+                        policy = "avoid", policyEffect = "exclude", policySelected = true,
+                        eligibilityRecorded = true, isBanned = false, isAvoided = true,
+                        policyBlocked = true, isProtected = false,
+                    },
+                },
+                decision = { source = "automatic", flags = { closeDecision = false, lastCharge = true } },
+            },
+        },
+    }
+    EbonBuilds.Database._CompactSessionForTests(compactSession)
+    local compactEntry = compactSession.logs[1]
+    local compactChoice = compactEntry.choices[1]
+    if compactEntry.eligibilitySchema ~= 1 or compactChoice.eligibilityRecorded ~= nil
+        or compactChoice.refKey ~= nil or compactChoice.families ~= nil
+        or compactChoice.modifierDelta ~= nil or compactChoice.policySelected ~= nil
+        or compactChoice.isProtected ~= nil or compactChoice.isAvoided ~= nil
+        or compactChoice.policyBlocked ~= nil or compactChoice.isBanned ~= nil
+        or compactEntry.decision.source ~= nil
+        or compactEntry.decision.flags.closeDecision ~= nil
+        or compactEntry.decision.flags.lastCharge ~= true then
+        error("session compaction removed required evidence or retained redundant fields")
+    end
+    local partialEvidence = { logs = { { choices = {
+        { eligibilityRecorded = true }, {},
+    } } } }
+    EbonBuilds.Database._CompactSessionForTests(partialEvidence)
+    if partialEvidence.logs[1].eligibilitySchema ~= nil
+        or partialEvidence.logs[1].choices[1].eligibilityRecorded ~= true then
+        error("session compaction promoted or erased partial eligibility evidence")
+    end
+
+    local savedDB = EbonBuildsDB
+    EbonBuildsDB = {
+        builds = {
+            localAlpha = { id = "localAlpha", title = " Alpha ", isPublic = true, lastModified = "2026-01-01" },
+        },
+        remoteBuilds = {
+            alphaTie = { id = "alphaTie", title = "ALPHA", lastModified = "2026-01-01" },
+            alphaLater = { id = "alphaLater", title = "alpha", lastModified = "2026-02-01" },
+            betaEarly = { id = "betaEarly", title = "Beta", lastModified = "2026-01-01" },
+            betaLater = { id = "betaLater", title = " beta ", lastModified = "2026-02-01" },
+            untitledA = { id = "untitledA", title = "" },
+            untitledB = { id = "untitledB", title = "  " },
+        },
+    }
+    local removed = EbonBuilds.Database.PruneRemoteBuilds()
+    if removed ~= 3 or EbonBuildsDB.remoteBuilds.alphaTie ~= nil
+        or EbonBuildsDB.remoteBuilds.alphaLater ~= nil
+        or EbonBuildsDB.remoteBuilds.betaEarly == nil or EbonBuildsDB.remoteBuilds.betaLater ~= nil
+        or EbonBuildsDB.remoteBuilds.untitledA == nil or EbonBuildsDB.remoteBuilds.untitledB == nil then
+        error("remote cache title deduplication changed the visible winner or removed untitled records")
+    end
+    EbonBuildsDB = savedDB
+end
+print("Verified compact session evidence and visible-equivalent remote build cache pruning.")
+
 -- Construct the primary UI once with API stubs. This catches missing frame
 -- methods, bad module ordering, and construction-time nil access that a pure
 -- TOC load cannot detect. It is not a pixel/layout test.
@@ -1384,6 +1493,16 @@ local analyticsOK, analyticsErr = xpcall(function()
     })
     EbonBuilds.Weights.MigrateBuild(build)
     EbonBuilds.Build.SetActive(build.id)
+
+    -- Refreshing a Missing-Echo result set fifty times must reuse its existing
+    -- WoW widget pool. Hidden/parented frames and regions cannot be reclaimed
+    -- by Lua GC on the 3.3.5a client.
+    EbonBuilds.BuildOverview._RefreshMissingForTests(build, true)
+    local missingPoolSize = EbonBuilds.BuildOverview._MissingRowPoolSizeForTests()
+    for _ = 1, 50 do EbonBuilds.BuildOverview._RefreshMissingForTests(build, true) end
+    if EbonBuilds.BuildOverview._MissingRowPoolSizeForTests() ~= missingPoolSize then
+        error("Missing Echo refresh created new rows instead of reusing its existing pool")
+    end
 
     -- Schema-3 and imported builds can have an allocated reference table that
     -- does not yet contain every still-valid legacy value. Stats must iterate

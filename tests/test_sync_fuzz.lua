@@ -66,6 +66,7 @@ EbonBuilds.Build = {
     GetAll = function() return {} end,
 }
 EbonBuilds.ExportImport = { DecodeBuild = function() return nil, "fuzz" end, ImportBuild = function() return nil, "fuzz" end }
+EbonBuilds.TomeAtlas = { SerializeAll = function() return {} end }
 
 assert(loadfile("core/RingBuffer.lua"))("EbonBuilds", EbonBuilds)
 assert(loadfile("modules/sync/Sync.lua"))("EbonBuilds", EbonBuilds)
@@ -158,5 +159,29 @@ assert(#messages == 1 and messages[1]:find("3.32", 1, true) and messages[1]:find
 ping("VER|3.33", "Other")
 assert(#messages == 1, "the notice fires once per session")
 print("Version ping semantics passed.")
+
+-- Requester state used to expire only when another inbound chunk happened.
+-- A quiet server could therefore retain one full eligible-build array and one
+-- cooldown entry per unique requester indefinitely.
+EbonBuilds.Sync._ResetForTests()
+EbonBuilds.Build.ListPublic = function()
+    return { { id = "public-build", title = "Public", class = "MAGE", author = "Author", validated = true } }
+end
+for i = 1, 200 do
+    local sender = "Requester" .. i
+    dispatch("EbonBuilds", "REQ|" .. sender .. "|MAGE", "WHISPER", sender)
+end
+local retained = EbonBuilds.Sync._DebugState()
+assert(retained.pendingBatches == 200 and retained.requestCooldowns == 200,
+    "sync retention fixture did not create the expected requester state")
+now = now + 100
+EbonBuilds.Sync._CleanupExpiredForTests()
+local expired = EbonBuilds.Sync._DebugState()
+assert(expired.pendingBatches == 0 and expired.requestCooldowns == 0,
+    "quiet sync requester state was not expired by periodic cleanup")
+now = now + 4000
+EbonBuilds.Sync._CleanupExpiredForTests()
+assert(EbonBuilds.Sync._DebugState().peers == 0, "stale session-local peer presence was not expired")
+print("Sync retention cleanup passed: pending batches, cooldowns, and stale peers are bounded while idle.")
 
 print(string.format("Sync fuzz passed: %d hostile payloads across DispatchAddon, HandleChannelMessage, and HandleSystemMessage (seed %d).", ITERATIONS, SEED))

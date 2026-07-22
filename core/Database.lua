@@ -15,6 +15,7 @@ local MAX_RAW_ACCOUNT = 120
 local MAX_REMOTE_BUILDS = 500
 local MAX_REMOTE_ESTIMATED_BYTES = 2 * 1024 * 1024
 local MIGRATION_BATCH = 8
+local SESSION_COMPACTION_SCHEMA = 1
 
 local CHARACTER_PREFERENCE_DEFAULTS = {
     autoSellJunkEnabled = false,
@@ -72,6 +73,15 @@ local function EnsureRootDefaults()
         if EbonBuildsCharDB[key] == nil then EbonBuildsCharDB[key] = defaultValue end
     end
 
+    -- Obsolete diagnostic/cache fields have no readers in the current addon.
+    -- They are not user-authored data and should not be loaded and serialized
+    -- forever after the feature that created them has gone away.
+    EbonBuildsDB.syncPeers = nil
+    EbonBuildsCharDB.performanceLab = nil
+    EbonBuildsCharDB.performanceLegacy = nil
+    EbonBuildsCharDB.performanceV2 = nil
+    EbonBuildsCharDB.valuationTelemetry = nil
+
     -- Draft/editor state is runtime-only. Never retain a half-committed edit.
     EbonBuildsDB.pendingWeights = nil
     EbonBuildsDB._isEditingBuild = nil
@@ -114,6 +124,62 @@ local function LegacyRunId(session, index)
     return "legacy:" .. SessionCharacter(session) .. ":" .. tostring(stamp) .. ":" .. tostring(buildId) .. ":" .. tostring(index)
 end
 
+local function CompactSession(session)
+    local changed = 0
+    for _, entry in ipairs(type(session.logs) == "table" and session.logs or {}) do
+        local choiceCount, recordedEligibilityCount = 0, 0
+        local choices = type(entry.choices) == "table" and entry.choices or {}
+        for _, choice in ipairs(choices) do
+            choiceCount = choiceCount + 1
+            if choice.eligibilityRecorded == true then recordedEligibilityCount = recordedEligibilityCount + 1 end
+        end
+        local promoteEligibility = choiceCount > 0 and recordedEligibilityCount == choiceCount
+        for _, choice in ipairs(choices) do
+            if promoteEligibility and choice.eligibilityRecorded ~= nil then
+                choice.eligibilityRecorded = nil
+                changed = changed + 1
+            end
+            if choice.refKey ~= nil then choice.refKey = nil; changed = changed + 1 end
+            if choice.families ~= nil then choice.families = nil; changed = changed + 1 end
+            if choice.modifierDelta ~= nil then choice.modifierDelta = nil; changed = changed + 1 end
+            if choice.policySelected ~= nil then choice.policySelected = nil; changed = changed + 1 end
+            if choice.isProtected ~= nil then choice.isProtected = nil; changed = changed + 1 end
+            if choice.policy == "normal" then choice.policy = nil; changed = changed + 1 end
+            if choice.policyEffect == "normal" then choice.policyEffect = nil; changed = changed + 1 end
+            if choice.isBanned == false then choice.isBanned = nil; changed = changed + 1 end
+            if choice.isAvoided == false
+                or (choice.isAvoided and (choice.isBanned or choice.policyBlocked
+                    or choice.policyEffect == "banish" or choice.policyEffect == "exclude")) then
+                choice.isAvoided = nil
+                changed = changed + 1
+            end
+            if choice.policyBlocked == false
+                or (choice.policyBlocked and (choice.policyEffect == "banish" or choice.policyEffect == "exclude")) then
+                choice.policyBlocked = nil
+                changed = changed + 1
+            end
+        end
+        if promoteEligibility and entry.eligibilitySchema ~= 1 then
+            entry.eligibilitySchema = 1
+            changed = changed + 1
+        end
+        local flags = entry.decision and entry.decision.flags
+        if entry.decision and tostring(entry.decision.source or ""):lower() == "automatic" then
+            entry.decision.source = nil
+            changed = changed + 1
+        end
+        if type(flags) == "table" then
+            for key, value in pairs(flags) do
+                if value == false then flags[key] = nil; changed = changed + 1 end
+            end
+            if next(flags) == nil then entry.decision.flags = nil; changed = changed + 1 end
+        end
+    end
+    return changed
+end
+
+Database._CompactSessionForTests = CompactSession
+
 local function MigrationCoroutine()
     migrationRunning = true
     local migration = EbonBuildsDB.migration
@@ -128,6 +194,7 @@ local function MigrationCoroutine()
             if type(session) == "table" then
                 session.runId = session.runId or LegacyRunId(session, index)
                 session.characterKey = session.characterKey or SessionCharacter(session)
+                CompactSession(session)
             end
         end
         cursor = stop
@@ -144,6 +211,7 @@ local function MigrationCoroutine()
 
     EbonBuildsDB.schemaVersion = ACCOUNT_SCHEMA
     EbonBuildsCharDB.schemaVersion = CHARACTER_SCHEMA
+    migration.sessionCompactionSchema = SESSION_COMPACTION_SCHEMA
     migration.stage = "complete"
     migration.cursor = 0
     migration.completedAt = time and time() or 0
@@ -160,6 +228,7 @@ function Database.Init()
     local migration = EbonBuildsDB.migration
     local needsMigration = tonumber(EbonBuildsDB.schemaVersion) ~= ACCOUNT_SCHEMA
         or tonumber(EbonBuildsCharDB.schemaVersion) ~= CHARACTER_SCHEMA
+        or tonumber(migration.sessionCompactionSchema) ~= SESSION_COMPACTION_SCHEMA
         or migration.stage ~= "complete"
 
     if needsMigration and EbonBuilds.Scheduler and not migrationRunning then
@@ -278,6 +347,40 @@ function Database.PruneRemoteBuilds()
     local remote = EbonBuildsDB and EbonBuildsDB.remoteBuilds
     if type(remote) ~= "table" then return 0 end
 
+    -- The public browser and relay path already collapse builds by normalized
+    -- title. Persisting every hidden copy only duplicates complete weight and
+    -- settings maps, so keep the same earliest-known winner and discard remote
+    -- copies that can never be displayed or relayed.
+    local titleWinners = {}
+    local function Consider(build)
+        if type(build) ~= "table" then return end
+        local key = tostring(build.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        if key == "" then return end
+        local current = titleWinners[key]
+        local candidateDate = tostring(build.lastModified or "")
+        local currentDate = current and tostring(current.lastModified or "") or nil
+        -- Match Build.ListPublic exactly: on equal dates, retain the first
+        -- record encountered (local public builds are considered first).
+        if not current or candidateDate < currentDate then
+            titleWinners[key] = build
+        end
+    end
+    for _, build in pairs(EbonBuildsDB.builds or {}) do
+        if type(build) == "table" and build.isPublic then Consider(build) end
+    end
+    for _, build in pairs(remote) do Consider(build) end
+
+    local removed = 0
+    for id, build in pairs(remote) do
+        local key = type(build) == "table"
+            and tostring(build.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
+        local winner = key ~= "" and titleWinners[key] or nil
+        if winner and winner ~= build then
+            remote[id] = nil
+            removed = removed + 1
+        end
+    end
+
     local list = {}
     local estimatedBytes = 0
     local seen = {}
@@ -286,7 +389,7 @@ function Database.PruneRemoteBuilds()
         estimatedBytes = estimatedBytes + bytes
         list[#list + 1] = { id = id, build = build, bytes = bytes }
     end
-    if #list <= MAX_REMOTE_BUILDS and estimatedBytes <= MAX_REMOTE_ESTIMATED_BYTES then return 0 end
+    if #list <= MAX_REMOTE_BUILDS and estimatedBytes <= MAX_REMOTE_ESTIMATED_BYTES then return removed end
 
     table.sort(list, function(a, b)
         local at = a.build._lastSeenAt or a.build.lastModified or ""
@@ -294,7 +397,7 @@ function Database.PruneRemoteBuilds()
         return tostring(at) > tostring(bt)
     end)
 
-    local keptBytes, keptCount, removed = 0, 0, 0
+    local keptBytes, keptCount = 0, 0
     for index = 1, #list do
         local entry = list[index]
         if keptCount < MAX_REMOTE_BUILDS and keptBytes + entry.bytes <= MAX_REMOTE_ESTIMATED_BYTES then

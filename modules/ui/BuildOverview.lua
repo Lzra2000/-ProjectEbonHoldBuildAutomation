@@ -1171,9 +1171,8 @@ RefreshMissing = function(assumeNoneOwned)
     missingChild.emptyLabel:Hide()
     local currY = 0
     local ownedCount, missingCount = 0, 0
-    for _, entry in ipairs(missing) do
+    for rowIdx, entry in ipairs(missing) do
         if entry.owned then ownedCount = ownedCount + 1 else missingCount = missingCount + 1 end
-        local rowIdx = #missingRows + 1
         while #missingRows < rowIdx do
             local n = #missingRows + 1
             local btn = CreateFrame("Button", nil, missingChild)
@@ -1282,6 +1281,21 @@ RefreshMissing = function(assumeNoneOwned)
             missingCountLabel:SetText(string.format("%d learned · %d missing", ownedCount, missingCount))
         end
     end
+end
+
+-- Narrow regression hooks: parented 3.3.5 UI objects cannot be destroyed, so
+-- repeated refreshes must plateau at the row pool's first high-water mark.
+function EbonBuilds.BuildOverview._RefreshMissingForTests(build, assumeNoneOwned)
+    if build then state.build = build end
+    return RefreshMissing(assumeNoneOwned)
+end
+
+function EbonBuilds.BuildOverview._MissingRowPoolSizeForTests()
+    return #missingRows
+end
+
+function EbonBuilds.BuildOverview._SetMissingViewForTests(key)
+    missingState.view = MissingViewDefinition(key).key
 end
 ------------------------------------------------------------------------
 -- BuildViewFrame

@@ -10,10 +10,38 @@ EbonBuilds.EchoProjection = {}
 local Projection = EbonBuilds.EchoProjection
 local Identity = EbonBuilds.EchoIdentity
 local cache = {}
+local cacheAge = {}
+local cacheClock = 0
+local MAX_CACHED_CLASSES = 3
 local CLASS_ORDER = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
 
 local function Clear(t)
     for key in pairs(t) do t[key] = nil end
+end
+
+local function Touch(classToken)
+    cacheClock = cacheClock + 1
+    cacheAge[classToken] = cacheClock
+end
+
+local function TrimCache(keepToken)
+    local count = 0
+    for _ in pairs(cache) do count = count + 1 end
+    while count > MAX_CACHED_CLASSES do
+        local oldestToken, oldestAge
+        for token in pairs(cache) do
+            if token ~= keepToken then
+                local age = cacheAge[token] or 0
+                if oldestAge == nil or age < oldestAge then
+                    oldestToken, oldestAge = token, age
+                end
+            end
+        end
+        if not oldestToken then break end
+        cache[oldestToken] = nil
+        cacheAge[oldestToken] = nil
+        count = count - 1
+    end
 end
 
 local function SortEntries(a, b)
@@ -161,6 +189,7 @@ local function Build(classToken)
         and existing.identityRevision == identityRevision
         and existing.eligibilityRevision == eligibilityRevision
         and existing.catalogFingerprint == fingerprint then
+        Touch(classToken)
         return existing
     end
 
@@ -215,12 +244,26 @@ local function Build(classToken)
     table.sort(projection.conflicted, SortEntries)
     table.sort(projection.unavailable, SortEntries)
     cache[classToken] = projection
+    Touch(classToken)
+    TrimCache(classToken)
     return projection
 end
 
 function Projection.Invalidate(classToken)
-    if classToken then cache[tostring(classToken):upper()] = nil
-    else Clear(cache) end
+    if classToken then
+        classToken = tostring(classToken):upper()
+        cache[classToken] = nil
+        cacheAge[classToken] = nil
+    else
+        Clear(cache)
+        Clear(cacheAge)
+    end
+end
+
+function Projection._CacheSizeForTests()
+    local count = 0
+    for _ in pairs(cache) do count = count + 1 end
+    return count, MAX_CACHED_CLASSES
 end
 
 function Projection.Get(classToken) return Build(classToken) end

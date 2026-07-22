@@ -162,8 +162,9 @@ end
 
 local PolicyEvidence = {}
 
-function PolicyEvidence.IsKnown(choice)
+function PolicyEvidence.IsKnown(choice, entry)
     if type(choice) ~= "table" then return false end
+    if entry and tonumber(entry.eligibilitySchema) == 1 then return true end
     if choice.eligibilityRecorded == true then return true end
     -- Older runs did record an active conditional policy effect, even though
     -- they did not record the complete eligibility snapshot.
@@ -171,8 +172,8 @@ function PolicyEvidence.IsKnown(choice)
         or choice.policyEffect == "banish" or choice.policyEffect == "exclude"
 end
 
-function PolicyEvidence.IsEligible(choice)
-    if not PolicyEvidence.IsKnown(choice) then return true end
+function PolicyEvidence.IsEligible(choice, entry)
+    if not PolicyEvidence.IsKnown(choice, entry) then return true end
     return not (choice.isBanned or choice.isAvoided or choice.policyBlocked
         or choice.policyEffect == "banish" or choice.policyEffect == "exclude")
 end
@@ -194,7 +195,7 @@ local function BestAlternative(entry, eligibleOnly)
     local best
     for arrayIndex, choice in ipairs((entry and entry.choices) or {}) do
         if choice ~= target and arrayIndex ~= targetArrayIndex
-            and (not eligibleOnly or PolicyEvidence.IsEligible(choice)) then
+            and (not eligibleOnly or PolicyEvidence.IsEligible(choice, entry)) then
             if not best or (tonumber(choice.score) or 0) > (tonumber(best.score) or 0) then best = choice end
         end
     end
@@ -206,7 +207,7 @@ function PolicyEvidence.BestIneligibleAlternative(entry)
     local best
     for arrayIndex, choice in ipairs((entry and entry.choices) or {}) do
         if choice ~= target and arrayIndex ~= targetArrayIndex
-            and PolicyEvidence.IsKnown(choice) and not PolicyEvidence.IsEligible(choice) then
+            and PolicyEvidence.IsKnown(choice, entry) and not PolicyEvidence.IsEligible(choice, entry) then
             if not best or (tonumber(choice.score) or 0) > (tonumber(best.score) or 0) then best = choice end
         end
     end
@@ -258,7 +259,7 @@ local function ReasonSentence(entry)
     local reason = REASON_TEXT[decision.reasonCode]
 
     if action == "Banish" and target then
-        if decision.reasonCode == "ECHO_BAN_LIST" or (PolicyEvidence.IsKnown(target) and target.isBanned) then
+        if decision.reasonCode == "ECHO_BAN_LIST" or (PolicyEvidence.IsKnown(target, entry) and target.isBanned) then
             return REASON_TEXT.ECHO_BAN_LIST
         end
         if decision.reasonCode == "ECHO_POLICY_BANISH" or target.policyEffect == "banish" then
@@ -678,7 +679,6 @@ local function SearchableText(entry)
     for _, choice in ipairs(entry.choices or {}) do
         fields[#fields + 1] = tostring(choice.name or "")
         fields[#fields + 1] = tostring(choice.spellId or "")
-        if choice.families then fields[#fields + 1] = tostring(choice.families) end
     end
     return SearchSafeLower(table.concat(fields, " "))
 end
@@ -1796,7 +1796,11 @@ local function BuildDecisionExport(entry)
     lines[#lines + 1] = "Offer:"
     for index, choice in ipairs(entry.choices or {}) do
         local target = TargetChoice(entry)
-        lines[#lines + 1] = string.format("%d. %s%s · quality %s · weight %s · modifiers %s · final %s", index, choice.name or "Unknown Echo", choice == target and " [TARGET]" or "", tostring(choice.quality or "?"), tostring(choice.baseWeight or "?"), choice.modifierDelta ~= nil and string.format("%+.0f", choice.modifierDelta) or "?", tostring(choice.score or "?"))
+        local modifierDelta = choice.modifierDelta
+        if modifierDelta == nil and choice.baseWeight ~= nil and choice.score ~= nil then
+            modifierDelta = (tonumber(choice.score) or 0) - (tonumber(choice.baseWeight) or 0)
+        end
+        lines[#lines + 1] = string.format("%d. %s%s · quality %s · weight %s · modifiers %s · final %s", index, choice.name or "Unknown Echo", choice == target and " [TARGET]" or "", tostring(choice.quality or "?"), tostring(choice.baseWeight or "?"), modifierDelta ~= nil and string.format("%+.0f", modifierDelta) or "?", tostring(choice.score or "?"))
     end
     local charges = entry.charges or {}
     local change, remaining = ResourceChangeSummary(PreviousEntryCharges(entry), charges, false)
@@ -1845,7 +1849,9 @@ function H.ShowDecisionDetail(entry)
             card._name:SetText((choice.name or "Unknown Echo") .. targetLabel)
             card._name:SetTextColor(EbonBuilds.Quality.GetRGB(choice.quality))
             if choice.baseWeight ~= nil then
-                card._breakdown:SetText(string.format("Weight %.0f · Mod %+.0f · Final %.0f", choice.baseWeight or 0, choice.modifierDelta or 0, choice.score or 0))
+                local modifierDelta = choice.modifierDelta
+                if modifierDelta == nil then modifierDelta = (tonumber(choice.score) or 0) - (tonumber(choice.baseWeight) or 0) end
+                card._breakdown:SetText(string.format("Weight %.0f · Mod %+.0f · Final %.0f", choice.baseWeight or 0, modifierDelta, choice.score or 0))
             else
                 card._breakdown:SetText(string.format("Final %.0f · legacy details unavailable", choice.score or 0))
             end

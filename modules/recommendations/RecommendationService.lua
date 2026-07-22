@@ -100,10 +100,13 @@ end
 
 function Service.Invalidate(classToken, spec)
     EbonBuildsDB.recommendationSourceRevision = Revision() + 1
+    -- Revision is global, so every existing cohort becomes unusable to Get()
+    -- at this point. Drop those stale snapshots immediately instead of keeping
+    -- their full derived evidence until the next reload.
+    local cache = Cache()
+    for key in pairs(cache) do cache[key] = nil; dirty[key] = nil end
     if classToken then
         dirty[EbonBuilds.CommunityEligibility.CohortKey(classToken, spec)] = true
-    else
-        for key in pairs(Cache()) do dirty[key] = true end
     end
     if EbonBuilds.EventHub then EbonBuilds.EventHub.Bump("RECOMMENDATION_SOURCE_CHANGED") end
 end
@@ -113,7 +116,8 @@ function Service.Init()
     EbonBuildsDB.recommendationSourceRevision = Revision()
     local staleKeys = {}
     for key, snapshot in pairs(EbonBuildsDB.recommendationCache) do
-        if type(snapshot) ~= "table" or tonumber(snapshot.schema) ~= 6 then
+        if type(snapshot) ~= "table" or tonumber(snapshot.schema) ~= 6
+            or tonumber(snapshot.sourceRevision) ~= Revision() then
             staleKeys[#staleKeys + 1] = key
         end
     end

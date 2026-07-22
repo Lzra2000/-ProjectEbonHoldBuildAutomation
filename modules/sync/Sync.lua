@@ -45,6 +45,8 @@ local MAX_INFLIGHT_TRANSFERS = 20
 local SYNC_TIMEOUT  = 15
 local BATCH_SIZE    = 1
 local WANT_TIMEOUT  = 15
+local CLEANUP_INTERVAL = 5
+local PEER_TTL = 3600
 local REQ_COOLDOWN  = 30
 local OFFLINE_COOLDOWN        = 60  -- seconds to block re-sends to a target detected as offline
 local MAX_QUEUE_SIZE          = 500 -- safety cap to prevent unbounded queue growth
@@ -103,6 +105,7 @@ local classSyncNextTime = 0
 local wantedFrom = {}       -- [sender] = { uuids = {uuid=true}, retries = {uuid=n}, lastActivity = t }
 local requestedThisSync = {}-- [uuid] = true  (dedup across responders, reset per RequestSync)
 local reqCooldown = {}      -- [sender] = ignore-REQs-until timestamp (responder-side flood guard)
+local nextCleanupTime = 0
 local syncSession = { active = false, received = 0, lastActivity = 0 }
 local RTX_IDLE      = 8    -- seconds of silence from a sender before retransmit request
 local RTX_MAX       = 2    -- retransmit attempts per build per sender
@@ -364,6 +367,12 @@ local function CleanupExpired()
             failedTargets[k] = nil
         end
     end
+    for k, expires in pairs(reqCooldown) do
+        if t >= expires then reqCooldown[k] = nil end
+    end
+    for k, peer in pairs(peers) do
+        if t - (tonumber(peer.lastSeen) or 0) > PEER_TTL then peers[k] = nil end
+    end
     -- Garbage-collect sendTally entries that haven't been touched in > SYNC_TIMEOUT
     for k in pairs(sendTally) do
         if not pendingBatches[k] and not failedTargets[k] then
@@ -487,9 +496,6 @@ local function HandleRequest(requester, classFilter)
     if classFilter == "" then classFilter = nil end
     SyncTrace("REQ from " .. tostring(requester) .. (classFilter and (" (class filter: " .. classFilter .. ")") or ""))
     if not requester or requester == "" or NormalizeName(requester) == NormalizeName(UnitName("player")) then return end
-
-    EbonBuildsDB.syncPeers = EbonBuildsDB.syncPeers or {}
-    EbonBuildsDB.syncPeers[requester] = true
 
     -- Target just contacted us — reset send cap so BLD chunks aren't blocked
     sendTally[requester] = nil
@@ -1073,12 +1079,25 @@ EbonBuilds.Sync._DebugState = function()
     for _, rec in pairs(wantedFrom) do
         for _ in pairs(rec.uuids) do wf = wf + 1 end
     end
-    return { queue = q, opcodes = opcodes, wantedFrom = wf, session = syncSession, requested = requestedThisSync }
+    local pending, cooldowns, peerCount, transfers = 0, 0, 0, 0
+    for _ in pairs(pendingBatches) do pending = pending + 1 end
+    for _ in pairs(reqCooldown) do cooldowns = cooldowns + 1 end
+    for _ in pairs(peers) do peerCount = peerCount + 1 end
+    for _ in pairs(inflight) do transfers = transfers + 1 end
+    return {
+        queue = q, opcodes = opcodes, wantedFrom = wf, session = syncSession,
+        requested = requestedThisSync, pendingBatches = pending,
+        requestCooldowns = cooldowns, peers = peerCount, inflight = transfers,
+    }
 end
+EbonBuilds.Sync._CleanupExpiredForTests = CleanupExpired
 EbonBuilds.Sync._ResetForTests = function()
     wantedFrom = {}
     requestedThisSync = {}
     reqCooldown = {}
+    pendingBatches = {}
+    inflight = {}
+    peers = {}
     EbonBuilds.RingBuffer.Clear(sendQueue)
     EbonBuilds.RingBuffer.Clear(classSyncQueue)
     syncSession.active = false
@@ -1195,6 +1214,11 @@ function EbonBuilds.Sync.Init()
     end, "Sync")
     local function TickSync()
         local now = Now()
+
+        if now >= nextCleanupTime then
+            CleanupExpired()
+            nextCleanupTime = now + CLEANUP_INTERVAL
+        end
 
         -- Retransmit lost transfers: if a sender we WNT'd builds from has
         -- gone quiet while builds are still missing, ask again (bounded).
@@ -1313,7 +1337,7 @@ function EbonBuilds.Sync.Init()
     end
 
     EbonBuildsDB.lastSyncDate = EbonBuildsDB.lastSyncDate or nil
-    EbonBuildsDB.syncPeers    = EbonBuildsDB.syncPeers    or {}
+    EbonBuildsDB.syncPeers    = nil
 
     -- Purge remote builds from older addon versions (only unimported builds)
     local storedVersion = EbonBuildsDB.syncVersion or 0

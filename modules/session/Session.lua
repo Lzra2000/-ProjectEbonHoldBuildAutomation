@@ -201,7 +201,7 @@ local function DecisionMetadata(action, settings, build, source)
         end
     end
     return {
-        source = source or "automatic",
+        source = source and tostring(source):lower() ~= "automatic" and source or nil,
         model = smart and "expected value" or "classic peak",
         threshold = threshold,
         reasonCode = reasonCode,
@@ -401,7 +401,6 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
     local settings = build and build.settings or EbonBuilds.Build.DefaultSettings()
     local choices = {}
     for _, s in ipairs(scored) do
-        local refKey = s.spellId and EbonBuilds.EchoCatalog.GetRefForSpell(s.spellId) or nil
         local baseWeight = s.spellId and EbonBuilds.Weights.GetForSpell(build, s.spellId, s.quality) or 0
         choices[#choices + 1] = {
             index         = s.index,
@@ -409,21 +408,13 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
             score         = s.score,
             quality       = s.quality,
             spellId       = s.spellId,
-            refKey        = refKey,
             baseWeight    = baseWeight,
-            modifierDelta = (s.score or 0) - baseWeight,
-            families      = s.data and s.data.families or nil,
-            policy        = s.policy,
-            policyEffect  = s.policyEffect,
-            policySelected = s.policySelected,
+            policy        = s.policy ~= "normal" and s.policy or nil,
+            policyEffect  = s.policyEffect ~= "normal" and s.policyEffect or nil,
             -- Keep the eligibility verdict with the decision evidence.  The
             -- Logbook cannot safely reconstruct these build/run-specific
             -- flags later, after the active build or selected Echoes change.
-            eligibilityRecorded = true,
-            isBanned      = s.isBanned and true or false,
-            isAvoided     = s.isAvoided and true or false,
-            policyBlocked = s.policyBlocked and true or false,
-            isProtected   = s.isProtected and true or false,
+            isBanned      = s.isBanned and true or nil,
         }
     end
 
@@ -462,12 +453,14 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
     end
     local normalizedAction = tostring(action or "")
     local chargeKey = normalizedAction:find("^Banish") and "ban" or normalizedAction:find("^Reroll") and "reroll" or normalizedAction:find("^Freeze") and "freeze" or nil
-    decision.flags = {
-        closeDecision = #sortedScores >= 2 and math.abs(sortedScores[1] - sortedScores[2]) <= 3 or false,
-        lastCharge = chargeKey and (charges[chargeKey] or 0) <= 1 or false,
-        modifierOverride = targetBase ~= nil and maxBase ~= nil and targetBase < maxBase and target and (target.score or 0) >= sortedScores[1] or false,
-        manualDisagreement = source == "manual" and target and sortedScores[1] and (tonumber(target.score) or 0) < sortedScores[1] or false,
-    }
+    decision.flags = {}
+    if #sortedScores >= 2 and math.abs(sortedScores[1] - sortedScores[2]) <= 3 then decision.flags.closeDecision = true end
+    if chargeKey and (charges[chargeKey] or 0) <= 1 then decision.flags.lastCharge = true end
+    if targetBase ~= nil and maxBase ~= nil and targetBase < maxBase and target
+        and (target.score or 0) >= sortedScores[1] then decision.flags.modifierOverride = true end
+    if source == "manual" and target and sortedScores[1]
+        and (tonumber(target.score) or 0) < sortedScores[1] then decision.flags.manualDisagreement = true end
+    if next(decision.flags) == nil then decision.flags = nil end
 
     local entry = {
         timestamp   = time(),
@@ -478,6 +471,7 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
         targetIndex = targetIndex,
         charges     = charges,
         decision    = decision,
+        eligibilitySchema = 1,
     }
 
     session.logs[#session.logs + 1] = entry
