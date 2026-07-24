@@ -69,6 +69,7 @@ nav:
   - Local checks & CI debugging: dev-testing.md
   - Automation server redesign: automation-server-redesign.md
   - Troubleshooting: troubleshooting.md
+  - Releases: releases.md
   - Changelog: changelog.md
 
 markdown_extensions:

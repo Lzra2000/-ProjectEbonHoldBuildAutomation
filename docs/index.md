@@ -25,4 +25,5 @@ Define a build with per-echo weights and policies. Autopilot evaluates every ech
 - **[Local checks & CI debugging](dev-testing.md)** — filter a failing check, Windows runners, reading Actions annotations/artifacts.
 - **[Automation server redesign](automation-server-redesign.md)** — design for moving Autopilot decisions onto the ProjectEbonhold server API.
 - **[Troubleshooting](troubleshooting.md)** — what to do when something doesn't work, and how to report it well.
+- **[Releases](releases.md)** — download `EbonBuilds.zip`, install steps, and links to GitHub Releases.
 - **[Changelog](changelog.md)** — the full release history, one entry per release.
