@@ -1,8 +1,9 @@
 # Releases
 
 EbonBuilds ships as versioned zip downloads on GitHub. Each release page includes
-install instructions, release notes pulled from [CHANGELOG.md](../CHANGELOG.md),
-and an **`EbonBuilds.zip`** asset you can install directly.
+install instructions, release notes pulled from the [Changelog](changelog.md) page
+(mirrors [`CHANGELOG.md`](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CHANGELOG.md)
+in the repo), and an **`EbonBuilds.zip`** asset you can install directly.
 
 [Download the latest release](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest){ .md-button .md-button--primary }
 [All releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases){ .md-button }
@@ -30,12 +31,13 @@ Requires **ProjectEbonhold** or **ProjectEbonhold Enhanced**. Some features addi
 | In-game "What's new" | Top entry from `CHANGELOG.md`, regenerated at release time |
 | Version in the client | `## Version:` line in `EbonBuilds.toc` |
 
-Pushing a `v*` tag (for example `v3.84`) triggers the [Release workflow](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/release.yml): full checks, `dist/EbonBuilds.zip` build, and publication to GitHub Releases with notes extracted from the matching `### <version>` block in `CHANGELOG.md`.
+Pushing a `v*` tag (for example `v3.85`) triggers the [Release workflow](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/release.yml): full checks, `dist/EbonBuilds.zip` build, and publication to GitHub Releases with notes extracted from the matching `### <version>` block in `CHANGELOG.md`.
 
 ## Recent releases
 
 | Version | Date | Summary |
 |---------|------|---------|
+| [3.85](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.85) | 2026-07-24 | Auctionator affix shopping, board state machine, UI/data refactors, test suite |
 | [3.84](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.84) | 2026-07-24 | Bag dots, freeze persistence, server loadouts, combat DPS in the Logbook |
 | [3.83](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.83) | 2026-07-24 | Autopilot / ProjectEbonhold API alignment and community bug-fix wave |
 | [3.82](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.82) | 2026-07-21 | Public Builds: full character view, search, and sort |

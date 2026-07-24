@@ -14,7 +14,7 @@ GitHub Releases use a short title (`EbonBuilds <version>`); the release body is 
 full matching `###` section from this file (plus install instructions). Install
 instructions and download links also live on
 [GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
-and in [docs/releases.md](docs/releases.md).
+and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/releases/).
 
 [Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.85...HEAD
 

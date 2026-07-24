@@ -87,7 +87,10 @@ nav:
   - Contributors:
     - Development: development.md
     - Local checks & CI: dev-testing.md
-    - Automation server redesign: automation-server-redesign.md
+    - Automation server redesign:
+      - automation-server-redesign.md
+      - WP1 Board state: board-state-wp1.md
+      - WP3 Intent queue: intent-queue-wp3.md
 
 markdown_extensions:
   - admonition

@@ -282,9 +282,9 @@ No hard dependency on [#46](https://github.com/Lzra2000/ProjectEbonHoldBuildAuto
 
 ## 8. Work packages (priority)
 
-1. **Board state machine + freeze lock** — [#50](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/50) — server states + reject reroll while pending/confirmed; surface `boardState` to client.
+1. **Board state machine + freeze lock** — [#50](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/50) — server states + reject reroll while pending/confirmed; surface `boardState` to client. Client stepping stone: [`board-state-wp1.md`](board-state-wp1.md).
 2. **Shared tie-break / ranks** — [#51](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/51) — publish ordering + optional per-card `rank`.
-3. **Intent queue + acks** — [#52](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/52) — one in-flight intent; ack before apply.
+3. **Intent queue + acks** — [#52](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/52) — one in-flight intent; ack before apply. Client stepping stone: [`intent-queue-wp3.md`](intent-queue-wp3.md).
 4. **Replay / dry-run** — [#53](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/53) — transcript → verdicts for CI and triage.
 5. **Constraints API** — [#54](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/54) — prefs as server inputs; remove parallel decide when policy active.
 
