@@ -258,11 +258,11 @@ function H.UpdateFilterVisuals()
     if actionDropdown then actionDropdown:SetText(actionFilter == "All" and "All actions" or actionFilter) end
     if sourceDropdown then sourceDropdown:SetText(sourceFilter == "All" and "All sources" or sourceFilter) end
     if importantButton then
-        importantButton:SetText(importantOnly and "âœ“ Important only" or "Important only")
+        importantButton:SetText(importantOnly and "[*] Important only" or "Important only")
         Theme.SetTabSelected(importantButton, importantOnly)
     end
     if groupButton then
-        groupButton:SetText(groupByLevel and "âœ“ Group by level" or "Group by level")
+        groupButton:SetText(groupByLevel and "[*] Group by level" or "Group by level")
         Theme.SetTabSelected(groupButton, groupByLevel)
     end
     UpdateFilterChips()
@@ -291,10 +291,14 @@ local function RefreshRunNavigatorText()
     local index = SelectedSessionIndex()
     if session then
         runDropdown:SetText(RunMenuLabel(session))
-        runPositionLabel:SetText(string.format("Run %d of %d · Started %s%s", index or 1, #relevantSessionCache, FormatRunDate(session.startTime), session.endTime and "" or " · recording now"))
+        if runPositionLabel then
+            runPositionLabel:SetText(string.format("Run %d of %d · Started %s%s", index or 1, #relevantSessionCache, FormatRunDate(session.startTime), session.endTime and "" or " · recording now"))
+        end
     else
         runDropdown:SetText("Choose a run")
-        runPositionLabel:SetText(#relevantSessionCache > 0 and (#relevantSessionCache .. " runs available") or "No runs recorded for this build")
+        if runPositionLabel then
+            runPositionLabel:SetText(#relevantSessionCache > 0 and (#relevantSessionCache .. " runs available") or "No runs recorded for this build")
+        end
     end
     if previousRunButton then
         if index and index > 1 then previousRunButton:Enable() else previousRunButton:Disable() end
@@ -428,6 +432,13 @@ local function ScrollRunBrowserToSelected()
     runBrowserBar:SetValue(math.min(maximum or 0, target))
 end
 
+local function SyncRunBrowserScroll()
+    if not runBrowserScroll or not runBrowserBar then return end
+    local value = runBrowserBar:GetValue() or 0
+    runBrowserScroll:SetVerticalScroll(value)
+    RefreshRunBrowserRows()
+end
+
 function H.RefreshRunBrowser(scrollToSelected)
     if not runBrowser then return end
     runBrowserResults = {}
@@ -445,11 +456,11 @@ function H.RefreshRunBrowser(scrollToSelected)
     runBrowserBar:SetMinMaxValues(0, maximum)
     if scrollToSelected then
         ScrollRunBrowserToSelected()
+        SyncRunBrowserScroll()
     elseif runBrowserBar:GetValue() > maximum then
         runBrowserBar:SetValue(maximum)
     else
-        runBrowserScroll:SetVerticalScroll(runBrowserBar:GetValue())
-        RefreshRunBrowserRows()
+        SyncRunBrowserScroll()
     end
 
     if runBrowserCountLabel then
@@ -468,7 +479,20 @@ function H.RefreshRunBrowser(scrollToSelected)
         end
     end
     if runBrowserEmpty then
-        if #runBrowserResults == 0 then runBrowserEmpty:Show() else runBrowserEmpty:Hide() end
+        if #runBrowserResults == 0 then
+            if runBrowserEmpty._title and runBrowserEmpty._body then
+                if #relevantSessionCache == 0 then
+                    runBrowserEmpty._title:SetText("No runs recorded")
+                    runBrowserEmpty._body:SetText("Complete an Echo run for this build to populate the Logbook.")
+                else
+                    runBrowserEmpty._title:SetText("No matching runs")
+                    runBrowserEmpty._body:SetText("Clear the search or choose All.")
+                end
+            end
+            runBrowserEmpty:Show()
+        else
+            runBrowserEmpty:Hide()
+        end
     end
     if runBrowserClear then
         if runBrowserFilter ~= "all" or runBrowserSearchText ~= "" then runBrowserClear:Show() else runBrowserClear:Hide() end
@@ -706,13 +730,13 @@ local function EnsureRunBrowser()
     runBrowserEmpty = CreateFrame("Frame", nil, runBrowserScroll)
     runBrowserEmpty:SetAllPoints(runBrowserScroll)
     runBrowserEmpty:EnableMouse(false)
-    local emptyTitle = runBrowserEmpty:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    emptyTitle:SetPoint("CENTER", runBrowserEmpty, "CENTER", 0, 10)
-    emptyTitle:SetText("No matching runs")
-    local emptyBody = runBrowserEmpty:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    emptyBody:SetPoint("TOP", emptyTitle, "BOTTOM", 0, -6)
-    emptyBody:SetText("Clear the search or select All.")
-    emptyBody:SetTextColor(unpack(Theme.TEXT_MUTED))
+    runBrowserEmpty._title = runBrowserEmpty:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    runBrowserEmpty._title:SetPoint("CENTER", runBrowserEmpty, "CENTER", 0, 10)
+    runBrowserEmpty._title:SetText("No matching runs")
+    runBrowserEmpty._body = runBrowserEmpty:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    runBrowserEmpty._body:SetPoint("TOP", runBrowserEmpty._title, "BOTTOM", 0, -6)
+    runBrowserEmpty._body:SetText("Clear the search or choose All.")
+    runBrowserEmpty._body:SetTextColor(unpack(Theme.TEXT_MUTED))
 
     runBrowserClear = Theme.CreateButton(popup)
     runBrowserClear:SetSize(104, 22)
@@ -752,10 +776,10 @@ end
 local function UpdateSummary(session)
     local data = SessionSummary(session)
     local values = {
-        level = tostring(session and (RunDisplayLevel(session)) or "â€”"),
-        duration = session and FormatDuration(session.startTime, RunDisplayEndTime(session)) or "â€”",
+        level = tostring(session and (RunDisplayLevel(session)) or "-"),
+        duration = session and FormatDuration(session.startTime, RunDisplayEndTime(session)) or "-",
         events = tostring(data.events or 0),
-        score = data.selectedCount > 0 and string.format("%.1f", data.averageSelected or 0) or "â€”",
+        score = data.selectedCount > 0 and string.format("%.1f", data.averageSelected or 0) or "-",
         actions = string.format("B %d  R %d  F %d", data.actions.Banish or 0, data.actions.Reroll or 0, data.actions.Freeze or 0),
     }
     for key, value in pairs(values) do if summaryMetrics[key] then summaryMetrics[key].value:SetText(value) end end
@@ -1049,6 +1073,7 @@ local function RenderVisibleRows()
         local top = timelineOffsets[i] or 0
         if top > scrollValue + viewport + buffer then last = i - 1; break end
     end
+    if last < first then last = first - 1 end
 
     local width = math.max(430, logScroll:GetWidth() or 0)
     local poolIndex = 0
@@ -1193,12 +1218,18 @@ function H.RefreshLogView()
     if not session then
         timelineItems, timelineOffsets, timelineTotalHeight = {}, {}, 1
         logChild:SetHeight(1)
-        logBar:SetMinMaxValues(0, 0)
-        resultLabel:SetText("No run selected")
-        emptyState._title:SetText("Choose a run")
-        emptyState._body:SetText("Select a run above to inspect its recorded decisions.")
-        emptyClearButton:Hide()
-        emptyState:Show()
+        if logBar then logBar:SetMinMaxValues(0, 0) end
+        if resultLabel then resultLabel:SetText("No run selected") end
+        if emptyState and emptyState._title and emptyState._body then
+            emptyState._title:SetText("Choose a run")
+            if #relevantSessionCache == 0 then
+                emptyState._body:SetText("No runs are recorded for this build yet.")
+            else
+                emptyState._body:SetText("Select a run above to inspect its recorded decisions.")
+            end
+            emptyState:Show()
+        end
+        if emptyClearButton then emptyClearButton:Hide() end
         return
     end
 
@@ -1218,9 +1249,9 @@ function H.RefreshLogView()
     local total = #(session.logs or {})
     local filterCount = #ActiveFilterDefinitions()
     if eventCount == total and filterCount == 0 then
-        resultLabel:SetText(eventCount .. " events")
+        if resultLabel then resultLabel:SetText(eventCount .. " events") end
     else
-        resultLabel:SetText(string.format("%d of %d · %d filter%s", eventCount, total, filterCount, filterCount == 1 and "" or "s"))
+        if resultLabel then resultLabel:SetText(string.format("%d of %d · %d filter%s", eventCount, total, filterCount, filterCount == 1 and "" or "s")) end
     end
 
     local width = math.max(430, logScroll:GetWidth() or 0)
@@ -1235,25 +1266,29 @@ function H.RefreshLogView()
     timelineTotalHeight = math.max(1, y)
     logChild:SetHeight(timelineTotalHeight)
     local maxScroll = math.max(0, timelineTotalHeight - (logScroll:GetHeight() or 0))
-    logBar:SetMinMaxValues(0, maxScroll)
-    if logBar:GetValue() > maxScroll then logBar:SetValue(maxScroll) end
+    if logBar then
+        logBar:SetMinMaxValues(0, maxScroll)
+        if logBar:GetValue() > maxScroll then logBar:SetValue(maxScroll) end
+    end
     RenderVisibleRows()
 
-    if #items == 0 then
-        emptyState._title:SetText(total == 0 and "No decisions recorded" or "No matching decisions")
-        if total == 0 then
-            emptyState._body:SetText("This run has no recorded decisions yet.")
-            emptyClearButton:Hide()
-        elseif filterCount > 0 then
-            emptyState._body:SetText(string.format("0 of %d events match %d active filter%s.", total, filterCount, filterCount == 1 and "" or "s"))
-            emptyClearButton:Show()
+    if emptyState and emptyState._title and emptyState._body then
+        if #items == 0 then
+            emptyState._title:SetText(total == 0 and "No decisions recorded" or "No matching decisions")
+            if total == 0 then
+                emptyState._body:SetText("This run has no recorded decisions yet.")
+                if emptyClearButton then emptyClearButton:Hide() end
+            elseif filterCount > 0 then
+                emptyState._body:SetText(string.format("0 of %d events match %d active filter%s.", total, filterCount, filterCount == 1 and "" or "s"))
+                if emptyClearButton then emptyClearButton:Show() end
+            else
+                emptyState._body:SetText("No events are available in the current view.")
+                if emptyClearButton then emptyClearButton:Hide() end
+            end
+            emptyState:Show()
         else
-            emptyState._body:SetText("No events are available in the current view.")
-            emptyClearButton:Hide()
+            emptyState:Hide()
         end
-        emptyState:Show()
-    else
-        emptyState:Hide()
     end
 end
 
@@ -1760,7 +1795,7 @@ local function BuildEventTimeline()
         H.RefreshLogView()
     end)
 
-    emptyState = Theme.CreateEmptyState(logScroll, "Choose a run", "Select a run above to inspect its decisions.")
+    emptyState = Theme.CreateEmptyState(logScroll, "Choose a run", "Select a run above to inspect its recorded decisions.")
     emptyState:SetHeight(126)
     emptyClearButton = Theme.CreateButton(emptyState, "gold")
     emptyClearButton:SetSize(112, 22)

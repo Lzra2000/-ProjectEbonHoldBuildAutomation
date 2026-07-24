@@ -708,12 +708,14 @@ local function RunBrowserSearchBlob(session)
     if dpsText ~= "" then fields[#fields + 1] = dpsText end
     return SearchSafeLower(table.concat(fields, " "))
 end
+local DEFAULT_WHEEL_STEP = 34
+
 local function NextWheelScrollValue(currentValue, delta, minimum, maximum, step)
     currentValue = tonumber(currentValue) or 0
     delta = tonumber(delta) or 0
     minimum = tonumber(minimum) or 0
     maximum = tonumber(maximum) or minimum
-    step = math.max(1, tonumber(step) or EVENT_ROW_H)
+    step = math.max(1, tonumber(step) or DEFAULT_WHEEL_STEP)
 
     if maximum < minimum then maximum = minimum end
     return math.max(minimum, math.min(maximum, currentValue - delta * step))

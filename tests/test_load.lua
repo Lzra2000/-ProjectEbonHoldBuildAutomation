@@ -1314,6 +1314,30 @@ do
         os.exit(1)
     end
 
+    if EbonBuilds.SessionHistory._NextWheelScrollValue(0, -1, 0, 100) ~= 34 then
+        io.stderr:write("LOGBOOK UX FAIL: wheel scroll helper must use a safe default step\n")
+        os.exit(1)
+    end
+
+    local logbookFile = assert(io.open("modules/ui/SessionHistory.lua", "r"))
+    local logbookSource = NormalizeNewlines(logbookFile:read("*a"))
+    logbookFile:close()
+    if not logbookSource:find('importantOnly and "[*] Important only"', 1, true)
+        or not logbookSource:find("SyncRunBrowserScroll", 1, true)
+        or not logbookSource:find("if runPositionLabel then", 1, true) then
+        io.stderr:write("LOGBOOK UX FAIL: SessionHistory reliability guards are missing\n")
+        os.exit(1)
+    end
+
+    local preUiRefreshOK, preUiRefreshErr = xpcall(function()
+        EbonBuilds.SessionHistory.RefreshSessionList()
+        EbonBuilds.SessionHistory.RefreshLogView()
+    end, debug.traceback)
+    if not preUiRefreshOK then
+        io.stderr:write("LOGBOOK UX FAIL: refresh before UI build crashed: " .. tostring(preUiRefreshErr) .. "\n")
+        os.exit(1)
+    end
+
     local descending = {
         { name = "Low", weight = 5 },
         { name = "High", weight = 30 },
