@@ -34,6 +34,46 @@ for _, path in ipairs(tocFiles) do
     end
 end
 
+-- Lint: ban the `x and nil or y` pattern in shipped code. In Lua the
+-- `and nil` branch can never be taken (nil is falsy), so the expression
+-- ALWAYS evaluates to `y`. Written as a toggle (`x = x and nil or true`)
+-- it produces a switch that turns on but never off -- exactly the bug
+-- class behind issue #39 (Caster protection, the Echo family filter, and
+-- the talent-snapshot comparison). Line comments are stripped before
+-- matching so the explanatory comments at the fixed sites don't trip it.
+--
+-- Allowlisted occurrences (exact counts, so NEW instances still fail):
+--   * modules/data/FAQContent.lua -- user-facing FAQ text that describes
+--     the historical bug inside a string literal.
+--   * modules/automation/ManualTraining.lua -- `q == "legacy" and nil or
+--     tonumber(q)`: harmless because tonumber("legacy") is nil anyway, so
+--     the expression equals plain tonumber(q); kept until that file is
+--     touched for other reasons.
+local allowedAndNilOr = {
+    ["modules/data/FAQContent.lua"] = 1,
+    ["modules/automation/ManualTraining.lua"] = 1,
+}
+for _, path in ipairs(tocFiles) do
+    local text = read(path):gsub("\r\n", "\n")
+    local found = 0
+    for line in (text .. "\n"):gmatch("(.-)\n") do
+        local code = line:gsub("%-%-.*$", "")
+        local position = 1
+        while true do
+            local matchStart = code:find("and%s+nil%s+or%s", position)
+            if not matchStart then break end
+            found = found + 1
+            position = matchStart + 1
+        end
+    end
+    local allowed = allowedAndNilOr[path] or 0
+    if found > allowed then
+        fail(string.format(
+            "%s contains %d `and nil or` expression(s) (%d allowlisted). This always evaluates to the `or` branch; write an explicit if/else toggle instead (issue #39).",
+            path, found, allowed))
+    end
+end
+
 local automation = read("modules/automation/Automation.lua")
 assertTrue(not automation:find("PerkUI%.Show%s*="), "Automation replaces the native ProjectEbonhold UI")
 assertTrue(automation:find("hooksecurefunc%(PerkUI, %\"Show%\""), "Automation does not securely observe the native UI")
@@ -136,4 +176,4 @@ assertTrue(schedulerFrame.visible, "PLAYER_REGEN_ENABLED did not wake parked wor
 schedulerFrame.scripts.OnUpdate(schedulerFrame, 0)
 assertTrue(ranDeferred, "parked scheduler job did not run after combat")
 
-print("Architecture invariants passed: private namespace, centralized events, stable dispatch, native UI fallback, and sync ownership.")
+print("Architecture invariants passed: private namespace, centralized events, stable dispatch, native UI fallback, sync ownership, and the `and nil or` toggle ban.")
