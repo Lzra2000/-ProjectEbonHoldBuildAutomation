@@ -106,6 +106,13 @@ release zip).
 - Custom Display scripts run inside Details' sandbox; if Details updates break
   `InstallCustomObject`, labels still work via spellcache.
 
+## 1.0.11-pe1
+
+PE Proc Sources Breakdown Targets chrome: own a single "Procs from source:"
+header (re-anchor stock `info.targets`, sweep stray SummaryWindowWidgets labels),
+hook stock "No Targets" Show so Fade/skin cannot overlay sibling proc bars.
+Custom Display script_version 11.
+
 ## 1.0.10-pe1
 
 PE Proc Sources Breakdown interaction: hide the Player Details status strip so
