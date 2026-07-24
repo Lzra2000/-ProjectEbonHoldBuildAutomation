@@ -2,9 +2,11 @@
 
 ## Reporting a vulnerability
 
-Use GitHub's private vulnerability reporting for this repository (Security tab -> "Report a vulnerability"). Reports are read by the maintainer; please don't open a public issue for anything exploitable before it's fixed.
+**Preferred:** [GitHub private vulnerability reporting](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/security/advisories/new) (repository **Security** tab → **Report a vulnerability**), when that option is available.
 
-Include what you'd include in any good bug report -- how to reproduce it, and what an attacker gains -- plus the addon version.
+**Otherwise:** open a [GitHub issue](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/new/choose) and mark it clearly as a security report. Do not post exploit details, payloads, or step-by-step attack instructions in public — describe impact and offer to follow up privately. The maintainer may convert the issue to a private advisory or ask you to redact details.
+
+Include how to reproduce, what an attacker gains, and the addon version.
 
 ## What counts as a security issue here
 

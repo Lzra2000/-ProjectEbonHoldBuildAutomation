@@ -1,40 +1,55 @@
 # Contributing to EbonBuilds
 
+Player support (FAQ, bug reports, Discussions): [`SUPPORT.md`](SUPPORT.md).
+
 ## Setup
 
-```
+```bash
 git clone https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation.git
 cd ProjectEbonHoldBuildAutomation
 sh scripts/dev-setup.sh      # installs lua5.1, zip (Debian/Ubuntu apt)
 sh scripts/install-hooks.sh  # optional: runs scripts/check.sh before every commit
-# Windows: powershell -File scripts/check.ps1   (or bash scripts/check.sh)
 ```
 
-`dev-setup.sh` uses `apt-get`, so it targets Debian/Ubuntu. On Windows, run everything through WSL; on other distros, install `lua5.1`, `texlive-binaries`, and `zip` with your package manager.
+Windows: use WSL for `dev-setup.sh`, then run checks with `bash scripts/check.sh` or `powershell -File scripts/check.ps1`.
 
-That's it. No build step for day-to-day development -- the repo root is already the addon folder structure `Interface/AddOns/` expects, so you can symlink or copy it straight in and reload.
+`dev-setup.sh` uses `apt-get` (Debian/Ubuntu). On other distros, install `lua5.1`, `texlive-binaries`, and `zip` yourself.
 
-## Before opening a PR
+No build step for day-to-day work — the repo root is already the addon folder `Interface/AddOns/` expects. Symlink or copy it in and `/reload`.
 
-```
-sh scripts/check.sh          # fast local loop (skips 70k board sim)
-sh scripts/check.sh --full   # matches CI
+## Checks (`scripts/check.sh`)
+
+```bash
+sh scripts/check.sh              # fast local loop (skips 70k board sim)
+sh scripts/check.sh --full       # matches CI — run before opening a PR
 sh scripts/check.sh --only architecture
 ```
 
-`scripts/check.sh --full` is what CI runs: Lua 5.1 syntax check, the full test suite (`tests/run.sh`), a check that every file listed in `EbonBuilds.toc` actually exists, the 3.3.5a API blocklist, and the file-header convention check. Day-to-day, omit `--full` for a faster loop. Filter a single group or test with `--only` / `FILTER=`; details and failure-class notes are in [`docs/dev-testing.md`](docs/dev-testing.md). If `scripts/install-hooks.sh` is set up this runs automatically on commit (skip once with `git commit --no-verify`).
+`--full` is what CI runs: Lua 5.1 syntax, full test suite (`tests/run.sh`), `.toc` file existence, 3.3.5a API blocklist, and file-header convention. Day-to-day, omit `--full` for speed. Filter with `--only` / `FILTER=`; failure notes live in [`docs/dev-testing.md`](docs/dev-testing.md).
 
-The PR template has a short checklist -- CHANGELOG.md entry for user-facing changes, translation keys for new UI strings, that kind of thing.
+With `install-hooks.sh`, checks run on every commit (`git commit --no-verify` to skip once).
 
-Further tooling, all under `scripts/`:
+Further tooling under `scripts/`:
 
-- `sh scripts/check-load-order.sh` -- verifies no file references an `EbonBuilds.<Module>` at file scope before the `.toc` has loaded the file defining it. Function bodies are exempt (they run post-load). This exact trap has bitten before; run it after adding cross-module references at the top of a file.
-- `sh scripts/find-orphans.sh` -- lists Lua files the `.toc` never loads (hard failure: they silently don't exist in-game) and exported functions with no visible caller (listed for review only -- dynamic dispatch is invisible to it, and `_`-prefixed test hooks are exempt).
-- `sh scripts/i18n-report.sh` -- per-locale translation coverage: missing keys and orphaned entries. The test suite only fails on missing; this shows the whole picture.
-- `sh scripts/triage-error.sh <file|-|>` -- paste an in-game error dump, get the source context and the last commits touching each mentioned line range.
-- `GITHUB_TOKEN=... sh scripts/ship.sh <version>` -- release.sh + push + publish-github-release.sh as one command (maintainers only).
+- `check-load-order.sh` — cross-module references at file scope must load after their defining module in the `.toc`
+- `find-orphans.sh` — Lua files not in the `.toc`, or exports with no visible caller
+- `i18n-report.sh` — per-locale translation coverage
+- `triage-error.sh <file|-` — paste an in-game error dump for source context and recent commits
+- `ship.sh` — release + push + publish (maintainers only)
 
-The test suite also includes `tests/test_sync_fuzz.lua`: 4000 deterministic hostile payloads against Sync's inbound message handlers. If it fails, it prints the seed, iteration, and escaped payload -- turn that into a named regression test alongside the fix.
+Sync inbound messages are fuzzed in `tests/test_sync_fuzz.lua`. If it fails, it prints seed, iteration, and payload — turn that into a named regression test with the fix.
+
+## Pull requests
+
+- **Branch from `main`**, keep PRs focused — one logical change when you can.
+- **Explain why**, not only what changed. Link issues (`Fixes #123`) when applicable.
+- **Run `sh scripts/check.sh --full`** before opening; the PR template checklist covers the rest.
+- **User-facing changes:** `CHANGELOG.md` entry at the top (`### <version>`), plus `docs/faq.md` when players need an explanation. Match existing tone — specific, no marketing language.
+- **New UI strings** in `BuildTabs.lua` / `MainWindow.lua`: add keys to all six `modules/i18n/locales/*.lua` files (or accept English fallback and let `check.sh` flag gaps).
+- **Tests:** add or update coverage when the change is testable; not every UI tweak needs one.
+- **Draft PRs** welcome for early feedback on larger work.
+
+The [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) has the full checklist.
 
 ## Project conventions
 
@@ -43,28 +58,29 @@ The test suite also includes `tests/test_sync_fuzz.lua`: 4000 deterministic host
   -- EbonBuilds: modules/path/File.lua
   -- Responsibility: one line, what this file owns.
   ```
-- **Namespace, not globals.** Everything hangs off `EbonBuilds.<Module>`. Internal helpers are `local function` at file scope, not global.
-- **Test hooks.** If something needs to be tested but isn't naturally reachable (a closure inside a button's `OnClick`, module-local state), expose it as `EbonBuilds.Module._DoTheThing = DoTheThing` -- see `EbonBuilds.Session`'s test helpers or `EbonBuilds.BuildTabs._TriggerExportAI` for the pattern. Prefix with `_` so it reads as "test/integration only," not part of the real API.
-- **Errors that should be visible.** Wrap a handler in `EbonBuilds.ErrorLog.Protect("Source.Name", fn)` if it's reachable from user interaction and isn't trivially safe -- an unprotected error goes straight to WoW's own (usually disabled) Lua error display and never reaches the Error log (Settings -- Windows & tools). Most of the codebase predates this and isn't wrapped; wrapping more of it as you touch nearby code is welcome.
-- **Changelog.** User-facing changes get a `### <version>` entry at the top of `CHANGELOG.md`. Look at recent entries for the tone: specific about what changed and why, no marketing language. FAQ-worthy explanations go in `docs/faq.md` (rendered on the docs site and in-game).
-- **Releases.** Version bumps go through `sh scripts/release.sh <version>` (bumps `EbonBuilds.toc` + the `docs/faq.md` header, requires a `CHANGELOG.md` entry, runs `scripts/check.sh`, commits, tags). Pushing the tag triggers `.github/workflows/release.yml`, which publishes the GitHub Release and uploads the zip as a release asset; `scripts/publish-github-release.sh` is the manual fallback. Not something a regular PR needs to touch.
+- **Namespace, not globals.** Everything hangs off `EbonBuilds.<Module>`. Internal helpers are `local function` at file scope.
+- **Test hooks.** Expose hard-to-reach internals as `EbonBuilds.Module._DoTheThing` with a `_` prefix — see `EbonBuilds.Session` or `EbonBuilds.BuildTabs._TriggerExportAI`.
+- **Error visibility.** Wrap user-facing handlers in `EbonBuilds.ErrorLog.Protect("Source.Name", fn)` when they are not trivially safe.
+- **Releases.** Version bumps go through `sh scripts/release.sh <version>` (maintainers). Regular PRs do not need to touch version or tags.
 
 ## Adding a translation
 
-UI strings go through `EbonBuilds.L["English string"]`, a lookup table that falls back to English for anything untranslated -- see `modules/i18n/Locale.lua`. Currently only `modules/ui/BuildTabs.lua` and `modules/ui/MainWindow.lua` are wired up to it.
+UI strings use `EbonBuilds.L["English string"]` (`modules/i18n/Locale.lua`). Currently wired in `modules/ui/BuildTabs.lua` and `modules/ui/MainWindow.lua`.
 
 **New language:**
-```
+
+```bash
 sh scripts/new-locale.sh itIT
 ```
-Generates `modules/i18n/locales/itIT.lua` pre-filled with every known key (English placeholder as the value). Translate the values, then:
-1. Add the file to `EbonBuilds.toc`, right after the other locale files.
-2. Add the locale code to `SUPPORTED_LOCALES` in `modules/i18n/Locale.lua` (and `ALIASES` if a short form like `it` should work with `/ebb locale it`).
 
-Game-specific terms (Echo, Build, Banish/Reroll/Freeze/Select, Autopilot) stay in English across every language -- check the existing locale files or `README.*.md` for how a given language already handles that.
+Then: add the file to `EbonBuilds.toc`, add the code to `SUPPORTED_LOCALES` in `Locale.lua` (and `ALIASES` if needed).
 
-**Extending an existing language, or adding `EbonBuilds.L[...]` to a file that isn't wired up yet:** `scripts/check.sh` (via the test suite) will flag any locale file missing a translation for a key that's actually used in `BuildTabs.lua`/`MainWindow.lua` -- run it after adding a new string to see what needs filling in across all six languages at once, instead of finding out one language at a time.
+Game terms (Echo, Build, Banish/Reroll/Freeze/Select, Autopilot) stay in English in every locale.
 
-## Reporting bugs
+## Code of conduct
 
-See the README's "Reporting bugs" section -- short version: attach the Error log output (Settings -- gear icon -- Windows & tools), and the Click Trace log if a click seemed to do nothing.
+Be direct and constructive. Harassment and bad-faith behavior are not welcome — see [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+## License note
+
+Contribution terms are under discussion ([#18](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/18)). By opening a PR you agree your contribution may be used in the project; final licensing will be clarified when #18 closes.

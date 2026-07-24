@@ -1,15 +1,15 @@
 **What this changes and why**
 
-<!-- Short description. Link an issue if there is one. -->
+<!-- Short description. Link an issue if there is one (`Fixes #123`). -->
 
 **Checklist**
 
-- [ ] `sh scripts/check.sh` passes locally (syntax check, test suite, `.toc` verification)
-- [ ] Added or updated a test for the change, where one made sense
-- [ ] If this changes user-facing behavior: added a `### <version>` entry to `CHANGELOG.md` (see existing entries for the format/tone -- plain, specific, no marketing language), and updated `docs/faq.md` if an explanation belongs there
-- [ ] If this adds a new UI string in `modules/ui/BuildTabs.lua` or `modules/ui/MainWindow.lua`: added the English key to all six files under `modules/i18n/locales/` (or left it untranslated on purpose -- it'll fall back to English, but `scripts/check.sh` will flag it as a gap either way)
-- [ ] Not something that should instead go through `scripts/release.sh` (version bump + tag) after merge
+- [ ] `sh scripts/check.sh --full` passes locally (or `check.sh` for a docs-only change)
+- [ ] Added or updated a test where one made sense
+- [ ] User-facing change: `### <version>` entry in `CHANGELOG.md` (plain, specific — see recent entries), and `docs/faq.md` if players need an explanation
+- [ ] New UI string in `BuildTabs.lua` / `MainWindow.lua`: key added to all six `modules/i18n/locales/*.lua` (or left untranslated on purpose)
+- [ ] Not a release-only change — version bumps and tags go through `scripts/release.sh` after merge
 
 **Anything reviewers should look at closely**
 
-<!-- Optional: tricky bits, things you're unsure about, deliberate tradeoffs. -->
+<!-- Optional: tricky bits, tradeoffs, things you're unsure about. -->
