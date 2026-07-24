@@ -16,9 +16,11 @@ instructions and download links also live on
 [GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
 and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/releases/).
 
-[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.85...HEAD
+[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86...HEAD
 
-### 3.86 (Unreleased) -- Automation stepping stones, Auctionator PE, and reliability fixes
+### 3.86 (2026-07-24) -- Automation stepping stones, Auctionator PE, and reliability fixes
+
+[Release v3.86](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.86)
 
 Follow-up to 3.85: client-side automation work packages WP2?WP5 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, optional Details!: Tiny Threat PE fork, ProjectEbonhold Anvil affix acquisition bridge, EchoPerformance / Details! hardening, expanded automation and regression test coverage, reliability fixes for bag dots / AutoSell / SessionHistory / FAQ, and original WotLK-inspired GitHub Pages branding. Release prep: [docs/release-386-prep.md](docs/release-386-prep.md).
 
