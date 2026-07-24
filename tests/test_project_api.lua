@@ -167,8 +167,14 @@ assertTrue(addon.ProjectAPI.GetPendingAction() == nil, "adapter retained a block
 -- ProjectEbonhold.Perks. The adapter must surface these flags so automation
 -- waits instead of firing a duplicate request that the service would refuse.
 ProjectEbonhold.Perks = {}
-assertTrue(addon.ProjectAPI.GetCapabilities().pendingFlags, "pendingFlags capability missing after Perks exists")
-assertTrue(addon.ProjectAPI.GetCapabilities().pendingBuildSlot, "pendingBuildSlot capability missing after Perks exists")
+assertTrue(addon.ProjectAPI.GetCapabilities().pendingFlags, "pendingFlags requires Perks + SelectPerk")
+assertTrue(not addon.ProjectAPI.GetCapabilities().pendingBuildSlot,
+    "pendingBuildSlot should stay false until build-slot APIs exist")
+ProjectEbonhold.PerkService.UploadServerBuildSlot = function()
+    return true
+end
+assertTrue(addon.ProjectAPI.GetCapabilities().pendingBuildSlot,
+    "pendingBuildSlot should follow UploadServerBuildSlot")
 assertTrue(addon.ProjectAPI.GetPendingAction() == nil, "empty server pending flags reported an action")
 ProjectEbonhold.Perks.pendingSelectSpellId = 10
 assertEqual(addon.ProjectAPI.GetPendingAction(), "select", "in-flight select was not reported")

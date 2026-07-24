@@ -707,6 +707,24 @@ function API.Init()
     return Service() ~= nil
 end
 
+-- Capability probes mirror the installed ProjectEbonhold build (see docs/capabilities.md).
+-- Future PE exports (serverBoardState, serverIntentAck, serverPolicy) stay false until present.
+
+local function HasPendingActionContract(perks, service)
+    -- perks_service.lua sets Perks.pending* while Select/Banish/Freeze/Reroll are in flight.
+    return type(perks) == "table"
+        and service and type(service.SelectPerk) == "function"
+end
+
+local function HasBuildSlotPendingContract(service)
+    -- pendingBuildSlotRequest ships with the server build-slot PerkService family.
+    return service and (
+        type(service.UploadServerBuildSlot) == "function"
+        or type(service.SaveServerBuildSlot) == "function"
+        or type(service.RequestServerBuildSlots) == "function"
+    ) or false
+end
+
 function API.GetBoardState(context)
     local BSM = EbonBuilds.AutomationBoardStateMachine
     if not BSM then return nil end
@@ -763,7 +781,8 @@ function API.GetCapabilities()
         descriptions = _G.utils and type(_G.utils.GetSpellDescription) == "function" or false,
         discoveredEchoes = service and type(service.GetDiscoveredEchoes) == "function" or false,
         discoveryRequest = service and type(service.RequestEchoDiscovery) == "function" or false,
-        activeLoadout = service and type(service.SetActiveEchoLoadout) == "function" or false,
+        activeLoadout = service and type(service.SetActiveEchoLoadout) == "function"
+            and type(service.IsSpellInActiveEchoLoadout) == "function" or false,
         sharedLoadouts = service and type(service.RequestSharedEchoLoadouts) == "function"
             and type(service.GetSharedEchoLoadouts) == "function" or false,
         serverBuildSlots = uploadReady and true or false,
@@ -779,8 +798,8 @@ function API.GetCapabilities()
         snapshotEchoes = service and type(service.SnapshotCurrentEchoes) == "function" or false,
         discoveryMutators = service and type(service.AddDiscoveredEcho) == "function"
             and type(service.RemoveDiscoveredEcho) == "function" or false,
-        pendingFlags = ProjectEbonhold and type(ProjectEbonhold.Perks) == "table" or false,
-        pendingBuildSlot = ProjectEbonhold and type(ProjectEbonhold.Perks) == "table" or false,
+        pendingFlags = HasPendingActionContract(perks, service),
+        pendingBuildSlot = HasBuildSlotPendingContract(service),
         pendingRollsCount = service and type(service.GetPendingRollsCount) == "function" or false,
         rollsDebugInfo = service and type(service.GetRollsDebugInfo) == "function" or false,
         autoAcceptLoadoutEchoes = options and type(options.GetSetting) == "function" or false,
