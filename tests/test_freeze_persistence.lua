@@ -55,9 +55,11 @@ local addon = {
 }
 
 assert(loadfile("modules/automation/BoardDecision.lua"))("EbonBuilds", addon)
+assert(loadfile("modules/automation/IntentQueue.lua"))("EbonBuilds", addon)
 assert(loadfile("modules/automation/Automation.lua"))("EbonBuilds", addon)
 
 local D = addon.AutomationBoardDecision
+local IQ = addon.AutomationIntentQueue
 local A = addon.Automation
 
 local function Emit(event, ...)
@@ -281,19 +283,47 @@ end
 ------------------------------------------------------------------------
 do
     A._ResetFreezeRound()
+    if IQ then IQ.Reset() end
     local board = Board({ Slot(1, 1601, 160), Slot(2, 1602, 130) })
     check(A._RequestFreezeForTests(build, board, board.slots[2]), "pending confirm setup failed")
     local state = A._GetBoardStateForTests()
     check(state.frozenEchoIDs[1602], "accepted request already run-persistent")
+    check(IQ and IQ.GetInFlight() ~= nil, "freeze request left intent in flight")
+    equal(IQ.GetInFlight().action, "freeze", "in-flight intent is freeze")
 
     local confirmed = Board({ Slot(1, 1601, 160), Slot(2, 1602, 130, { isFrozen = true }) })
     equal(A._ResolvePendingFreezeForTests(build, confirmed, { totalFreezes = 3, usedFreezes = 0 }),
         "confirmed", "pending freeze was not confirmed")
     check(state.frozenEchoIDs[1602], "confirmed freeze retained run-persistent mark")
+    equal(IQ.GetInFlight(), nil, "freeze confirmation must clear IntentQueue (no 8s TTL stall)")
+    local accepted = IQ.TryBegin("select", {
+        offerId = "offer-1",
+        identityFingerprint = confirmed.identityFingerprint,
+        targetSlot = 1,
+    })
+    equal(accepted, true, "SELECT accepted immediately after freeze confirmation")
+    IQ.Clear("test_cleanup")
 
     -- ResetObservedBoard clears in-flight pending flags; run marks survive board hide/show.
     A._ResetObservedBoardForTests()
     check(state.frozenEchoIDs[1602], "board hide/show after confirm kept run mark")
+end
+
+------------------------------------------------------------------------
+-- Board identity change after freeze request clears IntentQueue
+------------------------------------------------------------------------
+do
+    A._ResetFreezeRound()
+    IQ.Reset()
+    local board = Board({ Slot(1, 1901, 160), Slot(2, 1902, 130) })
+    check(A._RequestFreezeForTests(build, board, board.slots[1]), "board-change freeze setup failed")
+    check(IQ.GetInFlight() ~= nil, "freeze intent in flight before board change")
+
+    -- Different echo IDs => different identityFingerprint => board_changed.
+    local changed = Board({ Slot(1, 1911, 155), Slot(2, 1912, 125) })
+    equal(A._ResolvePendingFreezeForTests(build, changed, { totalFreezes = 3, usedFreezes = 0 }),
+        "changed", "identity change abandons pending freeze")
+    equal(IQ.GetInFlight(), nil, "board identity change clears freeze intent")
 end
 
 ------------------------------------------------------------------------

@@ -11,9 +11,9 @@
 |---|---|
 | One in-flight intent (select / freeze / banish / reroll) | `modules/automation/IntentQueue.lua` |
 | Duplicate intent rejection | same module (`TryBegin`) |
-| Ack via board identity change, PE pending drop, or 8s TTL | `PollAck` + `Automation.ResolvePendingAction` |
+| Ack via board identity change, PE pending drop, freeze confirm, or 8s TTL | `PollAck` + `Automation.ResolvePendingAction` / `CommitConfirmedFreeze` |
 | Wired into Autopilot execution | `Automation.ExecuteDecision`, `RequestFreeze` |
-| Unit tests | `tests/test_intent_queue.lua` |
+| Unit tests | `tests/test_intent_queue.lua`, `tests/test_freeze_persistence.lua` |
 
 ### Client ack signals (today)
 
@@ -23,6 +23,7 @@ Until ProjectEbonhold publishes explicit intent acks, EbonBuilds clears the queu
 |---|---|---|
 | `identityFingerprint` changed | Autopilot board observation | Board offer updated (select / banish / reroll / new choice) |
 | `GetPendingAction()` cleared after being set | PE `Perks` pending flags | Server finished handling the in-flight PE request |
+| Freeze confirmed / abandoned | `Automation.CommitConfirmedFreeze` (+ board-change / recovery-give-up paths) | Freeze does not change identity; freeze-wait returns before `PollAck`, so confirmation must clear the queue explicitly |
 | Intent TTL (8s) | `IntentQueue` | Avoid permanent stall if neither signal arrives |
 
 While an intent is in flight, Autopilot **does not** submit a second `Request*` for any action type.

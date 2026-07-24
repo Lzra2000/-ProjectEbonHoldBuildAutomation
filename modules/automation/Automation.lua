@@ -957,6 +957,10 @@ local function CommitConfirmedFreeze(build, board, runData, slot, usedCountSnaps
         board.freezeResources = math.max(0, (board.freezeResources or 0) - 1)
     end
     MarkFrozenThisBoard(slot)
+    -- Freeze does not change identityFingerprint, and Evaluate returns early
+    -- while WAITING_FOR_FREEZE_CONFIRMATION so PollAck never sees pending_ack.
+    -- Clear here so SELECT/next freeze is not blocked until the 8s Intent TTL.
+    if IntentQueue then IntentQueue.Clear("freeze_confirmed") end
     EbonBuilds.DebugLog.AddF("Freeze confirmed%s%s: [%d] %s (%s)",
         late and " after recovery" or "",
         source == "resource" and " by server resource counter" or "",
@@ -989,6 +993,7 @@ local function ResolvePendingFreeze(build, board, runData)
         EbonBuilds.DebugLog.Add("Freeze confirmation failed: board changed after the request; stale target cleared")
         ClearPendingFreeze()
         ClearFreezeUncertainty()
+        if IntentQueue then IntentQueue.Clear("freeze_board_changed") end
         boardState.state = Decision.STATE.EVALUATING
         return "changed"
     end
@@ -1043,6 +1048,7 @@ local function ResolveFreezeUncertainty(build, board, runData)
     if status == "board_changed" then
         EbonBuilds.DebugLog.Add("Freeze uncertainty cleared: board identity changed")
         ClearFreezeUncertainty()
+        if IntentQueue then IntentQueue.Clear("freeze_board_changed") end
         boardState.state = Decision.STATE.EVALUATING
         return "changed"
     end
@@ -1060,6 +1066,7 @@ local function ResolveFreezeUncertainty(build, board, runData)
     local failedEchoID = boardState.uncertainFreezeEchoID
     UnmarkFrozenThisBoard(failedSlot, failedEchoID)
     ClearFreezeUncertainty()
+    if IntentQueue then IntentQueue.Clear("freeze_not_confirmed") end
     boardState.state = Decision.STATE.EVALUATING
     -- Correction for the immediate request log/toast: recovery proved the
     -- slot never received a server freeze flag across stable reads.
