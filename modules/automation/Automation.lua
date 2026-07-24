@@ -64,6 +64,12 @@ local boardState = {
     pendingAction = nil,
     pendingActionFingerprint = nil,
     pendingActionIdentity = nil,
+    -- Select is logged only after Board-Ack (identity change). Until then the
+    -- CommitDecision payload sits here so Intent TTL retries cannot spam the
+    -- Logbook with identical Unstable-Infusion-style Selects.
+    pendingLogDecision = nil,
+    selectAttemptIdentity = nil,
+    selectAttemptSpellId = nil,
     frozenStateUncertain = false,
     uncertainFreezeSlot = nil,
     uncertainFreezeEchoID = nil,
@@ -577,7 +583,7 @@ local function CommitDecision(decision)
     LogAndToast(decision.scored, decision.displayAction, decision.targetIndex or 0, decision.appliedThreshold)
 end
 
-local function SubmitAction(action, build, scored, targetIndex, entry, displayAction, appliedThreshold)
+local function SubmitAction(action, build, scored, targetIndex, entry, displayAction, appliedThreshold, deferCommit)
     local api = EbonBuilds.ProjectAPI
     if not api then return false end
 
@@ -591,7 +597,7 @@ local function SubmitAction(action, build, scored, targetIndex, entry, displayAc
     end
     if not accepted then return false end
 
-    CommitDecision({
+    local decision = {
         action = action,
         build = build,
         scored = scored,
@@ -599,7 +605,12 @@ local function SubmitAction(action, build, scored, targetIndex, entry, displayAc
         entry = entry,
         displayAction = displayAction or action,
         appliedThreshold = appliedThreshold,
-    })
+    }
+    if deferCommit then
+        boardState.pendingLogDecision = decision
+    else
+        CommitDecision(decision)
+    end
     ArmRequestFallback()
     return true
 end
@@ -694,6 +705,32 @@ local function ClearPendingAction()
     if IntentQueue then IntentQueue.Clear("pending_action_cleared") end
 end
 
+-- Select is logged only after Board-Ack. Intent TTL may clear pendingAction
+-- without a board change; keep selectAttempt* so retries do not re-request or
+-- re-log the same Echo on an unchanged board.
+local function ClearSelectAttempt(keepDeferredLog)
+    boardState.selectAttemptIdentity = nil
+    boardState.selectAttemptSpellId = nil
+    if not keepDeferredLog then
+        boardState.pendingLogDecision = nil
+    end
+end
+
+local function IsDuplicateSelectAttempt(board, target)
+    if not board or not target then return false end
+    if boardState.selectAttemptIdentity == nil then return false end
+    if boardState.selectAttemptIdentity ~= board.identityFingerprint then return false end
+    local attempted = tonumber(boardState.selectAttemptSpellId) or boardState.selectAttemptSpellId
+    local want = tonumber(target.spellId) or target.spellId or target.echoId or target.refKey
+    return attempted ~= nil and want ~= nil and attempted == want
+end
+
+local function CommitDeferredLogDecision()
+    local deferred = boardState.pendingLogDecision
+    boardState.pendingLogDecision = nil
+    if deferred then CommitDecision(deferred) end
+end
+
 local function ClearFreezeUncertainty()
     boardState.frozenStateUncertain = false
     boardState.uncertainFreezeSlot = nil
@@ -742,6 +779,7 @@ local function ResetObservedBoard(nextState)
     ClearMap(boardState.failedFreezeBySlot)
     ClearPendingFreeze()
     ClearPendingAction()
+    ClearSelectAttempt()
     if IntentQueue then IntentQueue.Reset() end
 end
 
@@ -1105,7 +1143,16 @@ local function ResolveIntentQueueAck(board)
     if boardState.pendingAction then
         EbonBuilds.DebugLog.Add("Intent queue ack: " .. ack
             .. " after " .. tostring(boardState.pendingAction))
-        ClearPendingAction()
+        if ack == "board_ack" then
+            -- Board identity changed: Select is confirmed for the Logbook.
+            CommitDeferredLogDecision()
+            ClearSelectAttempt(true)
+            ClearPendingAction()
+        else
+            -- TTL / pending-flag drop without Board-Ack: do not log. Keep
+            -- selectAttempt* so identical Select retries stay suppressed.
+            ClearPendingAction()
+        end
         boardState.state = Decision.STATE.EVALUATING
     elseif ack == "timeout" then
         EbonBuilds.DebugLog.Add("Intent queue: in-flight intent timed out; clearing block")
@@ -1123,6 +1170,17 @@ local function ResolvePendingAction(board)
     end
 
     if not boardState.pendingAction then
+        -- Late Board-Ack after Intent TTL cleared pendingAction: still commit
+        -- the deferred Select once the offer identity finally changes.
+        if boardState.selectAttemptIdentity
+            and board.identityFingerprint
+            and boardState.selectAttemptIdentity ~= board.identityFingerprint then
+            EbonBuilds.DebugLog.Add("Board update confirmed after deferred select attempt")
+            CommitDeferredLogDecision()
+            ClearSelectAttempt(true)
+            boardState.state = Decision.STATE.EVALUATING
+            return "changed"
+        end
         -- The server ProjectEbonhold distribution rejects a request while its
         -- own one is in flight (player click or its auto-accept). Wait for the
         -- flag to clear instead of firing a request that would be refused and
@@ -1140,6 +1198,8 @@ local function ResolvePendingAction(board)
     end
     if board.identityFingerprint ~= boardState.pendingActionIdentity then
         EbonBuilds.DebugLog.Add("Board update confirmed after " .. tostring(boardState.pendingAction))
+        CommitDeferredLogDecision()
+        ClearSelectAttempt(true)
         ClearPendingAction()
         boardState.state = Decision.STATE.EVALUATING
         return "changed"
@@ -1260,6 +1320,12 @@ local function ExecuteDecision(build, board, decision)
     end
 
     if decision.action == "SELECT" then
+        if IsDuplicateSelectAttempt(board, decision.target) then
+            boardState.state = Decision.STATE.WAITING_FOR_BOARD_UPDATE
+            EbonBuilds.DebugLog.Add("Select dedup: identical Select already requested on this board; waiting for Board-Ack")
+            StartEvalTimer()
+            return true
+        end
         if not GuardIntent("SELECT", board, decision.target) then return true end
         if boardState.pendingFreezeSlot or boardState.frozenStateUncertain
             or Decision.HasUnsecuredFreezeCandidate(board, decision.target) then
@@ -1268,11 +1334,15 @@ local function ExecuteDecision(build, board, decision)
             return true
         end
         boardState.state = Decision.STATE.SELECTING
-        if SubmitAction("select", build, board.slots, decision.target.index, decision.target, "Select", board.rerollThreshold) then
+        -- Defer Logbook/stats until Board-Ack so Intent TTL retries cannot spam
+        -- identical Select rows while the offer identity is unchanged.
+        if SubmitAction("select", build, board.slots, decision.target.index, decision.target, "Select", board.rerollThreshold, true) then
             ClearRunFrozenEcho(decision.target.spellId or decision.target.echoId or decision.target.refKey)
             boardState.pendingAction = "select"
             boardState.pendingActionFingerprint = board.fingerprint
             boardState.pendingActionIdentity = board.identityFingerprint
+            boardState.selectAttemptIdentity = board.identityFingerprint
+            boardState.selectAttemptSpellId = decision.target.spellId or decision.target.echoId or decision.target.refKey
             boardState.state = Decision.STATE.WAITING_FOR_BOARD_UPDATE
             EbonBuilds.DebugLog.AddF("-> REQUEST SELECT [%d] %s (score %.0f)",
                 decision.target.index, decision.target.name, decision.target.score or 0)
