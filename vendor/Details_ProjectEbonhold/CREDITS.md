@@ -53,10 +53,11 @@ release zip).
   scrollable list, spell icons (client `GetSpellInfo` then PE `PerkDatabase` /
   `GetPerkData` from the server sync), real `%` column, no empty `()` when
   source is unknown.
-- **Left-click** a PE Proc Sources row opens a breakdown panel (amount, hits,
-  average, other sources of that proc, other procs from the same cast). Custom
-  displays (Details attribute 5) do not open the normal DPS player-details
-  window — this companion hooks `row_singleclick_overwrite[5]` for that index.
+- **Left-click** a PE Proc Sources row opens a Details-styled breakdown
+  (status bars with spell icons, amount + %, Sources and Other procs sections —
+  same chrome patterns as native Player Details! Breakdown). Custom displays
+  (Details attribute 5) do not open the normal DPS player-details window — this
+  companion hooks `row_singleclick_overwrite[5]` for that index.
 
 ### Icons
 
@@ -98,6 +99,10 @@ release zip).
   granted perk or PE-band combat hit.
 - Custom Display scripts run inside Details' sandbox; if Details updates break
   `InstallCustomObject`, labels still work via spellcache.
+
+## 1.0.4-pe1
+
+PE Proc Sources click summary restyled to match native Details **Player Details! Breakdown**: status bars with spell icons, amount + percent columns, gold title chrome, Sources / Other procs sections. Custom Display script_version 5.
 
 ## 1.0.3-pe1
 

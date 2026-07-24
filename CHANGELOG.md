@@ -23,6 +23,9 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 #### Added
 - **Details_ProjectEbonhold 1.0.3-pe1:** Left-click a **PE Proc Sources** bar opens a Details-style attribution summary (damage, hits, average, other sources for that proc, other procs from that source). Custom Display script v4; hover tooltip shows the same stats. Prefer `Details.zip` for the full suite.
 
+#### Changed
+- **Details_ProjectEbonhold 1.0.4-pe1:** PE Proc Sources click summary now matches native **Player Details! Breakdown** chrome (status bars, spell icons, amount + %, Sources / Other procs sections). Custom Display script v5.
+
 ### 3.86.4 (2026-07-24) -- Echo picker multi-select QoL
 
 #### Added

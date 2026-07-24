@@ -20,8 +20,15 @@ local recentCasts = {} -- { {spellId=, name=, t=}, ... }
 local recentCastIds = {} -- set of spellIds currently in the window
 local attribution = {} -- [procId] = { [sourceId] = { amount=, hits= } }
 local MAX_RECENT = 24
-local BREAKDOWN_ROWS = 14
-local BREAKDOWN_LINE_H = 16
+-- Details Player Details Breakdown uses 20px spell bars; match that chrome.
+local BREAKDOWN_BAR_H = 20
+local BREAKDOWN_HEADER_H = 18
+local BREAKDOWN_MAX_ROWS = 28
+local BREAKDOWN_BAR_TEXTURE = [[Interface\AddOns\Details\images\bar_serenity]]
+local BREAKDOWN_BG = [[Interface\AddOns\Details\images\background]]
+local BREAKDOWN_FOCUS_COLOR = { 129 / 255, 125 / 255, 69 / 255, 1 }
+local BREAKDOWN_BAR_COLOR = { 1, 1, 1, 0.85 }
+local BREAKDOWN_ALT_COLOR = { 0.55, 0.65, 0.85, 0.9 }
 
 local function Db()
     DetailsProjectEbonholdDB = DetailsProjectEbonholdDB or {}
@@ -229,8 +236,8 @@ local function OnCombatLog(_, _, timestamp, subevent, srcGUID, srcName, srcFlags
 end
 
 local CUSTOM_NAME = "PE Proc Sources"
--- Bump so Details InstallCustomObject replaces older scripts (click meta + hits).
-local CUSTOM_VERSION = 4
+-- Bump so Details InstallCustomObject replaces older scripts / tooltip copy.
+local CUSTOM_VERSION = 5
 -- Soft minimum height so more proc rows are visible without scrolling immediately.
 local CUSTOM_MIN_HEIGHT = 260
 
@@ -265,95 +272,275 @@ end
 Procs.EnsureReadableInstance = EnsureReadableInstance
 
 ---------------------------------------------------------------------------
--- Click → breakdown window (Custom Display attribute 5 never opens DPS info)
+-- Click → Details-styled breakdown (bars + icons + % like Player Details!)
+-- Custom Display attribute 5 never opens AbreJanelaInfo; we mirror its chrome.
 ---------------------------------------------------------------------------
 
 local breakdownFrame
-local breakdownLines = {}
+local breakdownRows = {}
+
+local function ResolveBarTexture()
+    local details = PE.GetDetails and PE.GetDetails()
+    if type(details) == "table" and type(details.player_details_window) == "table" then
+        local name = details.player_details_window.bar_texture
+        if type(name) == "string" and name ~= "" and LibStub then
+            local ok, SharedMedia = pcall(LibStub, "LibSharedMedia-3.0")
+            if ok and SharedMedia and type(SharedMedia.Fetch) == "function" then
+                local tex = SharedMedia:Fetch("statusbar", name)
+                if type(tex) == "string" and tex ~= "" then
+                    return tex
+                end
+            end
+        end
+    end
+    return BREAKDOWN_BAR_TEXTURE
+end
+
+local function BarColorForIndex(index, focused)
+    if focused then
+        return BREAKDOWN_FOCUS_COLOR[1], BREAKDOWN_FOCUS_COLOR[2], BREAKDOWN_FOCUS_COLOR[3], BREAKDOWN_FOCUS_COLOR[4]
+    end
+    if index % 2 == 0 then
+        return BREAKDOWN_ALT_COLOR[1], BREAKDOWN_ALT_COLOR[2], BREAKDOWN_ALT_COLOR[3], BREAKDOWN_ALT_COLOR[4]
+    end
+    return BREAKDOWN_BAR_COLOR[1], BREAKDOWN_BAR_COLOR[2], BREAKDOWN_BAR_COLOR[3], BREAKDOWN_BAR_COLOR[4]
+end
+
+local function CreateBreakdownBar(parent, index)
+    local bar = CreateFrame("Button", nil, parent)
+    bar:SetHeight(BREAKDOWN_BAR_H)
+    bar:EnableMouse(true)
+    bar:Hide()
+
+    local status = CreateFrame("StatusBar", nil, bar)
+    status:SetAllPoints()
+    status:SetMinMaxValues(0, 100)
+    status:SetValue(0)
+    status:SetStatusBarTexture(ResolveBarTexture())
+    status:SetStatusBarColor(1, 1, 1, 0.85)
+    status:SetAlpha(0.95)
+    local bg = status:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetTexture(1, 1, 1, 0.08)
+    bar.Status = status
+
+    local overlay = CreateFrame("Frame", nil, bar)
+    overlay:SetAllPoints()
+    overlay:SetFrameLevel(status:GetFrameLevel() + 2)
+
+    local icon = overlay:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(BREAKDOWN_BAR_H - 2, BREAKDOWN_BAR_H - 2)
+    icon:SetPoint("LEFT", bar, "LEFT", 1, 0)
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    bar.Icon = icon
+
+    local left = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    left:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+    left:SetJustifyH("LEFT")
+    left:SetTextColor(1, 1, 1, 1)
+    left:SetNonSpaceWrap(true)
+    if left.SetWordWrap then
+        left:SetWordWrap(false)
+    end
+    bar.Left = left
+
+    local right = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    right:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+    right:SetJustifyH("RIGHT")
+    right:SetTextColor(1, 1, 1, 1)
+    bar.Right = right
+
+    bar._index = index
+    return bar
+end
+
+local function CreateSectionHeader(parent)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "QuestFont_Large")
+    fs:SetJustifyH("LEFT")
+    fs:SetTextColor(0.890, 0.729, 0.015, 1)
+    fs:Hide()
+    return fs
+end
 
 local function EnsureBreakdownFrame()
     if breakdownFrame then
         return breakdownFrame
     end
+
     local f = CreateFrame("Frame", "DetailsPEProcBreakdownFrame", UIParent)
-    f:SetSize(420, 320)
-    f:SetPoint("CENTER", UIParent, "CENTER", 80, 40)
+    f:SetSize(450, 460)
+    f:SetPoint("CENTER", UIParent, "CENTER", 100, 20)
     f:SetFrameStrata("DIALOG")
+    f:SetToplevel(true)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:SetClampedToScreen(true)
     f:Hide()
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        bgFile = BREAKDOWN_BG,
+        edgeFile = [[Interface\Buttons\WHITE8X8]],
         tile = true,
-        tileSize = 32,
-        edgeSize = 32,
-        insets = { left = 8, right = 8, top = 8, bottom = 8 },
+        tileSize = 16,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
-    f:SetBackdropColor(0, 0, 0, 0.9)
+    f:SetBackdropColor(0.05, 0.05, 0.05, 0.94)
+    f:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     tinsert(UISpecialFrames, "DetailsPEProcBreakdownFrame")
 
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
-    title:SetPoint("TOPRIGHT", f, "TOPRIGHT", -36, -14)
-    title:SetJustifyH("LEFT")
+    -- Match native title: gold, centered ("Player Details! Breakdown").
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", f, "TOP", 0, -14)
+    title:SetTextColor(0.890, 0.729, 0.015, 1)
     title:SetText("PE Proc Breakdown")
     f.Title = title
 
-    local subtitle = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    subtitle:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -34)
-    subtitle:SetJustifyH("LEFT")
-    f.Subtitle = subtitle
-
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
+    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 4, -6)
+    close:SetWidth(32)
+    close:SetHeight(32)
     close:SetScript("OnClick", function()
         f:Hide()
     end)
 
+    -- Hero icon + name (mirrors class icon / player name in PDW).
+    local heroIcon = f:CreateTexture(nil, "ARTWORK")
+    heroIcon:SetSize(40, 40)
+    heroIcon:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -38)
+    heroIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    f.HeroIcon = heroIcon
+
+    local heroName = f:CreateFontString(nil, "OVERLAY", "QuestFont_Large")
+    heroName:SetPoint("TOPLEFT", heroIcon, "TOPRIGHT", 10, -2)
+    heroName:SetPoint("RIGHT", f, "RIGHT", -40, 0)
+    heroName:SetJustifyH("LEFT")
+    heroName:SetTextColor(1, 1, 1, 1)
+    f.HeroName = heroName
+
+    local heroSub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    heroSub:SetPoint("TOPLEFT", heroName, "BOTTOMLEFT", 0, -4)
+    heroSub:SetPoint("RIGHT", f, "RIGHT", -40, 0)
+    heroSub:SetJustifyH("LEFT")
+    heroSub:SetTextColor(0.85, 0.85, 0.85, 1)
+    f.HeroSub = heroSub
+
+    local stats = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    stats:SetPoint("TOPLEFT", heroIcon, "BOTTOMLEFT", 0, -8)
+    stats:SetPoint("RIGHT", f, "RIGHT", -16, 0)
+    stats:SetJustifyH("LEFT")
+    stats:SetTextColor(0.75, 0.85, 1, 1)
+    f.Stats = stats
+
     local scroll = CreateFrame("ScrollFrame", "DetailsPEProcBreakdownScroll", f, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -52)
-    scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 14)
+    scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -100)
+    scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 12)
     local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(360, BREAKDOWN_ROWS * BREAKDOWN_LINE_H)
+    content:SetWidth(400)
+    content:SetHeight(320)
     scroll:SetScrollChild(content)
     f.Content = content
+    f.Scroll = scroll
 
-    for i = 1, BREAKDOWN_ROWS do
-        local left = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        left:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(i - 1) * BREAKDOWN_LINE_H)
-        left:SetWidth(250)
-        left:SetJustifyH("LEFT")
-        local right = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        right:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -(i - 1) * BREAKDOWN_LINE_H)
-        right:SetWidth(100)
-        right:SetJustifyH("RIGHT")
-        breakdownLines[i] = { left = left, right = right }
+    for i = 1, BREAKDOWN_MAX_ROWS do
+        breakdownRows[i] = {
+            header = CreateSectionHeader(content),
+            bar = CreateBreakdownBar(content, i),
+        }
     end
 
     breakdownFrame = f
     return f
 end
 
-local function SetBreakdownLine(index, leftText, rightText, isHeader)
-    local line = breakdownLines[index]
-    if not line then
-        return
+local function HideAllBreakdownRows()
+    for i = 1, BREAKDOWN_MAX_ROWS do
+        local row = breakdownRows[i]
+        if row then
+            row.header:Hide()
+            row.bar:Hide()
+        end
     end
-    if isHeader then
-        line.left:SetFontObject(GameFontNormal)
-        line.left:SetTextColor(1, 0.82, 0)
+end
+
+local function PlaceRow(y, kind, data)
+    -- Returns next y offset (negative downward).
+    local slot
+    for i = 1, BREAKDOWN_MAX_ROWS do
+        local row = breakdownRows[i]
+        if row and not row._used then
+            slot = row
+            slot._used = true
+            break
+        end
+    end
+    if not slot then
+        return y
+    end
+
+    if kind == "header" then
+        slot.header:ClearAllPoints()
+        slot.header:SetPoint("TOPLEFT", breakdownFrame.Content, "TOPLEFT", 2, y)
+        slot.header:SetPoint("RIGHT", breakdownFrame.Content, "RIGHT", -4, 0)
+        slot.header:SetText(data.text or "")
+        slot.header:Show()
+        return y - BREAKDOWN_HEADER_H
+    end
+
+    local bar = slot.bar
+    bar:ClearAllPoints()
+    bar:SetPoint("TOPLEFT", breakdownFrame.Content, "TOPLEFT", 0, y)
+    bar:SetPoint("RIGHT", breakdownFrame.Content, "RIGHT", -4, 0)
+
+    local icon = data.icon
+    if type(icon) ~= "string" or icon == "" then
+        icon = Core.QUESTION_ICON
+    end
+    bar.Icon:SetTexture(icon)
+
+    local rank = data.rank
+    local name = data.name or "?"
+    if rank then
+        bar.Left:SetText(tostring(rank) .. ". " .. name)
     else
-        line.left:SetFontObject(GameFontHighlightSmall)
-        line.left:SetTextColor(1, 1, 1)
+        bar.Left:SetText(name)
     end
-    line.left:SetText(leftText or "")
-    line.right:SetText(rightText or "")
+
+    local amountText = FormatAmount(data.amount)
+    local pct = data.percent
+    if type(pct) == "number" then
+        bar.Right:SetText(string.format("%s (%.1f%%)", amountText, pct))
+    else
+        bar.Right:SetText(amountText)
+    end
+
+    local maxAmount = data.maxAmount or data.amount or 1
+    if maxAmount <= 0 then
+        maxAmount = 1
+    end
+    local value = (data.amount or 0) / maxAmount * 100
+    if value > 100 then
+        value = 100
+    end
+    if data.rank == 1 then
+        value = 100
+    end
+    bar.Status:SetStatusBarTexture(ResolveBarTexture())
+    bar.Status:SetValue(value)
+    local r, g, b, a = BarColorForIndex(data.rank or 1, data.focused)
+    bar.Status:SetStatusBarColor(r, g, b, a)
+
+    local rightW = bar.Right:GetStringWidth() or 80
+    local barWidth = bar:GetWidth()
+    if not barWidth or barWidth < 10 then
+        barWidth = (breakdownFrame.Content:GetWidth() or 400) - 4
+    end
+    bar.Left:SetWidth(math.max(40, barWidth - rightW - BREAKDOWN_BAR_H - 16))
+
+    bar:Show()
+    return y - (BREAKDOWN_BAR_H + 1)
 end
 
 function Procs.OpenBreakdown(actor, instance)
@@ -367,80 +554,121 @@ function Procs.OpenBreakdown(actor, instance)
     end
 
     local f = EnsureBreakdownFrame()
-    f.Title:SetText(bd.key or "PE Proc Breakdown")
+    HideAllBreakdownRows()
+    for i = 1, BREAKDOWN_MAX_ROWS do
+        if breakdownRows[i] then
+            breakdownRows[i]._used = false
+        end
+    end
+
+    local procIcon = PE.GetSpellIcon and PE.GetSpellIcon(bd.procId)
+    if type(procIcon) ~= "string" or procIcon == "" then
+        procIcon = Core.QUESTION_ICON
+    end
+    f.HeroIcon:SetTexture(procIcon)
+    f.HeroName:SetText(bd.procName or "Proc")
+    local sourceLabel = bd.sourceName or "Unknown"
+    f.HeroSub:SetText("Triggered by " .. sourceLabel)
     local hits = bd.hits or 0
-    local avg = bd.average or 0
-    f.Subtitle:SetText(string.format(
-        "Total %s  ·  %d hit%s  ·  avg %s",
+    f.Stats:SetText(string.format(
+        "Total %s   ·   %d hit%s   ·   avg %s",
         FormatAmount(bd.amount),
         hits,
         hits == 1 and "" or "s",
-        FormatAmount(avg)
+        FormatAmount(bd.average or 0)
     ))
 
-    local lines = {}
-    lines[#lines + 1] = {
-        left = "Proc",
-        right = (bd.procName or "?") .. "  id " .. tostring(bd.procId or 0),
-        header = true,
+    -- Build "Spells" list: this source first (focused), then sibling sources.
+    local sourceRows = {}
+    sourceRows[#sourceRows + 1] = {
+        spellId = bd.sourceId,
+        name = sourceLabel,
+        amount = bd.amount or 0,
+        hits = hits,
+        focused = true,
+        icon = (bd.sourceId and bd.sourceId > 0 and PE.GetSpellIcon and PE.GetSpellIcon(bd.sourceId)) or nil,
     }
-    lines[#lines + 1] = {
-        left = "Triggered by",
-        right = (bd.sourceName or "Unknown") .. (bd.sourceId and bd.sourceId > 0 and ("  id " .. tostring(bd.sourceId)) or ""),
-    }
-    lines[#lines + 1] = {
-        left = "Attributed damage",
-        right = FormatAmount(bd.amount),
-    }
-    lines[#lines + 1] = {
-        left = "Hits / average",
-        right = string.format("%d / %s", hits, FormatAmount(avg)),
-    }
-
     local siblings = bd.siblingSources or {}
-    if #siblings > 0 then
-        lines[#lines + 1] = { left = "Other sources of this proc", right = "", header = true }
-        for i = 1, #siblings do
-            local s = siblings[i]
-            lines[#lines + 1] = {
-                left = "  " .. (s.sourceName or ("Spell #" .. tostring(s.sourceId or 0))),
-                right = string.format("%s (%d)", FormatAmount(s.amount), s.hits or 0),
-            }
-        end
+    for i = 1, #siblings do
+        local s = siblings[i]
+        sourceRows[#sourceRows + 1] = {
+            spellId = s.sourceId,
+            name = s.sourceName or ("Spell #" .. tostring(s.sourceId or 0)),
+            amount = s.amount or 0,
+            hits = s.hits or 0,
+            focused = false,
+            icon = (s.sourceId and s.sourceId > 0 and PE.GetSpellIcon and PE.GetSpellIcon(s.sourceId)) or nil,
+        }
     end
 
+    local sourceTotal = 0
+    for i = 1, #sourceRows do
+        sourceTotal = sourceTotal + (sourceRows[i].amount or 0)
+    end
+    if sourceTotal <= 0 then
+        sourceTotal = 1
+    end
+    local sourceMax = sourceRows[1] and sourceRows[1].amount or 1
+
+    local y = 0
+    y = PlaceRow(y, "header", { text = "Sources:" })
+    for i = 1, #sourceRows do
+        local row = sourceRows[i]
+        y = PlaceRow(y, "bar", {
+            rank = i,
+            name = row.name,
+            amount = row.amount,
+            percent = (row.amount / sourceTotal) * 100,
+            maxAmount = sourceMax,
+            icon = row.icon,
+            focused = row.focused,
+        })
+    end
+
+    -- Targets-like panel: other procs from the same cast/aura.
     local otherProcs = bd.siblingProcs or {}
     if #otherProcs > 0 then
-        lines[#lines + 1] = {
-            left = "Other procs from " .. (bd.sourceName or "source"),
-            right = "",
-            header = true,
-        }
+        y = y - 6
+        y = PlaceRow(y, "header", {
+            text = "Other procs from " .. sourceLabel .. ":",
+        })
+        local procTotal = 0
+        for i = 1, #otherProcs do
+            procTotal = procTotal + (otherProcs[i].amount or 0)
+        end
+        -- Include current proc in total so % matches "share of this source".
+        procTotal = procTotal + (bd.amount or 0)
+        if procTotal <= 0 then
+            procTotal = 1
+        end
+        local procMax = otherProcs[1] and otherProcs[1].amount or 1
+        if (bd.amount or 0) > procMax then
+            procMax = bd.amount
+        end
         for i = 1, #otherProcs do
             local p = otherProcs[i]
-            lines[#lines + 1] = {
-                left = "  " .. (p.procName or ("Spell #" .. tostring(p.procId or 0))),
-                right = string.format("%s (%d)", FormatAmount(p.amount), p.hits or 0),
-            }
+            local icon = PE.GetSpellIcon and PE.GetSpellIcon(p.procId)
+            y = PlaceRow(y, "bar", {
+                rank = i,
+                name = p.procName or ("Spell #" .. tostring(p.procId or 0)),
+                amount = p.amount or 0,
+                percent = ((p.amount or 0) / procTotal) * 100,
+                maxAmount = procMax,
+                icon = icon,
+                focused = false,
+            })
         end
+    elseif #siblings == 0 then
+        y = y - 6
+        y = PlaceRow(y, "header", { text = "No other attributions this combat." })
     end
 
-    if #siblings == 0 and #otherProcs == 0 then
-        lines[#lines + 1] = {
-            left = "No other attributions for this combat yet.",
-            right = "",
-        }
+    local contentH = math.max(120, -y + 8)
+    f.Content:SetHeight(contentH)
+    f.Content:SetWidth(f.Scroll:GetWidth() or 400)
+    if f.Scroll.SetVerticalScroll then
+        f.Scroll:SetVerticalScroll(0)
     end
-
-    local shown = math.min(#lines, BREAKDOWN_ROWS)
-    for i = 1, BREAKDOWN_ROWS do
-        if i <= shown then
-            SetBreakdownLine(i, lines[i].left, lines[i].right, lines[i].header)
-        else
-            SetBreakdownLine(i, "", "", false)
-        end
-    end
-    f.Content:SetHeight(math.max(BREAKDOWN_ROWS, #lines) * BREAKDOWN_LINE_H)
     f:Show()
     f:Raise()
 end
@@ -488,7 +716,7 @@ local function InstallCustomDisplay()
         attribute = false,
         spellid = false,
         author = "Details PE / EbonBuilds",
-        desc = "Proc / Echo secondary damage attributed to the cast that likely triggered it. Click a row for a DPS-style breakdown (Project Ebonhold).",
+        desc = "Proc / Echo secondary damage attributed to the cast that likely triggered it. Click a row for a Details-style breakdown with bars, icons, and % (Project Ebonhold).",
         source = false,
         target = false,
         script_version = CUSTOM_VERSION,
@@ -618,7 +846,7 @@ else
         GameCooltip:AddLine("Spell: " .. tostring(pe.GetSpellName(actor.id)) .. "  id " .. tostring(actor.id))
     end
 end
-GameCooltip:AddLine("Click: breakdown  ·  Mousewheel: scroll list")
+GameCooltip:AddLine("Click: Details-style breakdown  ·  Mousewheel: scroll list")
 ]],
         percent_script = [[
 local value, top, total = ...
