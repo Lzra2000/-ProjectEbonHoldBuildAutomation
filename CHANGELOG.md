@@ -16,7 +16,20 @@ instructions and download links also live on
 [GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
 and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/releases/).
 
-[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.7...HEAD
+[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.8...HEAD
+
+### 3.86.8 (2026-07-24) -- Fix repeated in-place Save losing priority edits
+
+Patch for the Discord report that Save only stuck once until `/reload`.
+
+#### Kurznotiz (DE)
+- **Build speichern:** Prioritaeten mehrmals hintereinander speichern (Tab wechseln und zurueck) bleibt erhalten -- kein `/reload` mehr noetig.
+
+#### Highlights (EN)
+- **Save Build:** repeated priority edits after Save + tab switch now persist without `/reload`.
+
+#### Fixed
+- **In-place Save draft identity (Street0r):** after Save, `AcceptSavedBuild` kept swapping `Runtime.pendingWeights` / `pendingRefWeights` (and settings) for fresh clones while Priorities stayed mounted. Later edits could miss the live draft; the next tab remount showed the first Save again. Adoption now copies committed values into the existing draft tables, rebinds `context.build` to `Build.Get(id)`, skips Echo migration `Ensure` while editing, and refreshes the Echo table. Regression: `tests/test_inplace_save_weights.lua`.
 
 ### 3.86.7 (2026-07-24) -- Public Builds tabs, Tome shopping, sync/Auctionator fixes
 

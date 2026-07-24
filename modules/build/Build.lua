@@ -541,7 +541,14 @@ end
 
 function EbonBuilds.Build.GetActive()
     local build = EbonBuilds.Build.Get(EbonBuildsCharDB.activeBuildId)
-    if build and EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
+    -- While the editor holds a pending draft, skip migration Ensure. Save
+    -- replaces echoWeightsByRef with a new table and bumps revision, which
+    -- invalidates the migration cache; Ensure would rewrite the just-saved
+    -- maps before AcceptSavedBuild could adopt them as the clean baseline.
+    if build and EbonBuilds.EchoReferenceMigration
+        and not (EbonBuilds.Runtime and EbonBuilds.Runtime.isEditingBuild) then
+        EbonBuilds.EchoReferenceMigration.Ensure(build)
+    end
     return build
 end
 
