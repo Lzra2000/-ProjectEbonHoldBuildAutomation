@@ -158,7 +158,23 @@ if [ "$run_tests_only" -eq 0 ] && want syntax; then
     LUA_LIST="$LOG_DIR/lua-files-${RUN_STAMP}.txt"
     # Prefer find; fall back to a simple walk if find is missing (rare).
     if command -v find >/dev/null 2>&1; then
-        find . -name "*.lua" -not -path "./tests/*" -not -path "./.git/*" -not -path "./.cache/*" -not -path "./site/*" > "$LUA_LIST"
+        # Skip stock Details! suite trees under vendor/ (third-party; some upstream
+        # Lua ships with UTF-8 BOM that luac5.1 rejects). Still check PE forks:
+        # Details_ProjectEbonhold, Details_TinyThreat, and other vendor/* addons.
+        find . -name "*.lua" \
+            -not -path "./tests/*" \
+            -not -path "./.git/*" \
+            -not -path "./.cache/*" \
+            -not -path "./site/*" \
+            -not -path "./vendor/Details/*" \
+            -not -path "./vendor/Details_3DModelsPaths/*" \
+            -not -path "./vendor/Details_ChartViewer/*" \
+            -not -path "./vendor/Details_DataStorage/*" \
+            -not -path "./vendor/Details_DeathGraphs/*" \
+            -not -path "./vendor/Details_EncounterDetails/*" \
+            -not -path "./vendor/Details_SunderCount/*" \
+            -not -path "./vendor/Details_TimeLine/*" \
+            > "$LUA_LIST"
     else
         printf '%s\n' core/*.lua modules/*/*.lua > "$LUA_LIST"
     fi

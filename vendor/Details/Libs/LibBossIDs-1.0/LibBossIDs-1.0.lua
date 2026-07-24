@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 Name: LibBossIDs-1.0
 Revision: $Revision: 44 $
 Author: Elsia
