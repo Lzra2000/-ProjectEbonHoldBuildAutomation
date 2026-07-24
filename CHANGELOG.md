@@ -16,16 +16,22 @@ instructions and download links also live on
 [GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
 and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/releases/).
 
-[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86...HEAD
+[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.1...HEAD
 
-### Unreleased -- Sync oversized-build UX; ScrollBar spam false positive
+### 3.86.1 (2026-07-24) -- Post-3.86 reliability: Sync UX, Public Builds sort, Auctionator shop
+
+[Release v3.86.1](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.86.1)
+
+Patch release for fixes landed on main after v3.86 (#125, #126, #127).
 
 #### Changed
-- Sync transfer ceiling raised from 27 KB to 36 KB (still chunked at 180 bytes per `SendAddonMessage`; the ceiling is our reassembly/queue safety net, not WoW's per-message limit). `MAX_CONSECUTIVE_SENDS` now tracks `MAX_TRANSFER_CHUNKS + 20` so one max-size build cannot trip the offline detector mid-stream.
+- Sync transfer ceiling raised from 27 KB to 36 KB (still chunked at 180 bytes per `SendAddonMessage`; the ceiling is our reassembly/queue safety net, not WoW's per-message limit). `MAX_CONSECUTIVE_SENDS` now tracks `MAX_TRANSFER_CHUNKS + 20` so one max-size build cannot trip the offline detector mid-stream (#127).
 
 #### Fixed
-- Oversized public builds no longer spam `Sync.SendChunked` on every peer REQ/RTX: they are excluded from LST listings, reported once per build per session with the actual byte size and title, and surface a rate-limited toast explaining how to shrink them (shorten description / remove character snapshot). Enabling **Sharing: On** in the build form warns early when the draft already exceeds the ceiling.
-- `Theme.CreateScrollBar` / `CreateHorizontalScrollBar` mark `ProtectScript` as spam-exempt so continuous `OnValueChanged` while scrolling is not logged as event spam.
+- Oversized public builds no longer spam `Sync.SendChunked` on every peer REQ/RTX: they are excluded from LST listings, reported once per build per session with the actual byte size and title, and surface a rate-limited toast explaining how to shrink them (shorten description / remove character snapshot). Enabling **Sharing: On** in the build form warns early when the draft already exceeds the ceiling (#127).
+- `Theme.CreateScrollBar` / `CreateHorizontalScrollBar` mark `ProtectScript` as spam-exempt so continuous `OnValueChanged` while scrolling is not logged as event spam (#127).
+- Public Builds list sort comparator now defines a total order (no nil fall-through), avoiding BugSack "invalid order function" / nil-index crashes when sorting by votes, DPS, or other columns (#126).
+- Auctionator shopping-list sync no longer crashes when `AUCTIONATOR_SHOPPING_LISTS` is still nil: initialize before `table.insert`, and soft-fail PE/Bridge affix-list sync if the list cannot be created (#125).
 
 ### 3.86 (2026-07-24) -- Automation stepping stones, Auctionator PE, and reliability fixes
 
