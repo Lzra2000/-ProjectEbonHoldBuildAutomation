@@ -115,6 +115,7 @@ end
 
 loadAddonFile("core/EventHub.lua")
 loadAddonFile("modules/automation/BoardStateMachine.lua")
+loadAddonFile("modules/automation/Constraints.lua")
 loadAddonFile("modules/integration/ProjectEbonholdAPI.lua")
 assertTrue(addon.ProjectAPI.Init(), "standalone request adapter did not initialize")
 assertEqual(addon.ProjectAPI.GetCapabilities().actionConfirmation, "request_only", "wrong action mode")
@@ -123,6 +124,9 @@ assertTrue(not addon.ProjectAPI.HasActionObservers(), "unmodified base addon was
 local caps = addon.ProjectAPI.GetCapabilities()
 assertTrue(caps.boardState, "boardState capability missing")
 assertTrue(not caps.serverBoardState, "serverBoardState should be false without PE boardState")
+assertTrue(caps.constraintsClient, "constraintsClient capability missing")
+assertTrue(not caps.serverConstraints, "serverConstraints should be false until PE upload exists")
+assertTrue(not caps.serverPolicy, "serverPolicy should be false until PE policy channel exists")
 assertTrue(not caps.serverIntentAck, "serverIntentAck should be false without PE GetIntentAck")
 local derived = addon.ProjectAPI.GetBoardState({
     choices = { { spellId = 1 }, { spellId = 2, justFrozen = true } },

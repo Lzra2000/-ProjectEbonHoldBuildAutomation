@@ -795,5 +795,10 @@ function API.GetCapabilities()
         )) or false,
         intentQueueClient = EbonBuilds.AutomationIntentQueue ~= nil,
         serverIntentAck = (type(perks) == "table" and type(perks.GetIntentAck) == "function") or false,
+        constraintsClient = EbonBuilds.AutomationConstraints ~= nil,
+        serverConstraints = (type(perks) == "table" and (
+            type(perks.GetConstraintsAck) == "function" or type(perks.SubmitAutomationConstraints) == "function"
+        )) or false,
+        serverPolicy = false,
     }
 end

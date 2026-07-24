@@ -121,6 +121,7 @@ modules/automation/EchoPerformance.lua
 modules/automation/BoardStateMachine.lua
 modules/automation/BoardDecision.lua
 modules/automation/DryRun.lua
+modules/automation/Constraints.lua
 modules/automation/IntentQueue.lua
 modules/automation/Automation.lua
 modules/automation/ManualTraining.lua

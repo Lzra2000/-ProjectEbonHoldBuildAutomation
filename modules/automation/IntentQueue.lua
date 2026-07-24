@@ -108,6 +108,7 @@ function M.DescribeBlock(code)
         server_pending_freeze = "ProjectEbonhold freeze request in flight",
         server_pending_reroll = "ProjectEbonhold reroll request in flight",
         server_pending_slot = "ProjectEbonhold build-slot request in flight",
+        constraints_stale = "Autopilot prefs changed mid-board; intent cleared",
     }
     return messages[code] or ("Intent blocked: " .. tostring(code))
 end
@@ -122,10 +123,15 @@ function M.TryBegin(action, snapshot)
     M.PollAck(snapshot)
 
     if inFlight then
-        if inFlight.action == action then
+        local constraintsHash = snapshot and snapshot.constraintsHash
+        if constraintsHash and inFlight.constraintsHash
+            and constraintsHash ~= inFlight.constraintsHash then
+            M.Clear("constraints_stale")
+        elseif inFlight.action == action then
             return false, "duplicate_intent"
+        else
+            return false, "intent_in_flight"
         end
-        return false, "intent_in_flight"
     end
 
     local serverPending = GetServerPending(snapshot)
@@ -143,6 +149,7 @@ function M.TryBegin(action, snapshot)
         offerId = snapshot and snapshot.offerId,
         identityFingerprint = snapshot and snapshot.identityFingerprint,
         targetSlot = snapshot and snapshot.targetSlot,
+        constraintsHash = snapshot and snapshot.constraintsHash,
         startedAt = Now(),
     }
     sawServerPending = false
@@ -156,5 +163,6 @@ function M.BuildSnapshot(board, target)
         targetSlot = target and target.index,
         serverPendingAction = board and board.serverPendingAction,
         pendingAction = board and board.pendingAction,
+        constraintsHash = board and board.constraintsHash,
     }
 end

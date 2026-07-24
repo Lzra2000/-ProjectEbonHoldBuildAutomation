@@ -38,6 +38,7 @@ end
 
 local Decision = EbonBuilds.AutomationBoardDecision
 local IntentQueue = EbonBuilds.AutomationIntentQueue
+local Constraints = EbonBuilds.AutomationConstraints
 local MAX_FREEZE_CONFIRM_POLLS = 3
 local MAX_FREEZE_RECOVERY_POLLS = 2
 local boardState = {
@@ -327,6 +328,11 @@ end
 function EbonBuilds.Automation.ResetPeakCache()
     cachedPeak = nil
     cachedStats = nil
+end
+
+function EbonBuilds.Automation.GetConstraints(context)
+    if not Constraints then return nil end
+    return Constraints.GetActive(context)
 end
 
 function EbonBuilds.Automation.ResetInitialActionDelay()
@@ -857,6 +863,9 @@ local function BuildBoard(choices, settings, build, runData, peakScore)
     SetPickAcceptability(board, settings, runData, peakScore)
     board.fingerprint = Decision.Fingerprint(board)
     board.identityFingerprint = Decision.IdentityFingerprint(board)
+    if Constraints and Constraints.AttachToBoard then
+        Constraints.AttachToBoard(board, build, runData)
+    end
     return board
 end
 
@@ -1044,6 +1053,11 @@ local function BuildIntentSnapshot(board, target)
     if IntentQueue and IntentQueue.BuildSnapshot then
         local snapshot = IntentQueue.BuildSnapshot(board, target)
         snapshot.pendingAction = boardState.pendingAction
+        if Constraints and (not snapshot.constraintsHash) then
+            local build = EbonBuilds.Build and EbonBuilds.Build.GetActive and EbonBuilds.Build.GetActive()
+            local packed = Constraints.FromBuild(build, { runData = GetRunData() })
+            snapshot.constraintsHash = packed and packed.hash
+        end
         return snapshot
     end
     return {
@@ -1052,6 +1066,7 @@ local function BuildIntentSnapshot(board, target)
         targetSlot = target and target.index,
         serverPendingAction = board and board.serverPendingAction,
         pendingAction = boardState.pendingAction,
+        constraintsHash = board and board.constraintsHash,
     }
 end
 
