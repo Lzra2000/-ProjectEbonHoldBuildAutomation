@@ -383,6 +383,70 @@ local function UpdateLocalBuild(localBuild, publicBuild)
     EbonBuilds.ViewRouter.Show("buildOverview", { build = localBuild })
 end
 
+local function ToastAutoAcceptWarn(info)
+    if info and info.autoAcceptWarn and EbonBuilds.Toast then
+        EbonBuilds.Toast.Show("Warning: Auto-Accept is ON for this foreign loadout")
+    end
+end
+
+local function ApplyPublicWishlist(build)
+    local api = EbonBuilds.ProjectAPI
+    if not (api and api.ApplyBuildAsWishlist) then
+        if EbonBuilds.Toast then EbonBuilds.Toast.Show("Server doesn't support Active Echo Loadout") end
+        return
+    end
+    local function run(b)
+        local ok, err, info = api.ApplyBuildAsWishlist(b)
+        if not EbonBuilds.Toast then return end
+        if ok then
+            EbonBuilds.Toast.Show("Wishlist applied: \"" .. (b.title or "?") .. "\"")
+            ToastAutoAcceptWarn(info)
+        elseif err == "unsupported" then
+            EbonBuilds.Toast.Show("Server doesn't support Active Echo Loadout")
+        elseif err == "empty" then
+            EbonBuilds.Toast.Show("No locked echoes to apply")
+        else
+            EbonBuilds.Toast.Show("Failed to apply wishlist")
+        end
+    end
+    if api.WithForeignAutoAcceptConfirm then
+        api.WithForeignAutoAcceptConfirm(build, run)
+    else
+        run(build)
+    end
+end
+
+local function UploadPublicServerSlot(build)
+    local api = EbonBuilds.ProjectAPI
+    if not (api and api.UploadBuildAsServerSlot) then
+        if EbonBuilds.Toast then EbonBuilds.Toast.Show("Server doesn't support designed build slots") end
+        return
+    end
+    local function run(b)
+        local ok, err, info = api.UploadBuildAsServerSlot(b, 0)
+        if not EbonBuilds.Toast then return end
+        if ok then
+            local msg = "Saved \"" .. (b.title or "?") .. "\" as server loadout"
+            if info and info.skipped and info.skipped > 0 then
+                msg = msg .. string.format(" (%d class-skipped)", info.skipped)
+            end
+            EbonBuilds.Toast.Show(msg)
+            ToastAutoAcceptWarn(info)
+        elseif err == "disabled" or err == "unsupported" then
+            EbonBuilds.Toast.Show("Server build slots unavailable")
+        elseif err == "empty" then
+            EbonBuilds.Toast.Show("No locked echoes to upload")
+        else
+            EbonBuilds.Toast.Show("Failed to save server loadout")
+        end
+    end
+    if api.WithForeignAutoAcceptConfirm then
+        api.WithForeignAutoAcceptConfirm(build, run)
+    else
+        run(build)
+    end
+end
+
 ------------------------------------------------------------------------
 -- Inspect (read-only detail view, issue #8)
 ------------------------------------------------------------------------
@@ -530,7 +594,7 @@ local function BuildInspectFrame(parent)
         EbonBuilds.Debug.ProtectScript(contentScroll, "PublicBuildsView.Inspect.ContentScroll")
     end
     contentScroll:SetPoint("TOPLEFT", intentLabel, "BOTTOMLEFT", 0, -4)
-    contentScroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 52)
+    contentScroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 78)
     f._contentScroll = contentScroll
 
     local contentChild = CreateFrame("Frame", nil, contentScroll)
@@ -602,10 +666,26 @@ local function BuildInspectFrame(parent)
     f._priLabel = priLabel
 
     local importBtn = EbonBuilds.Theme.CreateButton(f)
-    importBtn:SetWidth(140)
+    importBtn:SetWidth(100)
     importBtn:SetHeight(24)
     importBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -18, 16)
     f._importBtn = importBtn
+
+    local L = EbonBuilds.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    local wishlistBtn = EbonBuilds.Theme.CreateButton(f)
+    wishlistBtn:SetWidth(120)
+    wishlistBtn:SetHeight(24)
+    wishlistBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 18, 16)
+    wishlistBtn:SetText(L["Apply wishlist"])
+    f._wishlistBtn = wishlistBtn
+
+    local serverBtn = EbonBuilds.Theme.CreateButton(f)
+    serverBtn:SetWidth(160)
+    serverBtn:SetHeight(24)
+    serverBtn:SetPoint("LEFT", wishlistBtn, "RIGHT", 8, 0)
+    serverBtn:SetText(L["Save as server loadout"])
+    f._serverLoadoutBtn = serverBtn
 
     -- Priority rows: icon + quality-colored name + weight, same as the
     -- editor -- pooled and parented to the single content scroll child
@@ -905,6 +985,35 @@ ShowInspect = function(build)
                 inspectFrame:Hide()
             end)
         end
+    end
+
+    -- Wishlist / designed slot: locked echoes only. Never apply characterSnapshot
+    -- talents/gear (no LearnTalent / auto-equip from foreign snapshots).
+    if inspectFrame._wishlistBtn then
+        inspectFrame._wishlistBtn:Enable()
+        inspectFrame._wishlistBtn:SetScript("OnClick", function()
+            ApplyPublicWishlist(build)
+        end)
+        inspectFrame._wishlistBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine("Apply wishlist", 1, 1, 1)
+            GameTooltip:AddLine("Sets locked echoes as your ProjectEbonhold wishlist (highlight / auto-accept). Does not import the build, upload a server slot, or apply gear/talents/weights.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        inspectFrame._wishlistBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    if inspectFrame._serverLoadoutBtn then
+        inspectFrame._serverLoadoutBtn:Enable()
+        inspectFrame._serverLoadoutBtn:SetScript("OnClick", function()
+            UploadPublicServerSlot(build)
+        end)
+        inspectFrame._serverLoadoutBtn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:AddLine("Save as server loadout", 1, 1, 1)
+            GameTooltip:AddLine("Uploads locked echoes as a designed ProjectEbonhold server slot. Not a verified snapshot — no L1 guarantee / L80 full swap. Weights and character snapshots stay display-only.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end)
+        inspectFrame._serverLoadoutBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
 
     inspectFrame:ClearAllPoints()

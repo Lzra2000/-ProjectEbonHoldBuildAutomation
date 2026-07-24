@@ -692,50 +692,104 @@ local function BuildOverviewTab(parent)
         EbonBuilds.ViewRouter.Show("buildOverview", { build = copy })
     end)
 
-    -- Apply this build's locked echoes to the server's native Active Echo
-    -- Loadout (ProjectEbonhold.PerkService.SetActiveEchoLoadout) -- the
-    -- server highlights matching picks in its own echo-selection screen
-    -- while a loadout is active.
+    -- Wishlist (SetActiveEchoLoadout): client SavedVariables highlight +
+    -- optional auto-accept. Distinct from designed server slots and from
+    -- verified L80 snapshots (those never come from EbonBuilds uploads).
+    local L = EbonBuilds.L or setmetatable({}, { __index = function(_, k) return k end })
+
+    local function ToastAutoAcceptWarn(info)
+        if info and info.autoAcceptWarn then
+            EbonBuilds.Toast.Show("Warning: Auto-Accept is ON for this foreign loadout")
+        end
+    end
+
+    local function RunApplyWishlist(build)
+        local api = EbonBuilds.ProjectAPI
+        if not api or not api.ApplyBuildAsWishlist then
+            EbonBuilds.Toast.Show("Server doesn't support Active Echo Loadout")
+            return
+        end
+        local ok, err, info = api.ApplyBuildAsWishlist(build)
+        if ok then
+            EbonBuilds.Toast.Show("Wishlist applied: \"" .. (build.title or "?") .. "\"")
+            ToastAutoAcceptWarn(info)
+        elseif err == "unsupported" then
+            EbonBuilds.Toast.Show("Server doesn't support Active Echo Loadout")
+        elseif err == "empty" then
+            EbonBuilds.Toast.Show("No locked echoes to apply")
+        else
+            EbonBuilds.Toast.Show("Failed to apply wishlist")
+        end
+    end
+
+    local function RunUploadServerSlot(build)
+        local api = EbonBuilds.ProjectAPI
+        if not api or not api.UploadBuildAsServerSlot then
+            EbonBuilds.Toast.Show("Server doesn't support designed build slots")
+            return
+        end
+        local ok, err, info = api.UploadBuildAsServerSlot(build, 0)
+        if ok then
+            local msg = "Saved \"" .. (build.title or "?") .. "\" as server loadout"
+            if info and info.skipped and info.skipped > 0 then
+                msg = msg .. string.format(" (%d class-skipped)", info.skipped)
+            end
+            EbonBuilds.Toast.Show(msg)
+            ToastAutoAcceptWarn(info)
+        elseif err == "disabled" or err == "unsupported" then
+            EbonBuilds.Toast.Show("Server build slots unavailable")
+        elseif err == "empty" then
+            EbonBuilds.Toast.Show("No locked echoes to upload")
+        else
+            EbonBuilds.Toast.Show("Failed to save server loadout")
+        end
+    end
+
+    local function ConfirmForeignAutoAccept(build, run)
+        local api = EbonBuilds.ProjectAPI
+        if api and api.WithForeignAutoAcceptConfirm then
+            api.WithForeignAutoAcceptConfirm(build, run)
+            return
+        end
+        run(build)
+    end
+
     local applyBtn = EbonBuilds.Theme.CreateButton(outer)
     applyBtn:SetWidth(150)
     applyBtn:SetHeight(20)
     applyBtn:SetPoint("TOPLEFT", trainToggle, "BOTTOMLEFT", 0, -8)
-    applyBtn:SetText("Apply to Character")
+    applyBtn:SetText(L["Apply wishlist"])
     applyBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Apply to Character", 1, 1, 1)
-        GameTooltip:AddLine("Sets this build's locked echoes as your server-tracked active loadout. The game's own echo-pick screen highlights matching choices while it's active.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine(L["Apply wishlist"], 1, 1, 1)
+        GameTooltip:AddLine("Sets this build's locked echoes as your ProjectEbonhold wishlist (Active Echo Loadout). The echo-pick screen highlights matches; with Auto-Accept on, matching picks are taken automatically. This is NOT a designed server slot and does NOT apply gear, talents, or weights.", 0.8, 0.8, 0.8, true)
         GameTooltip:Show()
     end)
     applyBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
     applyBtn:SetScript("OnClick", function()
         local build = state.build
         if not build then return end
-        local svc = ProjectEbonhold and ProjectEbonhold.PerkService
-        if not (svc and svc.SetActiveEchoLoadout) then
-            EbonBuilds.Toast.Show("Server doesn't support Active Echo Loadout")
-            return
-        end
-        local echoes = {}
-        for i = 1, EbonBuilds.Build.LOCKED_SLOTS do
-            local spellId = build.lockedEchoes and build.lockedEchoes[i]
-            if spellId then
-                local data = ProjectEbonhold.PerkDatabase[spellId]
-                echoes[#echoes + 1] = { spellId = spellId, quality = data and data.quality or 0, stacks = 1 }
-            end
-        end
-        if #echoes == 0 then
-            EbonBuilds.Toast.Show("No locked echoes to apply")
-            return
-        end
-        local ok = svc.SetActiveEchoLoadout({ name = build.title, class = build.class, echoes = echoes })
-        if ok then
-            EbonBuilds.Toast.Show("Applied \"" .. (build.title or "?") .. "\" to character")
-        else
-            EbonBuilds.Toast.Show("Failed to apply build")
-        end
+        ConfirmForeignAutoAccept(build, RunApplyWishlist)
     end)
     outer._applyBtn = applyBtn
+
+    local serverBtn = EbonBuilds.Theme.CreateButton(outer)
+    serverBtn:SetWidth(170)
+    serverBtn:SetHeight(20)
+    serverBtn:SetText(L["Save as server loadout"])
+    serverBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["Save as server loadout"], 1, 1, 1)
+        GameTooltip:AddLine("Uploads locked echoes as a designed ProjectEbonhold server build slot (highlight + auto-accept only). Not a verified L80 snapshot — no level-1 run guarantee and no full gear/talent swap. Weights and character snapshots stay in EbonBuilds only.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    serverBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    serverBtn:SetScript("OnClick", function()
+        local build = state.build
+        if not build then return end
+        ConfirmForeignAutoAccept(build, RunUploadServerSlot)
+    end)
+    outer._serverLoadoutBtn = serverBtn
 
     local ewlBtn = EbonBuilds.Theme.CreateButton(outer, "gold")
     ewlBtn:SetWidth(118)
@@ -784,7 +838,7 @@ local function BuildOverviewTab(parent)
     -- narrower views use three columns over three rows without squeezing
     -- labels or changing their semantic order.
     outer._actionButtons = {
-        autoToggle, trainToggle, characterBtn, applyBtn,
+        autoToggle, trainToggle, characterBtn, applyBtn, serverBtn,
         linkBtn, dupBtn, ewlBtn, reviewBtn,
     }
     LayoutOverviewActions(outer)

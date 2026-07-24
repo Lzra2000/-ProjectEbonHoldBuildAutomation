@@ -190,6 +190,228 @@ function API.RequestSharedEchoLoadouts(classToken)
     return ok and result ~= false
 end
 
+------------------------------------------------------------------------
+-- Server build slots (designed / verified Perk Loadouts)
+-- Capability-gated wrappers around ProjectEbonhold.PerkService. Designed
+-- uploads carry locked echoes only -- never weights or characterSnapshot
+-- gear/talents (3.3.5a has no safe auto-equip / LearnTalent from foreign
+-- snapshots).
+------------------------------------------------------------------------
+
+local function NormalizePlayerName(name)
+    if not name or name == "" then return nil end
+    return tostring(name):match("^([^%-]+)") or tostring(name)
+end
+
+--- Map EbonBuilds lockedEchoes (spellId slots) to UploadServerBuildSlot rows.
+-- Returns echoes, skippedCount. Each echo: { spellId, stacks, locked }.
+-- opts.classToken: when set, class-unusable echoes with known perk data are
+-- omitted (reported in skipped). Unknown spellIds are kept for the server.
+-- opts.lockAll: default true -- lockedEchoes are always marked locked on the slot.
+function API.MapLockedEchoesToServerSlot(lockedEchoes, opts)
+    opts = opts or {}
+    local lockAll = opts.lockAll ~= false
+    local classToken = opts.classToken and tostring(opts.classToken):upper() or nil
+    local echoes, skipped = {}, 0
+    if type(lockedEchoes) ~= "table" then return echoes, skipped end
+
+    local slots = (EbonBuilds.Build and EbonBuilds.Build.LOCKED_SLOTS) or 6
+    for i = 1, slots do
+        local spellId = tonumber(lockedEchoes[i])
+        if spellId then
+            local skip = false
+            if classToken then
+                local data = API.GetPerkData(spellId)
+                if data and data.classMask ~= nil then
+                    if not API.IsPerkAvailableForClass(spellId, classToken) then
+                        skip = true
+                    end
+                end
+            end
+            if skip then
+                skipped = skipped + 1
+            else
+                echoes[#echoes + 1] = {
+                    spellId = spellId,
+                    stacks = 1,
+                    locked = lockAll and true or false,
+                }
+            end
+        end
+    end
+    return echoes, skipped
+end
+
+--- Map lockedEchoes to SetActiveEchoLoadout wishlist rows ({spellId, quality, stacks}).
+function API.MapLockedEchoesToWishlist(lockedEchoes)
+    local echoes = {}
+    if type(lockedEchoes) ~= "table" then return echoes end
+    local slots = (EbonBuilds.Build and EbonBuilds.Build.LOCKED_SLOTS) or 6
+    local database = API.GetPerkDatabase() or {}
+    for i = 1, slots do
+        local spellId = tonumber(lockedEchoes[i])
+        if spellId then
+            local data = database[spellId] or database[tostring(spellId)]
+            echoes[#echoes + 1] = {
+                spellId = spellId,
+                quality = data and tonumber(data.quality) or 0,
+                stacks = 1,
+            }
+        end
+    end
+    return echoes
+end
+
+function API.IsAutoAcceptLoadoutEchoesEnabled()
+    local optSvc = _G.ProjectEbonholdOptionsService
+    if not optSvc or type(optSvc.GetSetting) ~= "function" then return false end
+    local ok, result = pcall(optSvc.GetSetting, optSvc, "autoAcceptLoadoutEchoes")
+    return ok and result and true or false
+end
+
+--- True when the build is not authored by the local player (imported /
+-- public / remote). Used to warn before enabling wishlist/designed loadouts
+-- while ProjectEbonhold auto-accept is on.
+function API.IsForeignBuild(build)
+    if type(build) ~= "table" then return false end
+    if build.importedFrom then return true end
+    local author = NormalizePlayerName(build.author)
+    if not author then return false end
+    local me = NormalizePlayerName(UnitName and UnitName("player"))
+    if not me then return false end
+    return author:lower() ~= me:lower()
+end
+
+function API.AreServerBuildSlotsEnabled()
+    local service = Service()
+    if not service then return false end
+    if type(service.AreServerBuildSlotsEnabled) == "function" then
+        local ok, result = pcall(service.AreServerBuildSlotsEnabled)
+        return ok and result and true or false
+    end
+    -- Older addon builds: presence of Upload is the capability probe.
+    return type(service.UploadServerBuildSlot) == "function"
+end
+
+function API.GetServerBuildSlots()
+    local service = Service()
+    if not service or type(service.GetServerBuildSlots) ~= "function" then return nil end
+    local ok, result = pcall(service.GetServerBuildSlots)
+    return ok and type(result) == "table" and result or nil
+end
+
+function API.RequestServerBuildSlots()
+    local service = Service()
+    if not service or type(service.RequestServerBuildSlots) ~= "function" then return false end
+    local ok, result = pcall(service.RequestServerBuildSlots)
+    return ok and result ~= false
+end
+
+function API.UploadServerBuildSlot(slot, name, echoes)
+    local service = Service()
+    if not service or type(service.UploadServerBuildSlot) ~= "function" then return false end
+    if not API.AreServerBuildSlotsEnabled() then return false end
+    slot = tonumber(slot) or 0
+    if type(echoes) ~= "table" or #echoes == 0 then return false end
+    local ok, result = pcall(service.UploadServerBuildSlot, slot, name, echoes)
+    return ok and result ~= false
+end
+
+function API.ActivateServerBuildSlot(slot)
+    local service = Service()
+    if not service or type(service.ActivateServerBuildSlot) ~= "function" then return false end
+    if not API.AreServerBuildSlotsEnabled() then return false end
+    slot = tonumber(slot)
+    if not slot or slot < 0 then return false end
+    local ok, result = pcall(service.ActivateServerBuildSlot, slot)
+    return ok and result ~= false
+end
+
+--- Push a build's locked echoes into the client wishlist (highlight /
+-- auto-accept only). Does not touch server slots, weights, or snapshots.
+-- Returns ok, errKey, info where info may include { skipped, autoAcceptWarn }.
+function API.ApplyBuildAsWishlist(build)
+    if type(build) ~= "table" then return false, "no_build" end
+    local service = Service()
+    if not service or type(service.SetActiveEchoLoadout) ~= "function" then
+        return false, "unsupported"
+    end
+    local echoes = API.MapLockedEchoesToWishlist(build.lockedEchoes)
+    if #echoes == 0 then return false, "empty" end
+    local ok = API.SetActiveEchoLoadout({
+        name = build.title,
+        class = build.class,
+        echoes = echoes,
+    })
+    if not ok then return false, "failed" end
+    return true, nil, {
+        count = #echoes,
+        autoAcceptWarn = API.IsForeignBuild(build) and API.IsAutoAcceptLoadoutEchoesEnabled() or false,
+    }
+end
+
+--- Upload locked echoes as a designed server build slot (slot 0 = new).
+-- Weights and characterSnapshot are intentionally ignored.
+-- Returns ok, errKey, info.
+function API.UploadBuildAsServerSlot(build, slot)
+    if type(build) ~= "table" then return false, "no_build" end
+    if not API.AreServerBuildSlotsEnabled() then return false, "disabled" end
+    local service = Service()
+    if not service or type(service.UploadServerBuildSlot) ~= "function" then
+        return false, "unsupported"
+    end
+    local echoes, skipped = API.MapLockedEchoesToServerSlot(build.lockedEchoes, {
+        classToken = build.class,
+        lockAll = true,
+    })
+    if #echoes == 0 then return false, "empty", { skipped = skipped } end
+    local ok = API.UploadServerBuildSlot(tonumber(slot) or 0, build.title or "Loadout", echoes)
+    if not ok then return false, "failed", { skipped = skipped } end
+    return true, nil, {
+        count = #echoes,
+        skipped = skipped,
+        autoAcceptWarn = API.IsForeignBuild(build) and API.IsAutoAcceptLoadoutEchoesEnabled() or false,
+    }
+end
+
+-- Confirm before applying a foreign loadout while ProjectEbonhold Auto-Accept
+-- is enabled. Character snapshots are never applied (no LearnTalent / equip).
+local pendingForeignConfirm
+
+local function EnsureForeignConfirmDialog()
+    if type(StaticPopupDialogs) ~= "table" then return false end
+    if StaticPopupDialogs["EBONBUILDS_FOREIGN_LOADOUT_AUTOACCEPT"] then return true end
+    StaticPopupDialogs["EBONBUILDS_FOREIGN_LOADOUT_AUTOACCEPT"] = {
+        text = "ProjectEbonhold Auto-Accept Loadout Echoes is ON. Applying this foreign build will auto-pick matching echoes in combat. Continue?",
+        button1 = "Continue",
+        button2 = "Cancel",
+        OnAccept = function()
+            local pending = pendingForeignConfirm
+            pendingForeignConfirm = nil
+            if pending and pending.run then pending.run(pending.build) end
+        end,
+        OnCancel = function()
+            pendingForeignConfirm = nil
+        end,
+        timeout = 0,
+        whileDead = 1,
+        hideOnEscape = 1,
+        preferredIndex = 3,
+    }
+    return true
+end
+
+function API.WithForeignAutoAcceptConfirm(build, run)
+    if type(run) ~= "function" then return end
+    if API.IsForeignBuild(build) and API.IsAutoAcceptLoadoutEchoesEnabled()
+        and EnsureForeignConfirmDialog() and type(StaticPopup_Show) == "function" then
+        pendingForeignConfirm = { build = build, run = run }
+        StaticPopup_Show("EBONBUILDS_FOREIGN_LOADOUT_AUTOACCEPT")
+        return
+    end
+    run(build)
+end
+
 function API.GetChoiceGeneration()
     return choiceGeneration
 end
@@ -286,6 +508,7 @@ end
 
 function API.GetCapabilities()
     local service = Service()
+    local uploadReady = service and type(service.UploadServerBuildSlot) == "function"
     return {
         addonVersion = API.GetAddonVersion(),
         perkDatabase = API.GetPerkDatabase() ~= nil,
@@ -297,6 +520,10 @@ function API.GetCapabilities()
         activeLoadout = service and type(service.SetActiveEchoLoadout) == "function" or false,
         sharedLoadouts = service and type(service.RequestSharedEchoLoadouts) == "function"
             and type(service.GetSharedEchoLoadouts) == "function" or false,
+        serverBuildSlots = uploadReady and true or false,
+        serverBuildSlotsEnabled = uploadReady and API.AreServerBuildSlotsEnabled() or false,
+        uploadServerBuildSlot = uploadReady and true or false,
+        activateServerBuildSlot = service and type(service.ActivateServerBuildSlot) == "function" or false,
         pendingFlags = ProjectEbonhold and type(ProjectEbonhold.Perks) == "table" or false,
         actionConfirmation = service and "request_only" or "unavailable",
     }

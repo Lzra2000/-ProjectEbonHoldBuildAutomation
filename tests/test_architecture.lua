@@ -85,6 +85,12 @@ assertTrue(projectAPI:find("actionConfirmation = service and %\"request_only%\""
     "ProjectAPI does not declare request-only standalone integration")
 assertTrue(not projectAPI:find("pendingAction", 1, true),
     "ProjectAPI still blocks actions behind inferred acknowledgement state")
+assertTrue(projectAPI:find("UploadServerBuildSlot", 1, true),
+    "ProjectAPI missing server build-slot upload wrapper (#57)")
+assertTrue(projectAPI:find("MapLockedEchoesToServerSlot", 1, true),
+    "ProjectAPI missing lockedEchoes -> server slot mapping (#57)")
+assertTrue(not projectAPI:find("LearnTalent%s*%("),
+    "ProjectAPI must not LearnTalent from foreign snapshots (#57)")
 
 local sync = read("modules/sync/Sync.lua")
 assertTrue(not sync:find("UpdateFromPublic%(existing"), "peer sync can overwrite a local build")
