@@ -191,6 +191,8 @@ If disabling felt like it "only worked half way" before 3.75: closing the zone p
 
 Finding where to farm the tomes you don't have yet.
 
+
+**Draw-pool toggles and permanent locks (3.85, #68 / #62):** On level-1 characters, Tome Atlas rows show draw-pool state; right-click toggles via `ToggleTomeEcho` / `IsTomeEchoDisabled`. Build Overview shows permanent locks from `GetLockedPerks` / `GetMaximumPermanentEchoes` with `LockPerk` / unlock gestures. **Snapshot Run** uses `SnapshotCurrentEchoes` when ProjectEbonhold exposes it.
 ### How does the Tome Atlas work? (new in 2.2)
 An AtlasLoot-style **community drop database** for echo tomes. When you loot a tome, the addon records the mob and zone automatically and shares the observation with other EbonBuilds users (over the sync channel and guild). Data from other players arrives live as drops happen and whenever anyone syncs (Public Builds > Reload). Duplicate reports merge via max-count, so nothing ever double-counts.
 

@@ -631,6 +631,13 @@ EbonBuilds.FAQContent = { PAGES = {
         "apply immediately while the map is open.",
         "",
         "Finding where to farm the tomes you don't have yet.",
+        "",
+        "Draw-pool toggles and permanent locks (3.85, #68 / #62): On level-1",
+        "characters, Tome Atlas rows show draw-pool state; right-click toggles",
+        "via ToggleTomeEcho / IsTomeEchoDisabled. Build Overview shows permanent",
+        "locks from GetLockedPerks / GetMaximumPermanentEchoes with LockPerk /",
+        "unlock gestures. Snapshot Run uses SnapshotCurrentEchoes when",
+        "ProjectEbonhold exposes it.",
     },
 },
 {
