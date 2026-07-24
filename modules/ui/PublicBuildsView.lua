@@ -479,8 +479,15 @@ local function AllPriorities(build)
         end
     end
     table.sort(rows, function(a, b)
-        if a.weight ~= b.weight then return a.weight > b.weight end
-        return a.name < b.name
+        -- Total order: never return true for both (a,b) and (b,a), and
+        -- never index a nil hole if the row list is sparse.
+        if a == nil or b == nil then
+            if a == nil and b == nil then return false end
+            return b == nil
+        end
+        local wa, wb = a.weight or 0, b.weight or 0
+        if wa ~= wb then return wa > wb end
+        return tostring(a.name or "") < tostring(b.name or "")
     end)
     return rows
 end
@@ -1235,6 +1242,64 @@ local function MatchesSearch(build, needle)
     return title:find(needle, 1, true) ~= nil or author:find(needle, 1, true) ~= nil
 end
 
+-- CompareBuilds(a, b, mode, now, timeFn) -> boolean.
+-- Strict weak order for table.sort: return true iff a must come strictly
+-- before b. Equal elements must yield false both ways; never return true
+-- for both (a,b) and (b,a). The previous `primary = x ~= y and x > y or nil`
+-- idiom collapsed "a sorts after b" into nil and then fell through to
+-- title/id, which could make both directions return true ("invalid order
+-- function for sorting"). Nil holes are also guarded so a sparse list
+-- never indexes a nil entry. timeFn is optional and forwarded to
+-- ParseLastModified / TrendingScore (defaults to real time()).
+local function CompareBuilds(a, b, mode, now, timeFn)
+    if a == nil or b == nil then
+        if a == nil and b == nil then return false end
+        return b == nil
+    end
+
+    mode = mode or sortMode
+    now = now or ((time and time()) or 0)
+
+    if mode == "newest" then
+        local ma = ParseLastModified(a.lastModified, timeFn) or 0
+        local mb = ParseLastModified(b.lastModified, timeFn) or 0
+        if ma ~= mb then return ma > mb end
+    elseif mode == "itemlevel" then
+        local sa = CharacterSummary(a.characterSnapshot)
+        local sb = CharacterSummary(b.characterSnapshot)
+        local ia, ib = sa and sa.avgItemLevel, sb and sb.avgItemLevel
+        if ia == nil and ib == nil then
+            -- fall through to title/id
+        elseif ia == nil or ib == nil then
+            -- Builds with no gear data sink to the bottom rather than
+            -- sorting as "item level 0", which would put them first.
+            return ib == nil
+        elseif ia ~= ib then
+            return ia > ib
+        end
+    elseif mode == "trending" then
+        local ta, tb = TrendingScore(a, now, timeFn), TrendingScore(b, now, timeFn)
+        if ta ~= tb then return ta > tb end
+    else -- "votes"
+        local va = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(a.id)) or 0
+        local vb = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(b.id)) or 0
+        if va ~= vb then return va > vb end
+    end
+
+    local ta, tb = tostring(a.title or ""), tostring(b.title or "")
+    if ta ~= tb then return ta < tb end
+    return tostring(a.id or "") < tostring(b.id or "")
+end
+EbonBuilds.PublicBuildsView._CompareBuildsForTest = CompareBuilds
+
+local function SortBuilds(list, mode, now, timeFn)
+    table.sort(list, function(a, b)
+        return CompareBuilds(a, b, mode, now, timeFn)
+    end)
+    return list
+end
+EbonBuilds.PublicBuildsView._SortBuildsForTest = SortBuilds
+
 GetFilteredBuilds = function()
     local all = FetchPublicBuilds()
     local filtered = {}
@@ -1265,37 +1330,7 @@ GetFilteredBuilds = function()
     -- mode: the primary key decides, ties fall through to title then id
     -- so two builds never visibly swap position between refreshes.
     local now = (time and time()) or 0
-    table.sort(filtered, function(a, b)
-        local primary
-        if sortMode == "newest" then
-            local ma, mb = ParseLastModified(a.lastModified) or 0, ParseLastModified(b.lastModified) or 0
-            primary = ma ~= mb and ma > mb or nil
-        elseif sortMode == "itemlevel" then
-            local sa = EbonBuilds.PublicBuildsView._CharacterSummaryForTest(a.characterSnapshot)
-            local sb = EbonBuilds.PublicBuildsView._CharacterSummaryForTest(b.characterSnapshot)
-            local ia, ib = sa and sa.avgItemLevel, sb and sb.avgItemLevel
-            if ia == nil and ib == nil then
-                primary = nil
-            elseif ia == nil or ib == nil then
-                -- Builds with no gear data sink to the bottom rather than
-                -- sorting as "item level 0", which would put them first.
-                return ib == nil
-            else
-                primary = ia ~= ib and ia > ib or nil
-            end
-        elseif sortMode == "trending" then
-            local ta, tb = TrendingScore(a, now), TrendingScore(b, now)
-            primary = ta ~= tb and ta > tb or nil
-        else -- "votes"
-            local va = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(a.id)) or 0
-            local vb = (EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.Count(b.id)) or 0
-            primary = va ~= vb and va > vb or nil
-        end
-        if primary ~= nil then return primary end
-        local ta, tb = tostring(a.title or ""), tostring(b.title or "")
-        if ta ~= tb then return ta < tb end
-        return tostring(a.id or "") < tostring(b.id or "")
-    end)
+    SortBuilds(filtered, sortMode, now)
     return filtered
 end
 
@@ -1688,6 +1723,96 @@ if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
         if scoreOf(3600, 0) ~= 0 then
             error("a build with zero votes must always score zero, regardless of age")
         end
+    end)
+
+    EbonBuilds.Debug.RegisterTest("PublicBuildsView.CompareBuilds is a total order (no invalid order / nil index)", function()
+        local cmp = EbonBuilds.PublicBuildsView._CompareBuildsForTest
+        local sort = EbonBuilds.PublicBuildsView._SortBuildsForTest
+        if type(cmp) ~= "function" or type(sort) ~= "function" then
+            error("expected CompareBuilds/SortBuilds test hooks")
+        end
+
+        -- Harness time() ignores its date-table argument; inject a tiny
+        -- epoch converter so newest/trending keys actually differ.
+        local function fakeEpoch(t)
+            local days = (t.year - 2000) * 365 + (t.month - 1) * 30 + (t.day - 1)
+            return days * 86400 + t.hour * 3600 + t.min * 60 + t.sec
+        end
+
+        -- Antisymmetry helper: never true both ways; equals are false both ways.
+        local function assertOrder(a, b, mode, expectABeforeB, label)
+            local ab = cmp(a, b, mode, 0, fakeEpoch)
+            local ba = cmp(b, a, mode, 0, fakeEpoch)
+            if ab and ba then
+                error("invalid order (true both ways): " .. label)
+            end
+            if expectABeforeB == true and not ab then
+                error("expected a before b: " .. label)
+            end
+            if expectABeforeB == false and ab then
+                error("expected a not before b: " .. label)
+            end
+            if expectABeforeB == nil then
+                if ab or ba then
+                    error("equal pair must be false both ways: " .. label)
+                end
+            end
+        end
+
+        -- Titles deliberately conflict with date order: older title "Alpha"
+        -- sorts before newer title "Zebra". The broken `x ~= y and x > y or nil`
+        -- idiom fell through to title and returned true for BOTH directions.
+        local older = { id = "a", title = "Alpha", lastModified = "2026-01-01 00:00:00",
+            characterSnapshot = { talents = {}, gear = { [1] = { itemLevel = 100 } } } }
+        local newer = { id = "b", title = "Zebra", lastModified = "2026-07-01 00:00:00",
+            characterSnapshot = { talents = {}, gear = { [1] = { itemLevel = 250 } } } }
+        local sameDateDifferentTitle = { id = "c", title = "Beta", lastModified = "2026-07-01 00:00:00" }
+
+        assertOrder(older, newer, "newest", false, "oldest must not precede newest")
+        assertOrder(newer, older, "newest", true, "newest precedes oldest")
+        assertOrder(newer, sameDateDifferentTitle, "newest", false, "same date: Zebra after Beta")
+        assertOrder(sameDateDifferentTitle, newer, "newest", true, "same date: Beta before Zebra")
+
+        EbonBuildsDB.buildVotes = {}
+        if EbonBuilds.BuildVotes and EbonBuilds.BuildVotes.MergeVote then
+            EbonBuilds.BuildVotes.MergeVote("V1", newer.id, true)
+            EbonBuilds.BuildVotes.MergeVote("V2", newer.id, true)
+            EbonBuilds.BuildVotes.MergeVote("V3", older.id, true)
+        end
+        assertOrder(newer, older, "votes", true, "more votes first")
+        assertOrder(newer, older, "itemlevel", true, "higher ilvl first")
+
+        local noGear = { id = "d", title = "NoGear", lastModified = "2026-07-01 00:00:00" }
+        assertOrder(newer, noGear, "itemlevel", true, "missing ilvl sinks")
+        assertOrder(noGear, newer, "itemlevel", false, "missing ilvl does not float")
+
+        assertOrder(nil, newer, "votes", false, "nil does not precede a build")
+        assertOrder(newer, nil, "votes", true, "build precedes nil")
+        assertOrder(nil, nil, "votes", nil, "nil equals nil")
+
+        local dense = { older, newer, sameDateDifferentTitle }
+        local ok, err = pcall(sort, dense, "newest", 0, fakeEpoch)
+        if not ok then error("SortBuilds crashed: " .. tostring(err)) end
+        -- Primary: date desc → c+b before a; tie-break: title asc → Beta (c) before Zebra (b).
+        if dense[1] ~= sameDateDifferentTitle or dense[2] ~= newer or dense[3] ~= older then
+            error(string.format("newest order wrong: %s, %s, %s",
+                tostring(dense[1] and dense[1].id),
+                tostring(dense[2] and dense[2].id),
+                tostring(dense[3] and dense[3].id)))
+        end
+
+        -- Comparator itself must tolerate nil arguments (BugSack: attempt to
+        -- index local 'b'), even if a caller somehow feeds a sparse list.
+        ok, err = pcall(function()
+            cmp(nil, newer, "newest", 0, fakeEpoch)
+            cmp(newer, nil, "newest", 0, fakeEpoch)
+            cmp(nil, nil, "newest", 0, fakeEpoch)
+        end)
+        if not ok then error("CompareBuilds crashed on nil entry: " .. tostring(err)) end
+
+        assertOrder(newer, newer, "newest", nil, "same build equal")
+
+        EbonBuildsDB.buildVotes = {}
     end)
 
     EbonBuilds.Debug.RegisterTest("PublicBuildsView.Inspect handles a very long Intent without breaking the layout", function()
