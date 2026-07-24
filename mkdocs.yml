@@ -15,6 +15,9 @@ theme:
   logo: img/logo.svg
   favicon: img/logo.svg
   custom_dir: docs/overrides
+  font:
+    text: Source Sans 3
+    code: Roboto Mono
   palette:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate

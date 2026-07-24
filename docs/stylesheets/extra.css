@@ -1,33 +1,176 @@
-/* EbonBuilds docs — restrained dark palette with gold accents (logo motif) */
+/* EbonBuilds docs — WotLK-inspired dark chrome with gold accents (logo motif) */
+
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&display=swap");
 
 :root {
   --ebb-gold: #c9a227;
   --ebb-gold-light: #d4af37;
+  --ebb-gold-dim: #8a7020;
+  --ebb-gold-glow: rgba(212, 175, 55, 0.18);
   --ebb-charcoal: #141414;
+  --ebb-charcoal-deep: #0a0a0a;
   --ebb-surface: #1c1c1c;
+  --ebb-surface-raised: #222018;
+  --ebb-border: #3a3428;
+  --ebb-border-light: rgba(201, 162, 39, 0.28);
+  --ebb-inset-top: inset 0 1px 0 rgba(212, 175, 55, 0.12);
+  --ebb-inset-bottom: inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+  --ebb-panel-shadow: var(--ebb-inset-top), var(--ebb-inset-bottom), 0 1px 4px rgba(0, 0, 0, 0.35);
+  --ebb-font-display: "Cinzel", "Palatino Linotype", "Book Antiqua", Palatino, "Times New Roman", serif;
+  --ebb-font-body: var(--md-text-font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
 }
+
+/* ── Material palette overrides (dark) ───────────────────────────────────── */
 
 [data-md-color-scheme="slate"] {
   --md-primary-fg-color: var(--ebb-charcoal);
-  --md-primary-fg-color--light: #252525;
-  --md-primary-fg-color--dark: #0d0d0d;
+  --md-primary-fg-color--light: #1e1c18;
+  --md-primary-fg-color--dark: var(--ebb-charcoal-deep);
   --md-accent-fg-color: var(--ebb-gold-light);
-  --md-default-bg-color: #121212;
+  --md-default-bg-color: #121110;
+  --md-default-fg-color: #e8e4dc;
+  --md-default-fg-color--light: #b8b0a4;
+  --md-default-fg-color--lighter: #8a8278;
+  --md-code-bg-color: #1a1814;
+  --md-code-fg-color: #d8ccb8;
+  --md-typeset-a-color: var(--ebb-gold-light);
 }
+
+/* ── Material palette overrides (light) ──────────────────────────────────── */
 
 [data-md-color-scheme="default"] {
-  --md-accent-fg-color: #8a7020;
+  --md-primary-fg-color: #1a1814;
+  --md-primary-fg-color--light: #2a2620;
+  --md-primary-fg-color--dark: #0d0c0a;
+  --md-accent-fg-color: var(--ebb-gold-dim);
+  --md-default-bg-color: #f4f0e8;
+  --md-default-fg-color: #2a2620;
+  --md-typeset-a-color: #6b5618;
+  --ebb-border: #c8b88a;
+  --ebb-border-light: rgba(138, 112, 32, 0.35);
+  --ebb-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --ebb-inset-bottom: inset 0 -1px 0 rgba(120, 100, 60, 0.18);
+  --ebb-panel-shadow: var(--ebb-inset-top), var(--ebb-inset-bottom), 0 1px 3px rgba(60, 48, 24, 0.12);
 }
 
-/* Hero block on the home page */
+/* ── Typography ──────────────────────────────────────────────────────────── */
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-header__title,
+.md-nav__title {
+  font-family: var(--ebb-font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.md-typeset h1 {
+  color: var(--ebb-gold-light);
+  border-bottom: 1px solid var(--ebb-border-light);
+  padding-bottom: 0.35em;
+}
+
+[data-md-color-scheme="default"] .md-typeset h1 {
+  color: var(--ebb-gold-dim);
+}
+
+/* ── Header & navigation chrome ──────────────────────────────────────────── */
+
+.md-header {
+  background-color: var(--ebb-charcoal-deep);
+  border-bottom: 2px solid var(--ebb-gold);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+[data-md-color-scheme="default"] .md-header {
+  background-color: #1a1814;
+}
+
+.md-header__title {
+  color: var(--ebb-gold-light);
+}
+
+.md-tabs {
+  background-color: var(--ebb-charcoal);
+  border-bottom: 1px solid var(--ebb-border-light);
+}
+
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #222018;
+}
+
+.md-tabs__link {
+  opacity: 0.82;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.md-tabs__link:hover {
+  opacity: 1;
+}
+
+.md-tabs__link--active {
+  opacity: 1;
+  border-bottom: 2px solid var(--ebb-gold-light);
+  color: var(--ebb-gold-light);
+}
+
+.md-nav__link--active,
+.md-nav__link[for]:checked ~ .md-nav__link {
+  color: var(--ebb-gold-light);
+}
+
+.md-nav__item .md-nav__link--active {
+  font-weight: 600;
+}
+
+/* Sidebar & footer surfaces */
+.md-sidebar,
+.md-footer {
+  background-color: var(--md-default-bg-color);
+}
+
+.md-footer-meta {
+  background-color: var(--ebb-charcoal-deep);
+  border-top: 1px solid var(--ebb-border-light);
+}
+
+[data-md-color-scheme="default"] .md-footer-meta {
+  background-color: #1a1814;
+}
+
+/* Search bar — panel frame */
+.md-search__form {
+  background-color: var(--ebb-surface);
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-inset-top), var(--ebb-inset-bottom);
+  border-radius: 0.15rem;
+}
+
+[data-md-color-scheme="default"] .md-search__form {
+  background-color: #fff;
+}
+
+/* ── WoW-style panel frames (shared) ─────────────────────────────────────── */
+
+.ebb-panel-frame {
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-panel-shadow);
+  border-radius: 0.15rem;
+}
+
+/* ── Hero block (home page) ──────────────────────────────────────────────── */
+
 .ebb-hero {
   text-align: center;
   margin: 0 0 2.4rem;
 }
 
 .ebb-hero img {
-  border-radius: 0.2rem;
+  border-radius: 0.15rem;
   margin-bottom: 1.2rem;
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-panel-shadow);
 }
 
 .ebb-hero .ebb-tagline {
@@ -52,32 +195,168 @@
   color: var(--md-accent-fg-color);
 }
 
-/* Primary CTA — dark fill, gold border (not generic Material teal) */
+/* Primary CTA — dark fill, gold border */
 .md-typeset .md-button--primary {
   background-color: var(--ebb-surface);
   border: 1px solid var(--ebb-gold);
   color: var(--ebb-gold-light);
+  box-shadow: var(--ebb-inset-top), var(--ebb-inset-bottom);
 }
 
 .md-typeset .md-button--primary:hover,
 .md-typeset .md-button--primary:focus {
-  background-color: #2a2a2a;
+  background-color: #2a2620;
   border-color: var(--ebb-gold-light);
   color: #f0d878;
 }
 
-/* Card grid spacing on the home page */
+.md-typeset .md-button:not(.md-button--primary) {
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-inset-top);
+}
+
+/* Card grid — inset panel look */
 .md-typeset .grid.cards {
   margin-top: 1.5rem;
 }
 
 .md-typeset .grid.cards > ul > li {
-  border-radius: 0.2rem;
+  border-radius: 0.15rem;
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-panel-shadow);
+  background-color: var(--ebb-surface-raised);
 }
 
-/* Page intros — consistent lead paragraph styling */
+[data-md-color-scheme="default"] .md-typeset .grid.cards > ul > li {
+  background-color: #fff;
+}
+
+/* Page intros */
 .ebb-lead {
   font-size: 1.02rem;
   color: var(--md-default-fg-color--light);
   margin-bottom: 1.6rem;
+}
+
+/* ── Code blocks — muted dark fantasy, not neon ─────────────────────────── */
+
+.highlight,
+.highlighttable,
+.md-typeset pre {
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-panel-shadow);
+  border-radius: 0.15rem;
+}
+
+[data-md-color-scheme="slate"] .highlight,
+[data-md-color-scheme="slate"] .md-typeset pre > code {
+  background-color: #1a1814;
+}
+
+[data-md-color-scheme="slate"] .md-typeset code {
+  background-color: rgba(26, 24, 20, 0.85);
+  color: #d8ccb8;
+  border: 1px solid rgba(58, 52, 40, 0.6);
+  border-radius: 0.12rem;
+  padding: 0.05em 0.35em;
+}
+
+[data-md-color-scheme="default"] .md-typeset code {
+  background-color: rgba(138, 112, 32, 0.08);
+  color: #5a4818;
+  border: 1px solid rgba(138, 112, 32, 0.2);
+}
+
+.md-typeset .md-clipboard.md-icon:hover {
+  color: var(--ebb-gold-light);
+}
+
+/* ── Admonitions — restrained gold/charcoal, no bright Material neon ─────── */
+
+.md-typeset .admonition,
+.md-typeset details {
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-panel-shadow);
+  border-radius: 0.15rem;
+  background-color: var(--ebb-surface-raised);
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition,
+[data-md-color-scheme="default"] .md-typeset details {
+  background-color: #faf8f4;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  border-bottom: 1px solid var(--ebb-border-light);
+  background-color: rgba(20, 20, 20, 0.35);
+  font-family: var(--ebb-font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+[data-md-color-scheme="default"] .md-typeset .admonition-title,
+[data-md-color-scheme="default"] .md-typeset summary {
+  background-color: rgba(138, 112, 32, 0.08);
+}
+
+/* Tone down default admonition accent stripes */
+.md-typeset .admonition.note,
+.md-typeset .admonition.abstract,
+.md-typeset .admonition.info,
+.md-typeset .admonition.tip,
+.md-typeset .admonition.hint,
+.md-typeset .admonition.success,
+.md-typeset .admonition.question,
+.md-typeset .admonition.warning,
+.md-typeset .admonition.failure,
+.md-typeset .admonition.danger,
+.md-typeset .admonition.bug,
+.md-typeset .admonition.example,
+.md-typeset .admonition.quote {
+  border-left: 3px solid var(--ebb-gold-dim);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.warning,
+[data-md-color-scheme="slate"] .md-typeset .admonition.failure,
+[data-md-color-scheme="slate"] .md-typeset .admonition.danger {
+  border-left-color: #a06830;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.tip,
+[data-md-color-scheme="slate"] .md-typeset .admonition.success {
+  border-left-color: #6a7a48;
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────────── */
+
+.md-typeset table:not([class]) {
+  border: 1px solid var(--ebb-border);
+  box-shadow: var(--ebb-panel-shadow);
+}
+
+.md-typeset table:not([class]) th {
+  background-color: rgba(20, 20, 20, 0.55);
+  border-bottom: 1px solid var(--ebb-border-light);
+  font-family: var(--ebb-font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+[data-md-color-scheme="default"] .md-typeset table:not([class]) th {
+  background-color: rgba(138, 112, 32, 0.1);
+}
+
+.md-typeset table:not([class]) tr:hover {
+  background-color: rgba(201, 162, 39, 0.06);
+}
+
+/* ── TOC & permalinks ────────────────────────────────────────────────────── */
+
+.md-typeset .headerlink {
+  color: var(--ebb-gold-dim);
+}
+
+.md-typeset .headerlink:hover {
+  color: var(--ebb-gold-light);
 }
