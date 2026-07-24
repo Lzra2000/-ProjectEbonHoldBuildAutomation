@@ -178,10 +178,10 @@ if [ "$SKIP_DETAILS_SUITE" -eq 0 ] && [ -f dist/Details.zip ]; then
     done
 
     # PE forks must carry expected Version lines when present in zip.
-    if grep -q "1.0.9-pe1" "$DETAILS_UNPACK/Details_ProjectEbonhold/Details_ProjectEbonhold.toc" 2>/dev/null; then
+    if grep -q "1.0.10-pe1" "$DETAILS_UNPACK/Details_ProjectEbonhold/Details_ProjectEbonhold.toc" 2>/dev/null; then
         :
     else
-        echo "PACKAGE FAIL: Details.zip Details_ProjectEbonhold.toc missing Version 1.0.9-pe1" >&2
+        echo "PACKAGE FAIL: Details.zip Details_ProjectEbonhold.toc missing Version 1.0.10-pe1" >&2
         annotate "Details.zip PE companion version mismatch"
         fail=1
     fi

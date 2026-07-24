@@ -389,13 +389,17 @@ end
 
 local CUSTOM_NAME = "PE Proc Sources"
 -- Bump so Details InstallCustomObject replaces older scripts / tooltip copy.
-local CUSTOM_VERSION = 9
+local CUSTOM_VERSION = 10
 -- Soft minimum height so more proc rows are visible without scrolling immediately.
 local CUSTOM_MIN_HEIGHT = 260
 -- Native Player Details right-side detail blocks (Details spellInfoSettings.amount).
 local RIGHT_DETAIL_SLOTS = 6
 -- Offset when docking Breakdown beside the PE Proc Sources / Details instance.
 local BREAKDOWN_DOCK_PAD_X = 12
+-- Details Player Details! footer strip height (janela_info PLAYER_DETAILS_STATUSBAR_HEIGHT).
+local PLAYER_DETAILS_STATUSBAR_HEIGHT = 20
+-- Minimum bottom inset so Targets does not sit under the status strip (classic skin uses 6).
+local TARGETS_MIN_BOTTOM_INSET = 6 + PLAYER_DETAILS_STATUSBAR_HEIGHT
 -- Status-bar tint for secondary right-panel blocks (share / siblings).
 local DETAIL_SHARE_COLOR = { 0.55, 0.65, 0.95, 0.85 }
 local DETAIL_SIBLING_COLOR = { 0.75, 0.75, 0.55, 0.85 }
@@ -541,8 +545,15 @@ local function HidePlayerDetailsTabs(details, info)
                 if tab.Hide then
                     tab:Hide()
                 end
-                if type(tab.frame) == "table" and tab.frame.Hide then
-                    tab.frame:Hide()
+                if type(tab.frame) == "table" then
+                    -- Tab frames are HIGH strata + EnableMouse and cover Targets;
+                    -- keep them inert while PE owns the Summary chrome.
+                    if tab.frame.EnableMouse then
+                        tab.frame:EnableMouse(false)
+                    end
+                    if tab.frame.Hide then
+                        tab.frame:Hide()
+                    end
                 end
             end
         end
@@ -550,6 +561,232 @@ local function HidePlayerDetailsTabs(details, info)
     if type(info) == "table" and type(info.SummaryWindowWidgets) == "table"
         and info.SummaryWindowWidgets.Show then
         info.SummaryWindowWidgets:Show()
+    end
+end
+
+local function HideNoTargets(info)
+    if type(info) ~= "table" or type(info.no_targets) ~= "table" then
+        return
+    end
+    if info.no_targets.Hide then
+        info.no_targets:Hide()
+    end
+    local text = info.no_targets.text
+    if type(text) == "table" then
+        if text.SetText then
+            text:SetText("")
+        end
+        if text.Hide then
+            text:Hide()
+        end
+    end
+end
+
+-- Details creates the footer status strip as an unnamed child of janela_info
+-- with a DF Label at .Text (see gumps/janela_info.lua SetStatusbarText).
+local function FindPlayerDetailsStatusBar(info)
+    if type(info) ~= "table" then
+        return nil
+    end
+    if type(info._peStatusBar) == "table" then
+        return info._peStatusBar
+    end
+    if type(info.GetNumChildren) ~= "function" or type(info.GetChildren) ~= "function" then
+        return nil
+    end
+    local n = info:GetNumChildren()
+    if type(n) ~= "number" or n < 1 then
+        return nil
+    end
+    local children = { info:GetChildren() }
+    for i = 1, #children do
+        local child = children[i]
+        if type(child) == "table" and child.Text ~= nil and type(child.GetHeight) == "function" then
+            local ok, height = pcall(child.GetHeight, child)
+            local name = (type(child.GetName) == "function" and child:GetName()) or nil
+            if ok and type(height) == "number"
+                and height >= (PLAYER_DETAILS_STATUSBAR_HEIGHT - 2)
+                and height <= (PLAYER_DETAILS_STATUSBAR_HEIGHT + 4)
+                and (name == nil or name == "") then
+                info._peStatusBar = child
+                return child
+            end
+        end
+    end
+    return nil
+end
+
+-- Stop stuck StartMoving captures and keep the status strip from covering
+-- Targets (classic skin docks Targets at y=6 while the strip is 20px tall).
+local function PreparePeBreakdownInteraction(info)
+    if type(info) ~= "table" then
+        return
+    end
+
+    if info.isMoving and type(info.StopMovingOrSizing) == "function" then
+        pcall(info.StopMovingOrSizing, info)
+        info.isMoving = false
+    end
+
+    local statusBar = FindPlayerDetailsStatusBar(info)
+    if type(statusBar) == "table" then
+        if statusBar.EnableMouse then
+            statusBar:EnableMouse(false)
+        end
+        if statusBar.Hide then
+            statusBar:Hide()
+        end
+        if statusBar.SetFrameLevel and type(info.GetFrameLevel) == "function" then
+            local base = info:GetFrameLevel() or 1
+            pcall(statusBar.SetFrameLevel, statusBar, math.max(1, base - 1))
+        end
+    end
+
+    -- Empty Targets gump OnMouseDown calls StartMoving; if MouseUp is lost
+    -- (overlap / strata), the cursor stays captured. Disable drag there in PE.
+    local alvos = info.container_alvos
+    local gumpFrame = alvos and alvos.gump
+    if type(gumpFrame) == "table" and type(gumpFrame.SetScript) == "function"
+        and not gumpFrame._peMousePatched then
+        gumpFrame._peOrigOnMouseDown = gumpFrame:GetScript("OnMouseDown")
+        gumpFrame._peOrigOnMouseUp = gumpFrame:GetScript("OnMouseUp")
+        gumpFrame:SetScript("OnMouseDown", function(_, button)
+            if button == "RightButton" then
+                local details = ResolveDetails()
+                if type(details) == "table" and type(details.FechaJanelaInfo) == "function" then
+                    pcall(details.FechaJanelaInfo, details)
+                end
+            end
+            -- LeftButton: ignore — do not StartMoving from empty Targets area.
+        end)
+        gumpFrame:SetScript("OnMouseUp", function() end)
+        gumpFrame._peMousePatched = true
+    end
+
+    -- Classic skin pins Targets at bottom inset 6; lift above the strip so
+    -- bars are not under the (now hidden) footer / leftover font bleed.
+    if type(alvos) == "table" and type(alvos.GetNumPoints) == "function"
+        and type(alvos.GetPoint) == "function" and type(alvos.SetPoint) == "function" then
+        local ok, nPoints = pcall(alvos.GetNumPoints, alvos)
+        if ok and type(nPoints) == "number" and nPoints >= 1 then
+            local ok2, point, relativeTo, relativePoint, xOfs, yOfs = pcall(alvos.GetPoint, alvos, 1)
+            if ok2 and point == "BOTTOMLEFT" and type(yOfs) == "number"
+                and yOfs < TARGETS_MIN_BOTTOM_INSET then
+                if not alvos._peOrigPoint then
+                    alvos._peOrigPoint = { point, relativeTo, relativePoint, xOfs, yOfs }
+                end
+                alvos:ClearAllPoints()
+                alvos:SetPoint(
+                    point,
+                    relativeTo or info,
+                    relativePoint or "BOTTOMLEFT",
+                    xOfs or 20,
+                    TARGETS_MIN_BOTTOM_INSET
+                )
+            end
+        end
+    end
+
+    HideNoTargets(info)
+end
+
+-- Sibling proc rows live in barras2 (isAlvo). Stock Details only focuses
+-- isMain (spell) bars — wire LeftClick → OpenBreakdown for that proc/source.
+local function IsPeBarClickNotDrag(self)
+    if type(self) ~= "table" then
+        return true
+    end
+    if type(self.x) ~= "number" or type(self.y) ~= "number" then
+        return true
+    end
+    if type(GetCursorPosition) ~= "function" then
+        return true
+    end
+    local x, y = GetCursorPosition()
+    if type(x) ~= "number" or type(y) ~= "number" then
+        return true
+    end
+    return math.floor(x) == self.x and math.floor(y) == self.y
+end
+
+local function BindPeSiblingProcBar(barra, procId, sourceId, instance, focused)
+    if type(barra) ~= "table" then
+        return
+    end
+    barra.peProcId = tonumber(procId)
+    barra.peSourceId = tonumber(sourceId) or 0
+    barra.peFocused = focused and true or false
+    barra.peInstance = instance
+    if barra._peProcClickBound then
+        return
+    end
+    local function onProcClick(self, button)
+        if button ~= "LeftButton" or self.peFocused or not IsPeBarClickNotDrag(self) then
+            return
+        end
+        local details = ResolveDetails()
+        local info = (type(details) == "table" and details.janela_info) or _G.DetailsPlayerDetailsWindow
+        if type(info) == "table" and info.isMoving and type(info.StopMovingOrSizing) == "function" then
+            pcall(info.StopMovingOrSizing, info)
+            info.isMoving = false
+        end
+        local pid = tonumber(self.peProcId)
+        local sid = tonumber(self.peSourceId) or 0
+        if not pid then
+            return
+        end
+        Procs.OpenBreakdown({
+            peProcId = pid,
+            peSourceId = sid,
+            id = pid,
+        }, self.peInstance)
+    end
+    if type(barra.HookScript) == "function" then
+        barra:HookScript("OnMouseUp", onProcClick)
+        barra._peProcClickBound = true
+    elseif type(barra.SetScript) == "function" then
+        local prev = barra:GetScript("OnMouseUp")
+        barra:SetScript("OnMouseUp", function(self, button)
+            if type(prev) == "function" then
+                pcall(prev, self, button)
+            end
+            onProcClick(self, button)
+        end)
+        barra._peProcClickBound = true
+    end
+end
+
+-- Sibling source rows (barras1 / isMain) already call MontaDetalhes; also allow
+-- a full refocus OpenBreakdown when the player picks another source for this proc.
+local function BindPeSiblingSourceBar(barra, procId, sourceId, instance, focused)
+    if type(barra) ~= "table" then
+        return
+    end
+    barra.peProcId = tonumber(procId)
+    barra.peSourceId = tonumber(sourceId) or 0
+    barra.peFocused = focused and true or false
+    barra.peInstance = instance
+    if barra._peSourceClickBound then
+        return
+    end
+    local function onSourceClick(self, button)
+        if button ~= "LeftButton" or self.peFocused or not IsPeBarClickNotDrag(self) then
+            return
+        end
+        local pid = tonumber(self.peProcId)
+        local sid = tonumber(self.peSourceId) or 0
+        if not pid then
+            return
+        end
+        Procs.OpenBreakdown({
+            peProcId = pid,
+            peSourceId = sid,
+            id = pid,
+        }, self.peInstance)
+    end
+    if type(barra.HookScript) == "function" then
+        barra:HookScript("OnMouseUp", onSourceClick)
+        barra._peSourceClickBound = true
     end
 end
 
@@ -801,6 +1038,7 @@ local function FillNativeBreakdown(details, info, instance, bd, actor)
             barra.other_actor = nil
             barra.minha_tabela = actor
             barra.show = row.spellId
+            BindPeSiblingSourceBar(barra, bd.procId, row.spellId, instance, row.focused)
             barra:Show()
         end
     end
@@ -830,12 +1068,7 @@ local function FillNativeBreakdown(details, info, instance, bd, actor)
     if type(gump.HidaAllBarrasAlvo) == "function" then
         gump:HidaAllBarrasAlvo()
     end
-    if info.no_targets then
-        info.no_targets:Hide()
-        if info.no_targets.text then
-            info.no_targets.text:Hide()
-        end
-    end
+    HideNoTargets(info)
 
     if #procRows > 0 then
         local procTotal = 0
@@ -891,14 +1124,17 @@ local function FillNativeBreakdown(details, info, instance, bd, actor)
                 end
                 barra.minha_tabela = nil
                 barra.show = p.procId
+                BindPeSiblingProcBar(barra, p.procId, bd.sourceId, instance, p.focused)
                 barra:Show()
             end
         end
-    elseif info.no_targets and info.no_targets.Show then
-        info.no_targets:Show()
-        if info.no_targets.text then
-            info.no_targets.text:SetText("No procs from this source")
-            info.no_targets.text:Show()
+        HideNoTargets(info)
+    else
+        HideNoTargets(info)
+        if info.no_targets and info.no_targets.Show then
+            -- Prefer an empty Targets list over the stock "No Targets" art
+            -- mixed under PE proc rows; leave the panel blank when no siblings.
+            info.no_targets:Hide()
         end
     end
 
@@ -1044,25 +1280,22 @@ function Procs.OpenBreakdown(actor, instance)
         end
     end
 
-    -- First open: run native tab layout once (like AbreJanelaInfo), then hide
-    -- Compare/etc. tabs so PE Summary fills the window.
-    if type(info.ShowTabs) == "function" then
-        pcall(info.ShowTabs, info)
-    end
+    -- Keep Summary widgets visible without ShowTabs (which flashes HIGH-strata
+    -- tab buttons / mouse-eating tab frames over Targets).
     HidePlayerDetailsTabs(details, info)
+    if type(info.SummaryWindowWidgets) == "table" and info.SummaryWindowWidgets.Show then
+        info.SummaryWindowWidgets:Show()
+    end
     if info.targets then
         info.targets:SetText("Procs from source:")
     end
 
-    if type(info.SetStatusbarText) == "function" then
-        info:SetStatusbarText(
-            "PE Proc Sources · Details PE " .. tostring(PE.VERSION or ""),
-            10,
-            "gray"
-        )
-    end
+    PreparePeBreakdownInteraction(info)
 
     peActor:MontaInfo()
+    -- Re-apply after MontaInfo in case TrocaBackgroundInfo / skin touched chrome.
+    PreparePeBreakdownInteraction(info)
+    HideNoTargets(info)
     PositionBreakdownNearInstance(info, instance)
 
     if type(gump) == "table" and type(gump.Fade) == "function" then

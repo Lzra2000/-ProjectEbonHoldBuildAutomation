@@ -106,6 +106,15 @@ release zip).
 - Custom Display scripts run inside Details' sandbox; if Details updates break
   `InstallCustomObject`, labels still work via spellcache.
 
+## 1.0.10-pe1
+
+PE Proc Sources Breakdown interaction: hide the Player Details status strip so
+it no longer overlaps Targets / steals clicks; disable empty-Targets
+`StartMoving` (mouse hang); lift classic-skin Targets above the footer; wire
+sibling proc/source row clicks to `OpenBreakdown`; keep tab frames mouse-inert
+and suppress stock "No Targets" art under proc lists. Custom Display
+script_version 10.
+
 ## 1.0.9-pe1
 
 PE Proc Sources Breakdown layout polish: denser right-side detail blocks

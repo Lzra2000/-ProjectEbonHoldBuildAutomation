@@ -18,21 +18,22 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 [Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.6...HEAD
 
-### 3.86.6 (2026-07-24) -- Echo Journal bridge, Apply visible, Autopilot Select/Soul Ashes, Details PE 1.0.9-pe1
 
-Cumulative GitHub Latest since **v3.86.4** (includes 3.86.5 + 3.86.6). Prefer **Details.zip** for the full Details! suite (ProjectEbonhold **1.0.9-pe1**). Auctionator remains **2.6.3-pe2**.
+### 3.86.6 (2026-07-24) -- Echo Journal bridge, Apply visible, Autopilot Select/Soul Ashes, Details PE 1.0.10-pe1
+
+Cumulative GitHub Latest since **v3.86.4** (includes 3.86.5 + 3.86.6). Prefer **Details.zip** for the full Details! suite (ProjectEbonhold **1.0.10-pe1** when Latest assets are refreshed). Auctionator remains **2.6.3-pe2**.
 
 #### Kurznotiz (DE)
 - **Empfehlungen:** Stats -> Recommendations -- **Apply visible** wendet alle gefilterten Empfehlungen mit einem Klick an (3.86.5).
-- **Echo Journal:** Community-Loadouts aus ProjectEbonhold erscheinen in Public Builds und fließen in Community-Evidenz ein (ohne Peer-Rebroadcast).
+- **Echo Journal:** Community-Loadouts aus ProjectEbonhold erscheinen in Public Builds und fliessen in Community-Evidenz ein (ohne Peer-Rebroadcast).
 - **Autopilot (#146):** Select-Logbook erst nach Board-Ack; kein identisches Select-Spam bei Intent-TTL-Retries; Soul Ashes-Feld-Fallbacks gegen falsche 0-Werte.
-- **Details_ProjectEbonhold 1.0.9-pe1:** PE Proc Sources mit Overall-Attribution, Breakdown beim ersten Klick, dichterem Layout, Soft-Default overall_clear_newboss = false. Danach /reload.
+- **Details_ProjectEbonhold 1.0.9-pe1 / 1.0.10-pe1:** PE Proc Sources mit Overall-Attribution, Breakdown beim ersten Klick, dichterem Layout; **1.0.10** fixiert Klicks/Maus-Hang im Targets-Panel. Danach /reload.
 
 #### Highlights since 3.86.4 (EN)
 - **Apply visible (3.86.5):** one-click apply for every currently filtered recommendation (Raise / Lower / Unapplied + Echo vs Automation Logic tabs).
 - **SharedLoadoutBridge:** Echo Journal community loadouts in Public Builds + CommunityEligibility (ephemeral; not rebroadcast via peer sync).
 - **Autopilot (#146):** log Select after Board-Ack; dedupe identical Select retries on unchanged boards; Soul Ashes alternate-field fallbacks.
-- **Details_ProjectEbonhold 1.0.9-pe1:** Overall Data proc attribution, first-click native Breakdown, denser layout, soft overall_clear_newboss = false.
+- **Details_ProjectEbonhold 1.0.9-pe1 / 1.0.10-pe1:** Overall Data proc attribution, first-click native Breakdown, denser layout; **1.0.10** fixes Targets click-through / sibling row clicks.
 
 #### Added
 - **SharedLoadoutBridge:** ProjectEbonhold Echo Journal community loadouts (GetSharedEchoLoadouts) appear in Public Builds and feed CommunityEligibility as ephemeral pseudo-builds (lockedEchoes from PE echoes). Not stored in 
@@ -45,6 +46,7 @@ emoteBuilds / Build.ListPublic(), so peer WNT/BLD sync never rebroadcasts them.
 - **Details_ProjectEbonhold 1.0.4-pe1 -> 1.0.5-pe1:** PE Proc Sources click summary matches native **Player Details! Breakdown** chrome, then opens the real Breakdown window (Sources + Other procs / Targets) instead of a custom popup. Custom Display scripts v5-v6.
 
 #### Fixed
+- **Details_ProjectEbonhold 1.0.10-pe1:** PE Proc Sources Breakdown - sibling proc/source rows clickable, no mouse hang on bottom-left Targets, status-footer no longer overlaps Targets / blocks clicks, stock "No Targets" art suppressed under proc lists. Prefer `Details.zip`. Custom Display script v10.
 - **Autopilot (#146):** Select is logged after Board-Ack; identical Select spam from Intent TTL retries is suppressed while the board is unchanged; Soul Ashes uses alternate PE fields / death-time fallbacks so the value does not stick at 0.
 - **Details_ProjectEbonhold 1.0.9-pe1:** PE Proc Sources Breakdown layout denser -- right panels use native field order + source-share/sibling blocks, Targets lists the focused proc too, Breakdown docks beside the meter and flips left if it would clip. Custom Display script v9.
 - **Details_ProjectEbonhold 1.0.8-pe1:** PE Proc Sources opens native Player Details! Breakdown on **first click** (prewarms the window; removes DPS-bar chat hint). Custom Display script v8.
@@ -57,7 +59,7 @@ emoteBuilds / Build.ListPublic(), so peer WNT/BLD sync never rebroadcasts them.
 - 	ests/test_load.lua covers filtered Apply visible batch apply of Echo-priority recommendations.
 
 #### Release assets
-- **EbonBuilds.zip**, **Auctionator.zip** (2.6.3-pe2), **Details.zip** (full suite, flat folders, ProjectEbonhold **1.0.9-pe1**). Do not use companion-only Details_ProjectEbonhold.zip / Details_TinyThreat.zip as the primary install.
+- **EbonBuilds.zip**, **Auctionator.zip** (2.6.3-pe2), **Details.zip** (full suite, flat folders, ProjectEbonhold **1.0.10-pe1**). Do not use companion-only Details_ProjectEbonhold.zip / Details_TinyThreat.zip as the primary install.
 
 ### 3.86.5 (2026-07-24) -- Apply visible recommendations
 
