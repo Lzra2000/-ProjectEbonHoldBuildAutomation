@@ -11,15 +11,36 @@ local ROW_HEIGHT   = 30
 local VISIBLE_ROWS = 12
 
 local viewFrame, scrollFrame, scrollChild, scrollBar
-local searchBox, filterBtn, refreshBtn, syncAhBtn, countLabel, emptyText
+local searchBox, filterBtn, refreshBtn, syncAhBtn, openAnvilBtn, openVendorBtn, countLabel, emptyText
 local rows = {}
 local state = { text = "", missingOnly = false }
 local offset = 0
 local filtered = {}
 
 ------------------------------------------------------------------------
+-- Acquisition bridges (ProjectEbonhold + Auctionator)
+------------------------------------------------------------------------
+local function PeAffixBridge() return EbonBuilds.ProjectEbonholdAffixBridge end
+local function AuctionBridge() return EbonBuilds.AuctionatorBridge end
+local function ShowAcquisitionToast(reason)
+ if not (EbonBuilds.Toast and EbonBuilds.Toast.Show) then return end
+ if reason=='missing-pe' then EbonBuilds.Toast.Show('Install ProjectEbonhold to use the Enchanted Anvil from here.','info')
+ elseif reason=='no-ui' then EbonBuilds.Toast.Show('ProjectEbonhold affix extraction UI is not available.','info')
+ elseif reason=='no-merchant' then EbonBuilds.Toast.Show('Open a vendor first, then try again.','info')
+ elseif reason=='no-affix-vendor' then EbonBuilds.Toast.Show('This ProjectEbonhold build has no affix vendor UI.','info')
+ elseif reason=='missing' then EbonBuilds.Toast.Show('Install Auctionator to search the AH from here.','info')
+ elseif reason=='no-ah' then EbonBuilds.Toast.Show('Open the Auction House first, then try again.','info')
+ else EbonBuilds.Toast.Show('Could not open that acquisition path.','info') end
+end
+local function WireAcquisitionButton(btn,title,body,fn)
+ btn:SetScript('OnClick',fn)
+ btn:SetScript('OnEnter',function(self) GameTooltip:SetOwner(self,'ANCHOR_RIGHT') GameTooltip:SetText(title,1,1,1) if body then GameTooltip:AddLine(body,0.8,0.8,0.8,true) end GameTooltip:Show() end)
+ btn:SetScript('OnLeave',function() GameTooltip:Hide() end)
+end
+------------------------------------------------------------------------
 -- Data
 ------------------------------------------------------------------------
+
 
 local function BuildFilteredList()
     local all = EbonBuilds.Affix.GetLearned()
@@ -87,29 +108,22 @@ local function CreateRow(parent)
     ahBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     ahBtn:SetText("AH")
     ahBtn:Hide()
-    ahBtn:SetScript("OnClick", function(self)
-        local a = self:GetParent()._affix
-        if not a or a.learned then return end
-        local bridge = EbonBuilds.AuctionatorBridge
-        if not bridge then return end
-        local ok, reason = bridge.OpenAffixSearch(a.name)
-        if not ok and EbonBuilds.Toast and EbonBuilds.Toast.Show then
-            if reason == "missing" then
-                EbonBuilds.Toast.Show("Install Auctionator to search the AH from here.", "info")
-            elseif reason == "no-ah" then
-                EbonBuilds.Toast.Show("Open the Auction House first, then try again.", "info")
-            else
-                EbonBuilds.Toast.Show("Could not start an Auctionator search.", "info")
-            end
-        end
-    end)
-    ahBtn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Search Auctionator for gear with this affix", 1, 1, 1)
-        GameTooltip:Show()
-    end)
-    ahBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    row._ahBtn = ahBtn
+    WireAcquisitionButton(ahBtn,'Search Auctionator for gear with this affix','Opens Auctionator Buy with an of <affix> search.',function(self)
+        local a=self:GetParent()._affix if not a or a.learned then return end
+        local bridge=AuctionBridge() if not bridge then return end
+        local ok,reason=bridge.OpenAffixSearch(a.name) if not ok then ShowAcquisitionToast(reason) end end)
+    row._ahBtn=ahBtn
+    local anvilBtn=EbonBuilds.Theme.CreateButton(row) anvilBtn:SetSize(44,18) anvilBtn:SetPoint('RIGHT',ahBtn,'LEFT',-4,0) anvilBtn:SetText('Anvil') anvilBtn:Hide()
+    WireAcquisitionButton(anvilBtn,'Open Enchanted Anvil','Extract affixes from corrupted gear.',function(self)
+        local a=self:GetParent()._affix if not a or a.learned then return end
+        local bridge=PeAffixBridge() if not bridge then return end
+        local ok,reason=bridge.OpenExtractionUi({affixName=a.name}) if not ok then ShowAcquisitionToast(reason) end end)
+    row._anvilBtn=anvilBtn
+    local vendorBtn=EbonBuilds.Theme.CreateButton(row) vendorBtn:SetSize(44,18) vendorBtn:SetPoint('RIGHT',anvilBtn,'LEFT',-4,0) vendorBtn:SetText('Shop') vendorBtn:Hide()
+    WireAcquisitionButton(vendorBtn,'Focus affix vendor','Brings merchant forward when at an affix vendor.',function()
+        local bridge=PeAffixBridge() if not bridge then return end
+        local ok,reason=bridge.OpenMerchantUi() if not ok then ShowAcquisitionToast(reason) end end)
+    row._vendorBtn=vendorBtn
 
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
@@ -130,7 +144,7 @@ local function CreateRow(parent)
         if a.appliedCount and a.appliedCount > 0 then
             GameTooltip:AddLine(("Applied %d time(s)"):format(a.appliedCount), 0.7, 0.7, 0.7)
         end
-        local bridge = EbonBuilds.AuctionatorBridge
+        local bridge = AuctionBridge()
         if bridge and bridge.IsAvailable and bridge.IsAvailable() then
             local linePrice = bridge.GetAffixLinePrice and bridge.GetAffixLinePrice(a.name)
             if linePrice then
@@ -144,6 +158,14 @@ local function CreateRow(parent)
             if not a.learned then
                 GameTooltip:AddLine("Click AH to search the auction house", 0.55, 0.82, 1)
             end
+        end
+
+        local peBridge = PeAffixBridge()
+        if not a.learned and peBridge and peBridge.IsExtractionUiAvailable and peBridge.IsExtractionUiAvailable() then
+            GameTooltip:AddLine("Click Anvil to open the Enchanted Anvil extractor", 0.55, 0.82, 1)
+        end
+        if not a.learned and peBridge and peBridge.IsMerchantAffixAvailable and peBridge.IsMerchantAffixAvailable() then
+            GameTooltip:AddLine("Click Shop while at a vendor for affix gear", 0.55, 0.82, 1)
         end
         GameTooltip:Show()
     end)
@@ -178,12 +200,18 @@ local function Render()
                 row._statusDot:SetVertexColor(0.85, 0.2, 0.2, 1)
             end
             row._sub:SetText(a.weaponOnly and "Weapon-only" or "Armor / any slot")
-            if row._ahBtn then
-                if not a.learned and EbonBuilds.AuctionatorBridge and EbonBuilds.AuctionatorBridge.IsAvailable() then
-                    row._ahBtn:Show()
-                else
-                    row._ahBtn:Hide()
-                end
+            if not a.learned then
+                local peBridge=PeAffixBridge() local ahBridge=AuctionBridge()
+                local showAnvil=peBridge and peBridge.IsExtractionUiAvailable and peBridge.IsExtractionUiAvailable()
+                local showVendor=peBridge and peBridge.IsMerchantAffixAvailable and peBridge.IsMerchantAffixAvailable()
+                local showAh=ahBridge and ahBridge.IsAvailable and ahBridge.IsAvailable()
+                if row._anvilBtn then if showAnvil then row._anvilBtn:Show() else row._anvilBtn:Hide() end end
+                if row._vendorBtn then if showVendor then row._vendorBtn:Show() else row._vendorBtn:Hide() end end
+                if row._ahBtn then if showAh then row._ahBtn:Show() else row._ahBtn:Hide() end end
+            else
+                if row._anvilBtn then row._anvilBtn:Hide() end
+                if row._vendorBtn then row._vendorBtn:Hide() end
+                if row._ahBtn then row._ahBtn:Hide() end
             end
             row._stripe:SetVertexColor(1, 1, 1, (offset + i) % 2 == 0 and 0.05 or 0.02)
             row:Show()
@@ -308,7 +336,7 @@ local function BuildViewFrame(parent)
     syncAhBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -8, 0)
     syncAhBtn:SetText("Sync AH list")
     syncAhBtn:SetScript("OnClick", function()
-        local bridge = EbonBuilds.AuctionatorBridge
+        local bridge = AuctionBridge()
         if not bridge then return end
         local ok, info = bridge.SyncMissingAffixShoppingList()
         if EbonBuilds.Toast and EbonBuilds.Toast.Show then
@@ -339,6 +367,27 @@ local function BuildViewFrame(parent)
         offset = 0
         Render()
     end)
+
+    openAnvilBtn = EbonBuilds.Theme.CreateButton(f)
+    openAnvilBtn:SetSize(72, 20)
+    openAnvilBtn:SetPoint("RIGHT", filterBtn, "LEFT", -8, 0)
+    openAnvilBtn:SetText("Anvil")
+    WireAcquisitionButton(openAnvilBtn,"Enchanted Anvil","Open ProjectEbonhold affix extraction UI.",function()
+        local bridge=PeAffixBridge() if not bridge then return end
+        local ok,reason=bridge.OpenExtractionUi() if not ok then ShowAcquisitionToast(reason) end end)
+    openAnvilBtn:SetScript("OnUpdate",function(self,dt) self._throttle=(self._throttle or 0)+dt if self._throttle<0.5 then return end self._throttle=0
+        local bridge=PeAffixBridge() local available=bridge and bridge.IsExtractionUiAvailable and bridge.IsExtractionUiAvailable()
+        if available then self:Show() else self:Hide() end end)
+    openVendorBtn = EbonBuilds.Theme.CreateButton(f)
+    openVendorBtn:SetSize(72, 20)
+    openVendorBtn:SetPoint("RIGHT", openAnvilBtn, "LEFT", -8, 0)
+    openVendorBtn:SetText("Vendor")
+    WireAcquisitionButton(openVendorBtn,"Affix vendor","Focus merchant when PE affix-vendor UI exists.",function()
+        local bridge=PeAffixBridge() if not bridge then return end
+        local ok,reason=bridge.OpenMerchantUi() if not ok then ShowAcquisitionToast(reason) end end)
+    openVendorBtn:SetScript("OnUpdate",function(self,dt) self._throttle=(self._throttle or 0)+dt if self._throttle<0.5 then return end self._throttle=0
+        local bridge=PeAffixBridge() local available=bridge and bridge.IsMerchantAffixAvailable and bridge.IsMerchantAffixAvailable()
+        if available then self:Show() else self:Hide() end end)
 
     countLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     countLabel:SetPoint("LEFT", controlsRow, "LEFT", 0, 0)

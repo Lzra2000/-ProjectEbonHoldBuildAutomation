@@ -41,6 +41,7 @@ modules/gear/GearScore.lua
 modules/gear/GearTooltip.lua
 modules/data/SpecData.lua
 modules/integration/ProjectEbonholdAPI.lua
+modules/integration/ProjectEbonholdAffixBridge.lua
 modules/integration/AuctionatorBridge.lua
 modules/data/EchoIdentityData.lua
 modules/data/EchoSemanticsData.lua
