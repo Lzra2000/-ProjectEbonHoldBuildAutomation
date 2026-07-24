@@ -33,6 +33,7 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 ### Unreleased
 
 #### Fixed
+- **Details_ProjectEbonhold 1.0.2-pe1:** PE Proc Sources labels no longer use ` (<- Source)` ? Details `GetOnlyName` strips from the first hyphen (`%-.*`), which mangled bars to `Name (<` and empty `()`. Labels are now plain `Proc [Source]`. Custom Display v3 keys rows by unique label, attaches spell id + icon after create (avoids UNKNOW role-sword), and fills the percent column.
 - **Details_ProjectEbonhold 1.0.1-pe1:** PE Proc Sources no longer shows empty `()` (Details percent brackets + missing source), shortens bar labels to reduce truncation/overlap, soft-grows the window and keeps percent on for scrollable full lists, and fills spell icons from ProjectEbonhold `PerkDatabase` / `GetPerkData` (server sync) when client `GetSpellInfo` lacks them.
 
 ### 3.86.3 (2026-07-24) -- Sparse community cohorts for rare specs

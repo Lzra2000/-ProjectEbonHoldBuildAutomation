@@ -103,11 +103,14 @@ end
 
 local function AnnotateProcSpell(procId, sourceName)
     local base = PE.GetSpellName(procId)
-    -- Strip prior attribution suffixes for a clean re-label.
-    base = base:gsub(" %(← .-%)", ""):gsub(" %(<%- .-%)", ""):gsub(" %(Proc%)", ""):gsub(" %(Echo%)", "")
+    -- Strip prior attribution / echo markers for a clean re-label.
+    if Core.StripProcSourceSuffix then
+        base = Core.StripProcSourceSuffix(base)
+    end
+    base = base:gsub(" %(Echo%)", "")
     local label
     if Core.IsPeCustomSpellId(procId) then
-        -- Prefer "EchoName (Echo) (<- SourceCast)" in the spell breakdown.
+        -- Prefer "EchoName (Echo) [SourceCast]" in the spell breakdown.
         label = Core.FormatEchoLabel(base)
         local suffix = Core.FormatProcSourceSuffix(sourceName)
         if suffix ~= "" then
@@ -172,7 +175,8 @@ local function OnCombatLog(_, _, timestamp, subevent, srcGUID, srcName, srcFlags
 end
 
 local CUSTOM_NAME = "PE Proc Sources"
-local CUSTOM_VERSION = 2
+-- Bump so Details InstallCustomObject replaces the mangled 1.0.1 script.
+local CUSTOM_VERSION = 3
 -- Soft minimum height so more proc rows are visible without scrolling immediately.
 local CUSTOM_MIN_HEIGHT = 260
 
@@ -180,9 +184,15 @@ local function EnsureReadableInstance(instance)
     if type(instance) ~= "table" then
         return
     end
-    -- Keep percent visible so Details does not render "97.6K()" with empty brackets.
-    if type(instance.row_info) == "table" and type(instance.row_info.textR_show_data) == "table" then
-        instance.row_info.textR_show_data[3] = true
+    if type(instance.row_info) == "table" then
+        -- Keep percent visible so Details does not render "97.6K()" with empty brackets.
+        if type(instance.row_info.textR_show_data) == "table" then
+            instance.row_info.textR_show_data[3] = true
+        end
+        -- percent_type 1 = vs total (fills the % column).
+        if instance.row_info.percent_type ~= 1 and instance.row_info.percent_type ~= 2 then
+            instance.row_info.percent_type = 1
+        end
     end
     local frame = instance.baseframe or instance.BaseFrame
     if type(frame) == "table" and type(frame.GetHeight) == "function" and type(frame.SetHeight) == "function" then
@@ -234,28 +244,38 @@ for i = 1, #rows do
     local value = row.amount or 0
     if value > 0 then
         local procId = tonumber(row.procId)
-        -- Use spell id so Details shows a real icon (not UNKNOW role texture).
-        local actor = { id = procId, nome = row.procName or row.key, name = row.procName or row.key }
-        local suffix = row.sourceSuffix
-        if type(suffix) ~= "string" or suffix == " ()" or suffix == "()" then
-            suffix = nil
-        end
-        instance_container:AddValue(actor, value, nil, suffix)
-        -- GetActorTable overwrites nome from GetSpellInfo; restore label + server icon.
-        local stored = instance_container:GetActorTable(actor, suffix)
-        if stored then
-            local procName = row.procName or stored.nome or ("Spell #" .. tostring(procId or 0))
-            stored.nome = procName
-            stored.name = procName
-            stored.displayName = procName .. (suffix or "")
-            if type(row.icon) == "string" and row.icon ~= "" then
-                stored.icon = row.icon
-            elseif pe.GetSpellIcon and procId then
-                stored.icon = pe.GetSpellIcon(procId)
+        -- Unique plain-text label (no "-", "<", "%"). Details GetOnlyName
+        -- strips from the first hyphen, which mangled legacy " (<- Source)".
+        local fullLabel = row.key
+        if type(fullLabel) ~= "string" or fullLabel == "" then
+            fullLabel = row.procName or ("Spell #" .. tostring(procId or 0))
+            if type(row.sourceSuffix) == "string" and row.sourceSuffix ~= "" then
+                fullLabel = fullLabel .. row.sourceSuffix
             end
-            -- Keep id so click/school coloring and spell-icon path stay active.
+        end
+        -- Key by unique label (proc+source). Do NOT pass id into AddValue:
+        -- GetActorTable(id) overwrites nome via GetSpellInfo and collapses
+        -- same-proc / different-source rows. Attach id+icon after create.
+        local actor = { nome = fullLabel, name = fullLabel }
+        instance_container:AddValue(actor, value)
+        local stored = instance_container:GetActorTable(actor)
+        if stored then
+            stored.nome = fullLabel
+            stored.name = fullLabel
+            stored.displayName = fullLabel
             if procId then
                 stored.id = procId
+            end
+            local icon = row.icon
+            if (type(icon) ~= "string" or icon == "") and pe.GetSpellIcon and procId then
+                icon = pe.GetSpellIcon(procId)
+            end
+            if type(icon) == "string" and icon ~= "" then
+                stored.icon = icon
+            end
+            -- RefreshBarra prefers UNKNOW role sword over spell icons — clear it.
+            if stored.classe == "UNKNOW" or stored.classe == "UNGROUPPLAYER" then
+                stored.classe = nil
             end
         end
         total = total + value
@@ -278,9 +298,11 @@ local name = actor.displayName or actor.nome or actor.name or "Proc"
 GameCooltip:AddLine(name)
 GameCooltip:AddLine("Attributed to the cast/aura that likely triggered this secondary hit.")
 if actor.id and pe and pe.GetSpellName then
-    GameCooltip:AddLine("Spell: " .. tostring(pe.GetSpellName(actor.id)) .. "  [" .. tostring(actor.id) .. "]")
+    GameCooltip:AddLine("Spell: " .. tostring(pe.GetSpellName(actor.id)) .. "  id " .. tostring(actor.id))
 end
-if actor.id and pe and pe.GetSpellIcon then
+if actor.icon then
+    GameCooltip:AddIcon(actor.icon, 1, 1, 18, 18)
+elseif actor.id and pe and pe.GetSpellIcon then
     local icon = pe.GetSpellIcon(actor.id)
     if icon then
         GameCooltip:AddIcon(icon, 1, 1, 18, 18)
@@ -288,7 +310,14 @@ if actor.id and pe and pe.GetSpellIcon then
 end
 GameCooltip:AddLine("Mousewheel scrolls the full list. Project Ebonhold Details PE.")
 ]],
-        -- Omit total/percent scripts: Details defaults avoid double "%" and empty "()".
+        percent_script = [[
+local value, top, total = ...
+total = tonumber(total) or 0
+if total <= 0 then
+    return "0.0"
+end
+return string.format("%.1f", (tonumber(value) or 0) / total * 100)
+]],
     }
     pcall(details.InstallCustomObject, details, object)
 end

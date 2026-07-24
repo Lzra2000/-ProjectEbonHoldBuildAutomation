@@ -47,10 +47,12 @@ release zip).
 
 - Watches 3.3.5a `COMBAT_LOG_EVENT_UNFILTERED` for the player's casts/auras.
 - Secondary damage within ~1.5s that was **not** itself cast is treated as a
-  proc and labeled `ProcName (<- SourceCast)`.
+  proc and labeled `ProcName [SourceCast]` (plain brackets — Details
+  `GetOnlyName` mangles any `-` / `<-` in actor names into `(<`).
 - Installs Details Custom Display **PE Proc Sources** (Attributes → Custom):
   scrollable list, spell icons (client `GetSpellInfo` then PE `PerkDatabase` /
-  `GetPerkData` from the server sync), no empty `()` when source is unknown.
+  `GetPerkData` from the server sync), real `%` column, no empty `()` when
+  source is unknown.
 
 ### Icons
 
@@ -78,7 +80,7 @@ release zip).
    `Interface/AddOns/Details_ProjectEbonhold`.
 3. `/reload`, confirm add-on list shows **Details!: Project Ebonhold**.
 4. In Details: open a window → attribute menu → **Custom** → **PE Proc Sources**
-   (optional). Player spell breakdowns show `(Echo)` / `(<- Source)` labels
+   (optional). Player spell breakdowns show `(Echo)` / `[Source]` labels
    automatically when tracking is on. Mousewheel scrolls long PE Proc Sources
    lists; hover a bar for the full name + spell id.
 

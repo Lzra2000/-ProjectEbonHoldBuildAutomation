@@ -86,14 +86,17 @@ function Core.NormalizeSourceName(sourceName)
     return sourceName
 end
 
--- Short bar suffix for Details custom rows (ASCII arrow — 3.3.5a fonts).
+-- Short bar suffix for Details custom rows / spell labels.
+-- IMPORTANT: Details GetOnlyName() does gsub("%-.*","") (strip from first
+-- hyphen) and RemoveOwnerName() strips " <.*". Never use "<-", "<", or raw
+-- "%" format tokens in labels — they get mangled to "(<" / empty "()".
 -- Returns "" when source is missing (never " ()").
 function Core.FormatProcSourceSuffix(sourceName)
     sourceName = Core.NormalizeSourceName(sourceName)
     if not sourceName then
         return ""
     end
-    return string.format(" (<- %s)", sourceName)
+    return string.format(" [%s]", sourceName)
 end
 
 function Core.FormatProcLabel(procName, sourceName)
@@ -103,12 +106,24 @@ function Core.FormatProcLabel(procName, sourceName)
         -- No empty parentheses when the cast source is unknown.
         return procName
     end
-    -- Avoid nesting if already attributed (plain find; arrows are literal).
-    if procName:find("(<- ", 1, true) or procName:find("(← ", 1, true)
-        or procName:find("(Proc)", 1, true) then
+    -- Avoid nesting if already attributed (new + legacy arrow forms).
+    if procName:find(" %[.-%]$") or procName:find("(<- ", 1, true)
+        or procName:find("(← ", 1, true) or procName:find("(Proc)", 1, true) then
         return procName
     end
     return procName .. Core.FormatProcSourceSuffix(sourceName)
+end
+
+-- Strip prior attribution suffixes (new brackets + legacy arrow forms).
+function Core.StripProcSourceSuffix(name)
+    if type(name) ~= "string" or name == "" then
+        return name
+    end
+    return name
+        :gsub(" %[.-%]$", "")
+        :gsub(" %(← .-%)", "")
+        :gsub(" %(<%- .-%)", "")
+        :gsub(" %(Proc%)", "")
 end
 
 -- Decide whether a damaging spell should be treated as a "proc" relative to
