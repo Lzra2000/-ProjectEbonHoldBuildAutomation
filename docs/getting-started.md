@@ -1,5 +1,14 @@
 # Getting Started
 
+<p class="ebb-lead">
+Install EbonBuilds, create your first build, and turn on Autopilot in a few minutes.
+</p>
+
+!!! info "Download"
+    Grab the latest **`EbonBuilds.zip`** from the
+    [releases page](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest)
+    before you start.
+
 ## Install
 
 1. Download the latest `EbonBuilds.zip` from the [releases page](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest).

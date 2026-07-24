@@ -1,6 +1,10 @@
 # Settings
 
-The Settings window (gear icon in the main window's header) holds everything that used to be a slash command. Only `/ebb` itself remains, toggling the main window. Edits are held as a draft: nothing applies until **Save**, **Cancel** discards cleanly, and a category holding an invalid value shows an error marker in the navigation.
+<p class="ebb-lead">
+Reference for every option in the Settings window (gear icon in the main window header).
+</p>
+
+The Settings window holds everything that used to be a slash command. Only `/ebb` itself remains, toggling the main window. Edits are held as a draft: nothing applies until **Save**, **Cancel** discards cleanly, and a category holding an invalid value shows an error marker in the navigation.
 
 ## General
 Action delay and toast duration. Very low action delays can outrun the server's own screen updates.

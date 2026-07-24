@@ -1,6 +1,10 @@
 # Automation server redesign
 
-**Status:** design (no implementation yet)  
+<p class="ebb-lead">
+Design document for moving Autopilot decision authority onto the ProjectEbonhold server API.
+<strong>Status:</strong> design only — no implementation yet.
+</p>
+
 **Audience:** EbonBuilds + ProjectEbonhold server maintainers  
 **Umbrella:** [#49](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/49)  
 **Work packages:** [#50](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/50) (WP1) · [#51](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/51) (WP2) · [#52](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/52) (WP3) · [#53](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/53) (WP4) · [#54](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/54) (WP5)  

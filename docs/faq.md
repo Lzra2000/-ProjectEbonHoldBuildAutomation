@@ -1,10 +1,13 @@
-# EbonBuilds — FAQ
+# FAQ
 
-*This file is updated with every release. Latest version: 3.84 — also available in-game via Settings (gear icon) under Windows & Tools. Release history lives in [CHANGELOG.md](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CHANGELOG.md).*
-
----
-
-## FAQ
+<p class="ebb-lead">
+Detailed, searchable explanations of every EbonBuilds feature.
+Updated with each release (currently <strong>3.84</strong>) — also available in-game via
+<strong>Settings → Windows &amp; Tools</strong>.
+See <a href="changelog.md">Changelog</a> or
+<a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases">GitHub releases</a>
+for version history.
+</p>
 
 Jump to a category: [Getting Started](#getting-started) · [Automation & Decision Models](#automation-decision-models) · [Stats, Logbook & Missing Tab](#stats-logbook-missing-tab) · [Tome Atlas](#tome-atlas) · [Affixes & Character](#affixes-character) · [Sync, Sharing & Public Builds](#sync-sharing-public-builds) · [Settings, Diagnostics & Troubleshooting](#settings-diagnostics-troubleshooting)
 

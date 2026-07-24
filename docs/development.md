@@ -1,5 +1,9 @@
 # Development
 
+<p class="ebb-lead">
+Contributor setup, the script toolbox, and where to find the full contributing guide.
+</p>
+
 Full contributor guide: [CONTRIBUTING.md](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CONTRIBUTING.md). This page is the short map.
 
 ## Setup
