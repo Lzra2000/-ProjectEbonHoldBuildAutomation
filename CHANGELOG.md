@@ -25,6 +25,7 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 #### Changed
 - **Details_ProjectEbonhold 1.0.4-pe1:** PE Proc Sources click summary now matches native **Player Details! Breakdown** chrome (status bars, spell icons, amount + %, Sources / Other procs sections). Custom Display script v5.
+- **Details_ProjectEbonhold 1.0.5-pe1:** PE Proc Sources click opens the real Details **Player Details! Breakdown** window (Sources + Other procs / Targets panel) instead of a custom popup ? removes stray scroll-frame icons and matches native chrome. Custom Display script v6.
 
 ### 3.86.4 (2026-07-24) -- Echo picker multi-select QoL
 

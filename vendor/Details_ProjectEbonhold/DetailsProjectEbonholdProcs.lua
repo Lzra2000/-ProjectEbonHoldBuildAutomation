@@ -20,15 +20,8 @@ local recentCasts = {} -- { {spellId=, name=, t=}, ... }
 local recentCastIds = {} -- set of spellIds currently in the window
 local attribution = {} -- [procId] = { [sourceId] = { amount=, hits= } }
 local MAX_RECENT = 24
--- Details Player Details Breakdown uses 20px spell bars; match that chrome.
-local BREAKDOWN_BAR_H = 20
-local BREAKDOWN_HEADER_H = 18
-local BREAKDOWN_MAX_ROWS = 28
-local BREAKDOWN_BAR_TEXTURE = [[Interface\AddOns\Details\images\bar_serenity]]
-local BREAKDOWN_BG = [[Interface\AddOns\Details\images\background]]
+-- Focus tint used by Details Player Details spell bars (129/125/69).
 local BREAKDOWN_FOCUS_COLOR = { 129 / 255, 125 / 255, 69 / 255, 1 }
-local BREAKDOWN_BAR_COLOR = { 1, 1, 1, 0.85 }
-local BREAKDOWN_ALT_COLOR = { 0.55, 0.65, 0.85, 0.9 }
 
 local function Db()
     DetailsProjectEbonholdDB = DetailsProjectEbonholdDB or {}
@@ -237,7 +230,7 @@ end
 
 local CUSTOM_NAME = "PE Proc Sources"
 -- Bump so Details InstallCustomObject replaces older scripts / tooltip copy.
-local CUSTOM_VERSION = 5
+local CUSTOM_VERSION = 6
 -- Soft minimum height so more proc rows are visible without scrolling immediately.
 local CUSTOM_MIN_HEIGHT = 260
 
@@ -272,278 +265,277 @@ end
 Procs.EnsureReadableInstance = EnsureReadableInstance
 
 ---------------------------------------------------------------------------
--- Click → Details-styled breakdown (bars + icons + % like Player Details!)
--- Custom Display attribute 5 never opens AbreJanelaInfo; we mirror its chrome.
+-- Click → open the real Details! Player Details Breakdown window.
+-- Custom Display attribute 5 never calls AbreJanelaInfo; we reuse that frame
+-- and fill Sources (spell bars) + Other procs (targets panel) ourselves so
+-- chrome/skins match native DPS breakdown (no custom UIPanelScrollFrame).
 ---------------------------------------------------------------------------
 
-local breakdownFrame
-local breakdownRows = {}
+local function HideLegacyCustomBreakdown()
+    local legacy = _G.DetailsPEProcBreakdownFrame
+    if type(legacy) == "table" and legacy.Hide then
+        legacy:Hide()
+    end
+end
 
-local function ResolveBarTexture()
-    local details = PE.GetDetails and PE.GetDetails()
-    if type(details) == "table" and type(details.player_details_window) == "table" then
-        local name = details.player_details_window.bar_texture
-        if type(name) == "string" and name ~= "" and LibStub then
-            local ok, SharedMedia = pcall(LibStub, "LibSharedMedia-3.0")
-            if ok and SharedMedia and type(SharedMedia.Fetch) == "function" then
-                local tex = SharedMedia:Fetch("statusbar", name)
-                if type(tex) == "string" and tex ~= "" then
-                    return tex
-                end
+local function EnsurePlayerDetailsWindow(details)
+    local info = details and details.janela_info
+    if type(info) ~= "table" then
+        info = _G.DetailsPlayerDetailsWindow
+    end
+    if type(info) ~= "table" then
+        return nil
+    end
+    if not info.Loaded then
+        local gump = details and details.gump
+        if type(gump) == "table" and type(gump.CriaJanelaInfo) == "function" then
+            pcall(gump.CriaJanelaInfo, gump)
+            info = details.janela_info or _G.DetailsPlayerDetailsWindow
+        end
+    end
+    if type(info) == "table" and info.Loaded then
+        return info
+    end
+    return nil
+end
+
+local function HidePlayerDetailsTabs(details, info)
+    local tabs = details and details.player_details_tabs
+    if type(tabs) ~= "table" then
+        return
+    end
+    for i = 1, #tabs do
+        local tab = tabs[i]
+        if type(tab) == "table" then
+            if tab.Hide then
+                tab:Hide()
+            end
+            if type(tab.frame) == "table" and tab.frame.Hide then
+                tab.frame:Hide()
             end
         end
     end
-    return BREAKDOWN_BAR_TEXTURE
+    if type(info) == "table" and type(info.SummaryWindowWidgets) == "table"
+        and info.SummaryWindowWidgets.Show then
+        info.SummaryWindowWidgets:Show()
+    end
 end
 
-local function BarColorForIndex(index, focused)
-    if focused then
-        return BREAKDOWN_FOCUS_COLOR[1], BREAKDOWN_FOCUS_COLOR[2], BREAKDOWN_FOCUS_COLOR[3], BREAKDOWN_FOCUS_COLOR[4]
-    end
-    if index % 2 == 0 then
-        return BREAKDOWN_ALT_COLOR[1], BREAKDOWN_ALT_COLOR[2], BREAKDOWN_ALT_COLOR[3], BREAKDOWN_ALT_COLOR[4]
-    end
-    return BREAKDOWN_BAR_COLOR[1], BREAKDOWN_BAR_COLOR[2], BREAKDOWN_BAR_COLOR[3], BREAKDOWN_BAR_COLOR[4]
-end
-
-local function CreateBreakdownBar(parent, index)
-    local bar = CreateFrame("Button", nil, parent)
-    bar:SetHeight(BREAKDOWN_BAR_H)
-    bar:EnableMouse(true)
-    bar:Hide()
-
-    local status = CreateFrame("StatusBar", nil, bar)
-    status:SetAllPoints()
-    status:SetMinMaxValues(0, 100)
-    status:SetValue(0)
-    status:SetStatusBarTexture(ResolveBarTexture())
-    status:SetStatusBarColor(1, 1, 1, 0.85)
-    status:SetAlpha(0.95)
-    local bg = status:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetTexture(1, 1, 1, 0.08)
-    bar.Status = status
-
-    local overlay = CreateFrame("Frame", nil, bar)
-    overlay:SetAllPoints()
-    overlay:SetFrameLevel(status:GetFrameLevel() + 2)
-
-    local icon = overlay:CreateTexture(nil, "OVERLAY")
-    icon:SetSize(BREAKDOWN_BAR_H - 2, BREAKDOWN_BAR_H - 2)
-    icon:SetPoint("LEFT", bar, "LEFT", 1, 0)
-    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    bar.Icon = icon
-
-    local left = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    left:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-    left:SetJustifyH("LEFT")
-    left:SetTextColor(1, 1, 1, 1)
-    left:SetNonSpaceWrap(true)
-    if left.SetWordWrap then
-        left:SetWordWrap(false)
-    end
-    bar.Left = left
-
-    local right = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    right:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
-    right:SetJustifyH("RIGHT")
-    right:SetTextColor(1, 1, 1, 1)
-    bar.Right = right
-
-    bar._index = index
-    return bar
-end
-
-local function CreateSectionHeader(parent)
-    local fs = parent:CreateFontString(nil, "OVERLAY", "QuestFont_Large")
-    fs:SetJustifyH("LEFT")
-    fs:SetTextColor(0.890, 0.729, 0.015, 1)
-    fs:Hide()
-    return fs
-end
-
-local function EnsureBreakdownFrame()
-    if breakdownFrame then
-        return breakdownFrame
-    end
-
-    local f = CreateFrame("Frame", "DetailsPEProcBreakdownFrame", UIParent)
-    f:SetSize(450, 460)
-    f:SetPoint("CENTER", UIParent, "CENTER", 100, 20)
-    f:SetFrameStrata("DIALOG")
-    f:SetToplevel(true)
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:SetClampedToScreen(true)
-    f:Hide()
-    f:SetBackdrop({
-        bgFile = BREAKDOWN_BG,
-        edgeFile = [[Interface\Buttons\WHITE8X8]],
-        tile = true,
-        tileSize = 16,
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
-    f:SetBackdropColor(0.05, 0.05, 0.05, 0.94)
-    f:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop", f.StopMovingOrSizing)
-    tinsert(UISpecialFrames, "DetailsPEProcBreakdownFrame")
-
-    -- Match native title: gold, centered ("Player Details! Breakdown").
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOP", f, "TOP", 0, -14)
-    title:SetTextColor(0.890, 0.729, 0.015, 1)
-    title:SetText("PE Proc Breakdown")
-    f.Title = title
-
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 4, -6)
-    close:SetWidth(32)
-    close:SetHeight(32)
-    close:SetScript("OnClick", function()
-        f:Hide()
-    end)
-
-    -- Hero icon + name (mirrors class icon / player name in PDW).
-    local heroIcon = f:CreateTexture(nil, "ARTWORK")
-    heroIcon:SetSize(40, 40)
-    heroIcon:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -38)
-    heroIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    f.HeroIcon = heroIcon
-
-    local heroName = f:CreateFontString(nil, "OVERLAY", "QuestFont_Large")
-    heroName:SetPoint("TOPLEFT", heroIcon, "TOPRIGHT", 10, -2)
-    heroName:SetPoint("RIGHT", f, "RIGHT", -40, 0)
-    heroName:SetJustifyH("LEFT")
-    heroName:SetTextColor(1, 1, 1, 1)
-    f.HeroName = heroName
-
-    local heroSub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    heroSub:SetPoint("TOPLEFT", heroName, "BOTTOMLEFT", 0, -4)
-    heroSub:SetPoint("RIGHT", f, "RIGHT", -40, 0)
-    heroSub:SetJustifyH("LEFT")
-    heroSub:SetTextColor(0.85, 0.85, 0.85, 1)
-    f.HeroSub = heroSub
-
-    local stats = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    stats:SetPoint("TOPLEFT", heroIcon, "BOTTOMLEFT", 0, -8)
-    stats:SetPoint("RIGHT", f, "RIGHT", -16, 0)
-    stats:SetJustifyH("LEFT")
-    stats:SetTextColor(0.75, 0.85, 1, 1)
-    f.Stats = stats
-
-    local scroll = CreateFrame("ScrollFrame", "DetailsPEProcBreakdownScroll", f, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -100)
-    scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -32, 12)
-    local content = CreateFrame("Frame", nil, scroll)
-    content:SetWidth(400)
-    content:SetHeight(320)
-    scroll:SetScrollChild(content)
-    f.Content = content
-    f.Scroll = scroll
-
-    for i = 1, BREAKDOWN_MAX_ROWS do
-        breakdownRows[i] = {
-            header = CreateSectionHeader(content),
-            bar = CreateBreakdownBar(content, i),
+local function BuildSourceRows(bd)
+    local sourceLabel = bd.sourceName or "Unknown"
+    local rows = {}
+    rows[#rows + 1] = {
+        spellId = bd.sourceId or 0,
+        name = sourceLabel,
+        amount = bd.amount or 0,
+        hits = bd.hits or 0,
+        average = bd.average or 0,
+        focused = true,
+        icon = (bd.sourceId and bd.sourceId > 0 and PE.GetSpellIcon and PE.GetSpellIcon(bd.sourceId)) or nil,
+    }
+    local siblings = bd.siblingSources or {}
+    for i = 1, #siblings do
+        local s = siblings[i]
+        local sid = s.sourceId or 0
+        rows[#rows + 1] = {
+            spellId = sid,
+            name = s.sourceName or ("Spell #" .. tostring(sid)),
+            amount = s.amount or 0,
+            hits = s.hits or 0,
+            average = (s.hits and s.hits > 0 and (s.amount or 0) / s.hits) or 0,
+            focused = false,
+            icon = (sid > 0 and PE.GetSpellIcon and PE.GetSpellIcon(sid)) or nil,
         }
     end
-
-    breakdownFrame = f
-    return f
+    return rows
 end
 
-local function HideAllBreakdownRows()
-    for i = 1, BREAKDOWN_MAX_ROWS do
-        local row = breakdownRows[i]
-        if row then
-            row.header:Hide()
-            row.bar:Hide()
+local function FillRightPanel(details, info, sourceRow, bd)
+    local gump = details.gump
+    if type(gump) ~= "table" then
+        return
+    end
+    if type(gump.HidaAllDetalheInfo) == "function" then
+        gump:HidaAllDetalheInfo()
+    end
+    if type(gump.SetaDetalheInfoTexto) ~= "function" then
+        return
+    end
+
+    local amount = sourceRow and sourceRow.amount or bd.amount or 0
+    local hits = sourceRow and sourceRow.hits or bd.hits or 0
+    local average = sourceRow and sourceRow.average or bd.average or 0
+    if hits > 0 and average == 0 then
+        average = amount / hits
+    end
+
+    gump:SetaDetalheInfoTexto(
+        1, 100,
+        "Damage: " .. FormatAmount(amount),
+        "Hits: " .. tostring(hits),
+        "",
+        "Average: " .. FormatAmount(average),
+        "Proc: " .. (bd.procName or "Proc"),
+        ""
+    )
+    gump:SetaDetalheInfoTexto(
+        2, 100,
+        "Triggered by: " .. (sourceRow and sourceRow.name or bd.sourceName or "Unknown"),
+        "Combat total: " .. FormatAmount(bd.amount or 0),
+        "",
+        "",
+        "",
+        ""
+    )
+
+    local icon = sourceRow and sourceRow.icon
+    if (type(icon) ~= "string" or icon == "") and bd.procId and PE.GetSpellIcon then
+        icon = PE.GetSpellIcon(bd.procId)
+    end
+    if type(icon) == "string" and icon ~= "" and info.spell_icone then
+        info.spell_icone:SetTexture(icon)
+        if info.spell_icone.SetTexCoord then
+            info.spell_icone:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         end
     end
 end
 
-local function PlaceRow(y, kind, data)
-    -- Returns next y offset (negative downward).
-    local slot
-    for i = 1, BREAKDOWN_MAX_ROWS do
-        local row = breakdownRows[i]
-        if row and not row._used then
-            slot = row
-            slot._used = true
-            break
+local function FillNativeBreakdown(details, info, instance, bd, actor)
+    local gump = details.gump
+    if type(gump) ~= "table" then
+        return false
+    end
+
+    local sourceRows = BuildSourceRows(bd)
+    local sourceTotal = 0
+    for i = 1, #sourceRows do
+        sourceTotal = sourceTotal + (sourceRows[i].amount or 0)
+    end
+    if sourceTotal <= 0 then
+        sourceTotal = 1
+    end
+    local sourceMax = sourceRows[1] and sourceRows[1].amount or 1
+    if sourceMax <= 0 then
+        sourceMax = 1
+    end
+
+    if type(gump.JI_AtualizaContainerBarras) == "function" then
+        gump:JI_AtualizaContainerBarras(#sourceRows + 1)
+    end
+
+    local barras = info.barras1
+    for i = 1, #sourceRows do
+        local row = sourceRows[i]
+        local barra = barras[i]
+        if not barra and type(gump.CriaNovaBarraInfo1) == "function" then
+            barra = gump:CriaNovaBarraInfo1(instance, i)
+        end
+        if barra then
+            if type(details.UpdadeInfoBar) == "function" then
+                details.UpdadeInfoBar(
+                    actor, barra, i, row.spellId, row.name, row.amount,
+                    FormatAmount(row.amount), sourceMax,
+                    (row.amount / sourceTotal) * 100, row.icon, true
+                )
+            end
+            if type(details.FocusLock) == "function" then
+                details.FocusLock(actor, barra, row.spellId)
+            end
+            if row.focused and barra.textura then
+                barra.textura:SetStatusBarColor(
+                    BREAKDOWN_FOCUS_COLOR[1], BREAKDOWN_FOCUS_COLOR[2],
+                    BREAKDOWN_FOCUS_COLOR[3], BREAKDOWN_FOCUS_COLOR[4]
+                )
+                barra.on_focus = true
+                info.mostrando = barra
+            end
+            barra.other_actor = nil
+            barra.minha_tabela = actor
+            barra.show = row.spellId
+            barra:Show()
         end
     end
-    if not slot then
-        return y
+
+    -- Targets panel → other procs from the same cast/aura.
+    local otherProcs = bd.siblingProcs or {}
+    if type(gump.HidaAllBarrasAlvo) == "function" then
+        gump:HidaAllBarrasAlvo()
+    end
+    if info.no_targets then
+        info.no_targets:Hide()
+        if info.no_targets.text then
+            info.no_targets.text:Hide()
+        end
     end
 
-    if kind == "header" then
-        slot.header:ClearAllPoints()
-        slot.header:SetPoint("TOPLEFT", breakdownFrame.Content, "TOPLEFT", 2, y)
-        slot.header:SetPoint("RIGHT", breakdownFrame.Content, "RIGHT", -4, 0)
-        slot.header:SetText(data.text or "")
-        slot.header:Show()
-        return y - BREAKDOWN_HEADER_H
+    if #otherProcs > 0 then
+        local procTotal = (bd.amount or 0)
+        for i = 1, #otherProcs do
+            procTotal = procTotal + (otherProcs[i].amount or 0)
+        end
+        if procTotal <= 0 then
+            procTotal = 1
+        end
+        local procMax = otherProcs[1] and otherProcs[1].amount or 1
+        if (bd.amount or 0) > procMax then
+            procMax = bd.amount or 1
+        end
+        if type(gump.JI_AtualizaContainerAlvos) == "function" then
+            gump:JI_AtualizaContainerAlvos(#otherProcs)
+        end
+        local barras2 = info.barras2
+        for i = 1, #otherProcs do
+            local p = otherProcs[i]
+            local barra = barras2[i]
+            if not barra and type(gump.CriaNovaBarraInfo2) == "function" then
+                barra = gump:CriaNovaBarraInfo2(instance, i)
+            end
+            if barra then
+                local amount = p.amount or 0
+                local name = p.procName or ("Spell #" .. tostring(p.procId or 0))
+                local icon = PE.GetSpellIcon and PE.GetSpellIcon(p.procId)
+                if barra.textura then
+                    if i == 1 then
+                        barra.textura:SetValue(100)
+                    else
+                        barra.textura:SetValue(amount / procMax * 100)
+                    end
+                    barra.textura:SetStatusBarColor(1, 1, 1)
+                end
+                if barra.texto_esquerdo then
+                    barra.texto_esquerdo:SetText(tostring(i) .. ". " .. name)
+                end
+                if barra.texto_direita then
+                    barra.texto_direita:SetText(string.format(
+                        "%s (%.1f%%)", FormatAmount(amount), (amount / procTotal) * 100
+                    ))
+                end
+                if barra.icone then
+                    barra.icone:SetTexture(icon or Core.QUESTION_ICON)
+                    if barra.icone.SetTexCoord then
+                        barra.icone:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+                    end
+                end
+                barra.minha_tabela = nil
+                barra.show = p.procId
+                barra:Show()
+            end
+        end
+    elseif info.no_targets and info.no_targets.Show then
+        info.no_targets:Show()
+        if info.no_targets.text then
+            info.no_targets.text:SetText("No other procs from this source")
+            info.no_targets.text:Show()
+        end
     end
 
-    local bar = slot.bar
-    bar:ClearAllPoints()
-    bar:SetPoint("TOPLEFT", breakdownFrame.Content, "TOPLEFT", 0, y)
-    bar:SetPoint("RIGHT", breakdownFrame.Content, "RIGHT", -4, 0)
-
-    local icon = data.icon
-    if type(icon) ~= "string" or icon == "" then
-        icon = Core.QUESTION_ICON
-    end
-    bar.Icon:SetTexture(icon)
-
-    local rank = data.rank
-    local name = data.name or "?"
-    if rank then
-        bar.Left:SetText(tostring(rank) .. ". " .. name)
-    else
-        bar.Left:SetText(name)
-    end
-
-    local amountText = FormatAmount(data.amount)
-    local pct = data.percent
-    if type(pct) == "number" then
-        bar.Right:SetText(string.format("%s (%.1f%%)", amountText, pct))
-    else
-        bar.Right:SetText(amountText)
-    end
-
-    local maxAmount = data.maxAmount or data.amount or 1
-    if maxAmount <= 0 then
-        maxAmount = 1
-    end
-    local value = (data.amount or 0) / maxAmount * 100
-    if value > 100 then
-        value = 100
-    end
-    if data.rank == 1 then
-        value = 100
-    end
-    bar.Status:SetStatusBarTexture(ResolveBarTexture())
-    bar.Status:SetValue(value)
-    local r, g, b, a = BarColorForIndex(data.rank or 1, data.focused)
-    bar.Status:SetStatusBarColor(r, g, b, a)
-
-    local rightW = bar.Right:GetStringWidth() or 80
-    local barWidth = bar:GetWidth()
-    if not barWidth or barWidth < 10 then
-        barWidth = (breakdownFrame.Content:GetWidth() or 400) - 4
-    end
-    bar.Left:SetWidth(math.max(40, barWidth - rightW - BREAKDOWN_BAR_H - 16))
-
-    bar:Show()
-    return y - (BREAKDOWN_BAR_H + 1)
+    FillRightPanel(details, info, sourceRows[1], bd)
+    return true
 end
 
 function Procs.OpenBreakdown(actor, instance)
+    HideLegacyCustomBreakdown()
+
     local procId, sourceId = Procs.ResolveActorPair(actor)
     local bd = Procs.GetRowBreakdown(procId, sourceId)
     if not bd then
@@ -553,124 +545,158 @@ function Procs.OpenBreakdown(actor, instance)
         return
     end
 
-    local f = EnsureBreakdownFrame()
-    HideAllBreakdownRows()
-    for i = 1, BREAKDOWN_MAX_ROWS do
-        if breakdownRows[i] then
-            breakdownRows[i]._used = false
+    local details = PE.GetDetails and PE.GetDetails()
+    local info = EnsurePlayerDetailsWindow(details)
+    if not info then
+        if type(DEFAULT_CHAT_FRAME) == "table" and DEFAULT_CHAT_FRAME.AddMessage then
+            DEFAULT_CHAT_FRAME:AddMessage(
+                "|cff33ff99Details PE|r Player Details window not ready — open any DPS bar once, then retry."
+            )
+        end
+        return
+    end
+
+    if type(instance) ~= "table" then
+        if type(details.GetInstance) == "function" then
+            instance = details:GetInstance(1)
         end
     end
+    if type(instance) ~= "table" then
+        if type(DEFAULT_CHAT_FRAME) == "table" and DEFAULT_CHAT_FRAME.AddMessage then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Details PE|r No Details instance available for breakdown.")
+        end
+        return
+    end
+
+    local gump = details.gump
+    local peActor = {
+        nome = bd.procName or "Proc",
+        name = bd.procName or "Proc",
+        classe = "UNKNOW",
+        peBreakdown = bd,
+        detalhes = bd.sourceId,
+        spells = {
+            _ActorTable = {},
+            PegaHabilidade = function()
+                return nil
+            end,
+        },
+        targets = {},
+        total = bd.amount or 0,
+        total_without_pet = bd.amount or 0,
+        grupo = false,
+        serial = "",
+        enemy = false,
+        isTank = false,
+    }
+
+    function peActor:Tempo()
+        return 1
+    end
+
+    function peActor:MontaDetalhes(spellid)
+        local sourceRows = BuildSourceRows(self.peBreakdown)
+        local chosen = sourceRows[1]
+        for i = 1, #sourceRows do
+            if sourceRows[i].spellId == spellid then
+                chosen = sourceRows[i]
+                break
+            end
+        end
+        FillRightPanel(details, info, chosen, self.peBreakdown)
+    end
+
+    function peActor:MontaInfo()
+        FillNativeBreakdown(details, info, instance, self.peBreakdown, self)
+    end
+
+    -- Mirror AbreJanelaInfo chrome setup without going through attribute 5.
+    info.ativo = true
+    info.atributo = 1
+    info.sub_atributo = 1
+    info.jogador = peActor
+    info.instancia = instance
+    info.target_text = "Other procs:"
+    info.target_member = "total"
+    info.target_persecond = false
+    info.mostrando = nil
+    info.mostrando_mouse_over = false
+    info.showing = nil
+    info.selectedTab = "Summary"
+
+    if info.nome then
+        info.nome:SetText(bd.procName or "Proc")
+        info.nome:Show()
+    end
+    if info.atributo_nome then
+        info.atributo_nome:SetText("Triggered by " .. (bd.sourceName or "Unknown"))
+        if info.nome then
+            info.atributo_nome:SetPoint("CENTER", info.nome, "CENTER", 0, 14)
+        end
+        info.atributo_nome:Show()
+    end
+    if info.avatar then info.avatar:Hide() end
+    if info.avatar_bg then info.avatar_bg:Hide() end
+    if info.avatar_nick then info.avatar_nick:Hide() end
+    if info.avatar_attribute then info.avatar_attribute:Hide() end
 
     local procIcon = PE.GetSpellIcon and PE.GetSpellIcon(bd.procId)
     if type(procIcon) ~= "string" or procIcon == "" then
         procIcon = Core.QUESTION_ICON
     end
-    f.HeroIcon:SetTexture(procIcon)
-    f.HeroName:SetText(bd.procName or "Proc")
-    local sourceLabel = bd.sourceName or "Unknown"
-    f.HeroSub:SetText("Triggered by " .. sourceLabel)
-    local hits = bd.hits or 0
-    f.Stats:SetText(string.format(
-        "Total %s   ·   %d hit%s   ·   avg %s",
-        FormatAmount(bd.amount),
-        hits,
-        hits == 1 and "" or "s",
-        FormatAmount(bd.average or 0)
-    ))
-
-    -- Build "Spells" list: this source first (focused), then sibling sources.
-    local sourceRows = {}
-    sourceRows[#sourceRows + 1] = {
-        spellId = bd.sourceId,
-        name = sourceLabel,
-        amount = bd.amount or 0,
-        hits = hits,
-        focused = true,
-        icon = (bd.sourceId and bd.sourceId > 0 and PE.GetSpellIcon and PE.GetSpellIcon(bd.sourceId)) or nil,
-    }
-    local siblings = bd.siblingSources or {}
-    for i = 1, #siblings do
-        local s = siblings[i]
-        sourceRows[#sourceRows + 1] = {
-            spellId = s.sourceId,
-            name = s.sourceName or ("Spell #" .. tostring(s.sourceId or 0)),
-            amount = s.amount or 0,
-            hits = s.hits or 0,
-            focused = false,
-            icon = (s.sourceId and s.sourceId > 0 and PE.GetSpellIcon and PE.GetSpellIcon(s.sourceId)) or nil,
-        }
-    end
-
-    local sourceTotal = 0
-    for i = 1, #sourceRows do
-        sourceTotal = sourceTotal + (sourceRows[i].amount or 0)
-    end
-    if sourceTotal <= 0 then
-        sourceTotal = 1
-    end
-    local sourceMax = sourceRows[1] and sourceRows[1].amount or 1
-
-    local y = 0
-    y = PlaceRow(y, "header", { text = "Sources:" })
-    for i = 1, #sourceRows do
-        local row = sourceRows[i]
-        y = PlaceRow(y, "bar", {
-            rank = i,
-            name = row.name,
-            amount = row.amount,
-            percent = (row.amount / sourceTotal) * 100,
-            maxAmount = sourceMax,
-            icon = row.icon,
-            focused = row.focused,
-        })
-    end
-
-    -- Targets-like panel: other procs from the same cast/aura.
-    local otherProcs = bd.siblingProcs or {}
-    if #otherProcs > 0 then
-        y = y - 6
-        y = PlaceRow(y, "header", {
-            text = "Other procs from " .. sourceLabel .. ":",
-        })
-        local procTotal = 0
-        for i = 1, #otherProcs do
-            procTotal = procTotal + (otherProcs[i].amount or 0)
+    if info.classe_icone then
+        info.classe_icone:SetTexture(procIcon)
+        if info.classe_icone.SetTexCoord then
+            info.classe_icone:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         end
-        -- Include current proc in total so % matches "share of this source".
-        procTotal = procTotal + (bd.amount or 0)
-        if procTotal <= 0 then
-            procTotal = 1
-        end
-        local procMax = otherProcs[1] and otherProcs[1].amount or 1
-        if (bd.amount or 0) > procMax then
-            procMax = bd.amount
-        end
-        for i = 1, #otherProcs do
-            local p = otherProcs[i]
-            local icon = PE.GetSpellIcon and PE.GetSpellIcon(p.procId)
-            y = PlaceRow(y, "bar", {
-                rank = i,
-                name = p.procName or ("Spell #" .. tostring(p.procId or 0)),
-                amount = p.amount or 0,
-                percent = ((p.amount or 0) / procTotal) * 100,
-                maxAmount = procMax,
-                icon = icon,
-                focused = false,
-            })
-        end
-    elseif #siblings == 0 then
-        y = y - 6
-        y = PlaceRow(y, "header", { text = "No other attributions this combat." })
+    end
+    if info.classe_iconePlus and info.classe_iconePlus.SetTexture then
+        info.classe_iconePlus:SetTexture()
     end
 
-    local contentH = math.max(120, -y + 8)
-    f.Content:SetHeight(contentH)
-    f.Content:SetWidth(f.Scroll:GetWidth() or 400)
-    if f.Scroll.SetVerticalScroll then
-        f.Scroll:SetVerticalScroll(0)
+    if type(gump) == "table" then
+        if type(gump.TrocaBackgroundInfo) == "function" then
+            gump:TrocaBackgroundInfo()
+        end
+        if type(gump.HidaAllBarrasInfo) == "function" then
+            gump:HidaAllBarrasInfo()
+        end
+        if type(gump.HidaAllBarrasAlvo) == "function" then
+            gump:HidaAllBarrasAlvo()
+        end
+        if type(gump.HidaAllDetalheInfo) == "function" then
+            gump:HidaAllDetalheInfo()
+        end
+        if type(gump.JI_AtualizaContainerBarras) == "function" then
+            gump:JI_AtualizaContainerBarras(-1)
+        end
     end
-    f:Show()
-    f:Raise()
+
+    -- Keep native Targets: label semantics, then rename for PE.
+    if info.targets then
+        info.targets:SetText("Other procs:")
+    end
+
+    HidePlayerDetailsTabs(details, info)
+
+    if type(info.SetStatusbarText) == "function" then
+        info:SetStatusbarText(
+            "PE Proc Sources · Details PE " .. tostring(PE.VERSION or ""),
+            10,
+            "gray"
+        )
+    end
+
+    peActor:MontaInfo()
+
+    if type(gump) == "table" and type(gump.Fade) == "function" then
+        gump:Fade(info, 0)
+    elseif info.Show then
+        info:Show()
+    end
+    if info.Raise then
+        info:Raise()
+    end
 end
 
 -- Custom Display left-click never opens AbreJanelaInfo (attribute 5 → Report).
@@ -692,8 +718,8 @@ local function BindCustomClickHandler()
         local custom = customs[i]
         if type(custom) == "table" and custom.name == CUSTOM_NAME then
             details.row_singleclick_overwrite[5][i] = function(_, actor, instance)
-                -- Attribute 5 normally opens the report window; open a DPS-style
-                -- attribution breakdown instead (matches user expectation).
+                -- Attribute 5 normally opens the report window; open native
+                -- Player Details! Breakdown filled with PE attribution instead.
                 Procs.OpenBreakdown(actor, instance)
             end
         end
@@ -716,7 +742,7 @@ local function InstallCustomDisplay()
         attribute = false,
         spellid = false,
         author = "Details PE / EbonBuilds",
-        desc = "Proc / Echo secondary damage attributed to the cast that likely triggered it. Click a row for a Details-style breakdown with bars, icons, and % (Project Ebonhold).",
+        desc = "Proc / Echo secondary damage attributed to the cast that likely triggered it. Click a row to open the native Details! Player Details Breakdown (Project Ebonhold).",
         source = false,
         target = false,
         script_version = CUSTOM_VERSION,
@@ -846,7 +872,7 @@ else
         GameCooltip:AddLine("Spell: " .. tostring(pe.GetSpellName(actor.id)) .. "  id " .. tostring(actor.id))
     end
 end
-GameCooltip:AddLine("Click: Details-style breakdown  ·  Mousewheel: scroll list")
+GameCooltip:AddLine("Click: open Player Details! Breakdown  ·  Mousewheel: scroll list")
 ]],
         percent_script = [[
 local value, top, total = ...
