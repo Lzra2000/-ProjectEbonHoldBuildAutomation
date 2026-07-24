@@ -7,28 +7,34 @@
 #   sh scripts/verify-package.sh --build   # build first when dist/ is missing
 #
 # Optional companions:
-#   vendor/Auctionator/            -> dist/Auctionator.zip              (see vendor/Auctionator/CREDITS.md)
-#   vendor/Details_TinyThreat/     -> dist/Details_TinyThreat.zip       (see vendor/Details_TinyThreat/CREDITS.md)
-#   vendor/Details_ProjectEbonhold/ -> dist/Details_ProjectEbonhold.zip (see vendor/Details_ProjectEbonhold/CREDITS.md)
+#   vendor/Auctionator/             -> dist/Auctionator.zip
+#   vendor/Details/ (+ suite)       -> dist/Details.zip  (primary Details asset)
+#   vendor/Details_TinyThreat/      -> dist/Details_TinyThreat.zip (legacy single)
+#   vendor/Details_ProjectEbonhold/ -> dist/Details_ProjectEbonhold.zip (legacy single)
 set -eu
 cd "$(dirname "$0")/.."
 
+DETAILS_SUITE_ADDONS="Details Details_3DModelsPaths Details_ChartViewer Details_DataStorage Details_DeathGraphs Details_EncounterDetails Details_SunderCount Details_TimeLine Details_TinyThreat Details_ProjectEbonhold"
+
 BUILD_FIRST=0
 SKIP_AUCTIONATOR=0
+SKIP_DETAILS_SUITE=0
 SKIP_DETAILS_TINYTHREAT=0
 SKIP_DETAILS_PE=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --build) BUILD_FIRST=1; shift ;;
         --skip-auctionator) SKIP_AUCTIONATOR=1; shift ;;
+        --skip-details-suite) SKIP_DETAILS_SUITE=1; shift ;;
         --skip-details-tinythreat) SKIP_DETAILS_TINYTHREAT=1; shift ;;
         --skip-details-pe) SKIP_DETAILS_PE=1; shift ;;
         --help|-h)
             cat <<'EOF'
-Usage: sh scripts/verify-package.sh [--build] [--skip-auctionator] [--skip-details-tinythreat] [--skip-details-pe]
+Usage: sh scripts/verify-package.sh [--build] [--skip-auctionator] [--skip-details-suite] [--skip-details-tinythreat] [--skip-details-pe]
 
   --build                    Run scripts/build-dist.sh first if dist/EbonBuilds.zip is missing
   --skip-auctionator         Do not validate dist/Auctionator.zip even when present
+  --skip-details-suite       Do not validate dist/Details.zip even when present
   --skip-details-tinythreat  Do not validate dist/Details_TinyThreat.zip even when present
   --skip-details-pe          Do not validate dist/Details_ProjectEbonhold.zip even when present
 EOF
@@ -146,6 +152,65 @@ elif [ -d vendor/Auctionator ] && [ -f vendor/Auctionator/Auctionator.toc ] && [
     fail=1
 fi
 
+DETAILS_SUITE_EXPECTED=0
+if [ -f vendor/Details/Details.toc ]; then
+    DETAILS_SUITE_EXPECTED=1
+fi
+
+if [ "$SKIP_DETAILS_SUITE" -eq 0 ] && [ -f dist/Details.zip ]; then
+    echo ""
+    echo "== Verifying primary dist/Details.zip (full suite) =="
+    DETAILS_UNPACK="$STAGE/details_suite_verify"
+    mkdir -p "$DETAILS_UNPACK"
+    unzip -q dist/Details.zip -d "$DETAILS_UNPACK"
+
+    # Reject nested Interface/AddOns layout at zip root.
+    if [ -d "$DETAILS_UNPACK/Interface" ] || [ -d "$DETAILS_UNPACK/AddOns" ]; then
+        echo "PACKAGE FAIL: Details.zip has nested Interface/AddOns at zip root (must be flat AddOn folders)" >&2
+        annotate "Details.zip nested Interface/AddOns at zip root"
+        fail=1
+    fi
+
+    for name in $DETAILS_SUITE_ADDONS; do
+        if [ ! -f "$DETAILS_UNPACK/$name/$name.toc" ]; then
+            echo "PACKAGE FAIL: Details.zip missing root TOC: $name/$name.toc" >&2
+            annotate "Details.zip missing $name/$name.toc"
+            fail=1
+            continue
+        fi
+        if [ -d "$DETAILS_UNPACK/$name/Interface" ] || [ -d "$DETAILS_UNPACK/$name/AddOns" ]; then
+            echo "PACKAGE FAIL: Details.zip folder $name contains nested Interface/AddOns" >&2
+            annotate "Details.zip nested path under $name"
+            fail=1
+        fi
+    done
+
+    # PE forks must carry expected Version lines when present in zip.
+    if grep -q "1.0.2-pe1" "$DETAILS_UNPACK/Details_ProjectEbonhold/Details_ProjectEbonhold.toc" 2>/dev/null; then
+        :
+    else
+        echo "PACKAGE FAIL: Details.zip Details_ProjectEbonhold.toc missing Version 1.0.2-pe1" >&2
+        annotate "Details.zip PE companion version mismatch"
+        fail=1
+    fi
+    if grep -q "v1.07-pe1" "$DETAILS_UNPACK/Details_TinyThreat/Details_TinyThreat.toc" 2>/dev/null; then
+        :
+    else
+        echo "PACKAGE FAIL: Details.zip Details_TinyThreat.toc missing Version v1.07-pe1" >&2
+        annotate "Details.zip TinyThreat version mismatch"
+        fail=1
+    fi
+
+    verify_toc_package "$DETAILS_UNPACK/Details_TinyThreat/Details_TinyThreat.toc" "$DETAILS_UNPACK/Details_TinyThreat" "Details_TinyThreat_suite"
+    verify_toc_package "$DETAILS_UNPACK/Details_ProjectEbonhold/Details_ProjectEbonhold.toc" "$DETAILS_UNPACK/Details_ProjectEbonhold" "Details_ProjectEbonhold_suite"
+    echo "Primary Details.zip suite verified — see vendor/Details/CREDITS.md"
+elif [ "$SKIP_DETAILS_SUITE" -eq 0 ] && [ "$DETAILS_SUITE_EXPECTED" -eq 1 ] && [ ! -f dist/Details.zip ]; then
+    echo ""
+    echo "WARN: vendor/Details present but dist/Details.zip was not built" >&2
+    annotate "vendor/Details present but dist/Details.zip missing"
+    fail=1
+fi
+
 if [ "$SKIP_DETAILS_TINYTHREAT" -eq 0 ] && [ -f dist/Details_TinyThreat.zip ]; then
     echo ""
     echo "== Verifying optional dist/Details_TinyThreat.zip =="
@@ -185,9 +250,12 @@ echo "Package smoke check OK (EbonBuilds TOC paths, locale BOMs, media, no dev l
 if [ -f dist/Auctionator.zip ]; then
     echo "Optional Auctionator.zip included — install separately; see vendor/Auctionator/CREDITS.md"
 fi
+if [ -f dist/Details.zip ]; then
+    echo "Primary Details.zip included — full PE-selective Details suite; see vendor/Details/CREDITS.md"
+fi
 if [ -f dist/Details_TinyThreat.zip ]; then
-    echo "Optional Details_TinyThreat.zip included — requires Details! core; see vendor/Details_TinyThreat/CREDITS.md"
+    echo "Legacy Details_TinyThreat.zip included — prefer Details.zip; see vendor/Details_TinyThreat/CREDITS.md"
 fi
 if [ -f dist/Details_ProjectEbonhold.zip ]; then
-    echo "Optional Details_ProjectEbonhold.zip included — requires Details! core; see vendor/Details_ProjectEbonhold/CREDITS.md"
+    echo "Legacy Details_ProjectEbonhold.zip included — prefer Details.zip; see vendor/Details_ProjectEbonhold/CREDITS.md"
 fi

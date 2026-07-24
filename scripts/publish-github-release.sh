@@ -3,7 +3,7 @@
 # which publishes the Release automatically when a v* tag is pushed. Use
 # this script only when Actions is unavailable. It creates the Release
 # (a pushed tag alone is NOT a GitHub Release, only a ref) and uploads
-# dist/EbonBuilds.zip as a release asset.
+# dist/*.zip release assets.
 #
 #   GITHUB_TOKEN=ghp_xxx sh scripts/publish-github-release.sh 3.06
 #
@@ -55,15 +55,25 @@ fi
 
 TITLE="EbonBuilds $VERSION"
 
-# The asset download URL is deterministic; the asset itself is uploaded
-# right after the release is created below.
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/EbonBuilds.zip"
-ATR_LINE=""
+EXTRA_LINES=""
 if [ -f dist/Auctionator.zip ]; then
     ATR_URL="https://github.com/$REPO/releases/download/$TAG/Auctionator.zip"
-    ATR_LINE=$(printf '\n')"Optional affix shopping: [Download Auctionator.zip]($ATR_URL) — extract to \`Interface/AddOns/Auctionator\` (EbonBuilds enables bridge features when present)."
+    EXTRA_LINES="${EXTRA_LINES}$(printf '\n')Optional affix shopping: [Download Auctionator.zip]($ATR_URL) — extract to \`Interface/AddOns/Auctionator\` (EbonBuilds enables bridge features when present)."
 fi
-BODY="**Install:** [Download EbonBuilds.zip]($DOWNLOAD_URL)$(printf '\n')Extract it and drop the \`EbonBuilds\` folder into \`Interface/AddOns/\`.$ATR_LINE
+if [ -f dist/Details.zip ]; then
+    DET_URL="https://github.com/$REPO/releases/download/$TAG/Details.zip"
+    EXTRA_LINES="${EXTRA_LINES}$(printf '\n')**Details! suite (recommended):** [Download Details.zip]($DET_URL) — full pack (Details core + plugins + TinyThreat + ProjectEbonhold). Extract so each folder lands top-level under \`Interface/AddOns/\`."
+fi
+if [ -f dist/Details_TinyThreat.zip ]; then
+    TT_URL="https://github.com/$REPO/releases/download/$TAG/Details_TinyThreat.zip"
+    EXTRA_LINES="${EXTRA_LINES}$(printf '\n')Legacy single-plugin: [Details_TinyThreat.zip]($TT_URL) — prefer Details.zip when available."
+fi
+if [ -f dist/Details_ProjectEbonhold.zip ]; then
+    PE_URL="https://github.com/$REPO/releases/download/$TAG/Details_ProjectEbonhold.zip"
+    EXTRA_LINES="${EXTRA_LINES}$(printf '\n')Legacy single-plugin: [Details_ProjectEbonhold.zip]($PE_URL) — prefer Details.zip when available."
+fi
+BODY="**Install:** [Download EbonBuilds.zip]($DOWNLOAD_URL)$(printf '\n')Extract it and drop the \`EbonBuilds\` folder into \`Interface/AddOns/\`.$EXTRA_LINES
 $(printf '\n')$(printf '%s' "$NOTES")"
 
 PAYLOAD_FILE="$(mktemp)"
@@ -89,30 +99,27 @@ if [ -z "$URL" ]; then
 fi
 
 UPLOAD_URL="$(printf '%s' "$RESPONSE" | python3 -c "import json,sys; print(json.load(sys.stdin)['upload_url'].split('{')[0])")"
-ASSET="$(curl -s -X POST \
-    -H "Authorization: token $GITHUB_TOKEN" \
-    -H "Content-Type: application/zip" \
-    --data-binary @dist/EbonBuilds.zip \
-    "$UPLOAD_URL?name=EbonBuilds.zip")"
-ASSET_STATE="$(printf '%s' "$ASSET" | python3 -c "import json,sys; print(json.load(sys.stdin).get('state',''))" 2>/dev/null || true)"
-if [ "$ASSET_STATE" != "uploaded" ]; then
-    echo "Release created but asset upload failed -- upload dist/EbonBuilds.zip manually on the release page. Response:" >&2
-    echo "$ASSET" >&2
-    exit 1
-fi
 
-if [ -f dist/Auctionator.zip ]; then
-    ATR_ASSET="$(curl -s -X POST \
+upload_zip() {
+    name=$1
+    path=$2
+    ASSET="$(curl -s -X POST \
         -H "Authorization: token $GITHUB_TOKEN" \
         -H "Content-Type: application/zip" \
-        --data-binary @dist/Auctionator.zip \
-        "$UPLOAD_URL?name=Auctionator.zip")"
-    ATR_STATE="$(printf '%s' "$ATR_ASSET" | python3 -c "import json,sys; print(json.load(sys.stdin).get('state',''))" 2>/dev/null || true)"
-    if [ "$ATR_STATE" != "uploaded" ]; then
-        echo "Auctionator.zip upload failed -- upload dist/Auctionator.zip manually. Response:" >&2
-        echo "$ATR_ASSET" >&2
+        --data-binary @"$path" \
+        "$UPLOAD_URL?name=$name")"
+    ASSET_STATE="$(printf '%s' "$ASSET" | python3 -c "import json,sys; print(json.load(sys.stdin).get('state',''))" 2>/dev/null || true)"
+    if [ "$ASSET_STATE" != "uploaded" ]; then
+        echo "$name upload failed -- upload $path manually. Response:" >&2
+        echo "$ASSET" >&2
         exit 1
     fi
-fi
+}
+
+upload_zip EbonBuilds.zip dist/EbonBuilds.zip
+[ -f dist/Auctionator.zip ] && upload_zip Auctionator.zip dist/Auctionator.zip
+[ -f dist/Details.zip ] && upload_zip Details.zip dist/Details.zip
+[ -f dist/Details_TinyThreat.zip ] && upload_zip Details_TinyThreat.zip dist/Details_TinyThreat.zip
+[ -f dist/Details_ProjectEbonhold.zip ] && upload_zip Details_ProjectEbonhold.zip dist/Details_ProjectEbonhold.zip
 
 echo "Published: $URL"

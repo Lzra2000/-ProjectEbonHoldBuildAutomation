@@ -25,7 +25,7 @@ Requires **ProjectEbonhold** or **ProjectEbonhold Enhanced**. Some features addi
 | **Details!: Tiny Threat (PE)** | Threat meter Details! plugin for 3.3.5a | [Details!: Tiny Threat (PE)](details-tinythreat-pe.md) |
 | **Details!: Project Ebonhold** | Echo DPS labels + proc source attribution for Details! | [Details!: Project Ebonhold (PE)](details-project-ebonhold-pe.md) |
 
-Extract optional zips (`Auctionator.zip`, `Details_TinyThreat.zip`, `Details_ProjectEbonhold.zip` when shipped) into `Interface/AddOns/` with folder names matching each `.toc`. Details companions **require Details!** in `Interface/AddOns/Details` — not included in EbonBuilds releases.
+Extract optional zips (`Auctionator.zip`, **`Details.zip`** full suite when shipped) into `Interface/AddOns/` so each folder sits next to `EbonBuilds`. Prefer `Details.zip` (core + plugins + PE TinyThreat / ProjectEbonhold); legacy single-plugin zips remain optional.
 
 ## First login
 

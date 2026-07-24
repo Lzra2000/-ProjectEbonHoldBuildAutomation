@@ -25,7 +25,7 @@ Both must sit **alongside** `EbonBuilds` under `World of Warcraft/Interface/AddO
 
 ## Install from a GitHub release
 
-When `Details_TinyThreat.zip` is attached to a release:
+Prefer **`Details.zip`** (full suite including TinyThreat). When only `Details_TinyThreat.zip` is attached to a release:
 
 1. Download **`Details_TinyThreat.zip`** from the [latest release](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest) (alongside `EbonBuilds.zip`).
 2. Extract the archive. The folder inside must be named **`Details_TinyThreat`** (matching `Details_TinyThreat.toc`).
@@ -55,7 +55,7 @@ Some Project Ebonhold client bundles ship a zip named **`Details_TinyThreat (2).
 
 Source lives under `vendor/Details_TinyThreat/` on branch [`feat/details-tinythreat-pe`](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/tree/feat/details-tinythreat-pe). See [`vendor/Details_TinyThreat/CREDITS.md`](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/feat/details-tinythreat-pe/vendor/Details_TinyThreat/CREDITS.md) for upstream credit and PE-specific changes (`DetailsTinyThreatProjectEbonhold.lua`).
 
-Build packaging: `scripts/build-dist.sh` emits `dist/Details_TinyThreat.zip` when the vendor tree is present (same pattern as optional `Auctionator.zip`).
+Build packaging: `scripts/build-dist.sh` emits `dist/Details.zip` (full suite) plus legacy `dist/Details_TinyThreat.zip` when the vendor suite is present.
 
 ---
 

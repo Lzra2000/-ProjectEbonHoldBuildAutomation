@@ -65,11 +65,14 @@ jobs:
               if [ -f dist/Auctionator.zip ]; then
                   echo "Optional affix shopping: [Download Auctionator.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Auctionator.zip) — extract to \`Interface/AddOns/Auctionator\` (EbonBuilds enables bridge features when present)."
               fi
+              if [ -f dist/Details.zip ]; then
+                  echo "**Details! suite (recommended):** [Download Details.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Details.zip) — full pack (Details core + plugins + TinyThreat + ProjectEbonhold). Extract so each folder lands top-level under \`Interface/AddOns/\`."
+              fi
               if [ -f dist/Details_TinyThreat.zip ]; then
-                  echo "Optional Details! threat plugin: [Download Details_TinyThreat.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Details_TinyThreat.zip) — requires [Details!](https://github.com/Tercioo/Details-Damage-Meter) core in \`Interface/AddOns/Details\` (not shipped with EbonBuilds)."
+                  echo "Legacy single-plugin: [Details_TinyThreat.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Details_TinyThreat.zip) — prefer Details.zip when available."
               fi
               if [ -f dist/Details_ProjectEbonhold.zip ]; then
-                  echo "Optional Details! PE companion: [Download Details_ProjectEbonhold.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Details_ProjectEbonhold.zip) — Echo DPS labels + proc attribution; requires Details! core in \`Interface/AddOns/Details\`."
+                  echo "Legacy single-plugin: [Details_ProjectEbonhold.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Details_ProjectEbonhold.zip) — prefer Details.zip when available."
               fi
               echo
               cat /tmp/notes_raw.md
@@ -82,6 +85,9 @@ jobs:
           ASSETS="dist/EbonBuilds.zip"
           if [ -f dist/Auctionator.zip ]; then
               ASSETS="$ASSETS dist/Auctionator.zip"
+          fi
+          if [ -f dist/Details.zip ]; then
+              ASSETS="$ASSETS dist/Details.zip"
           fi
           if [ -f dist/Details_TinyThreat.zip ]; then
               ASSETS="$ASSETS dist/Details_TinyThreat.zip"

@@ -17,7 +17,7 @@ Does **not** ship the Details! core (~22 MB) — install Details separately.
 ## Install
 
 1. Ensure **Details!** is in `Interface/AddOns/Details`.
-2. Download **`Details_ProjectEbonhold.zip`** from the
+2. Prefer **`Details.zip`** (full suite), or download **`Details_ProjectEbonhold.zip`** alone from the
    [latest release](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest)
    (when attached) **or** copy `vendor/Details_ProjectEbonhold/` from this repo.
 3. Folder name must be exactly **`Details_ProjectEbonhold`**.

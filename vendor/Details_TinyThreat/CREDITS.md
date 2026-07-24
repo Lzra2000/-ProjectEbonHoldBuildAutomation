@@ -3,9 +3,7 @@
 This folder contains **Details!: Tiny Threat v1.07** by the **Details! Team**,
 packaged for Project Ebonhold players on **WoW 3.3.5a (Interface 30300)**.
 
-Tiny Threat is a **Details! plugin** — it does not run without the **Details!** core add-on
-(`Interface/AddOns/Details`). EbonBuilds does not ship Details!; install Details! separately
-(see upstream or your PE client bundle).
+Tiny Threat is a **Details! plugin** — it does not run without the **Details!** core add-on (Interface/AddOns/Details). Prefer the release asset **Details.zip** (full suite including TinyThreat). Legacy single-plugin zip remains for compatibility.
 
 ## Upstream source
 
