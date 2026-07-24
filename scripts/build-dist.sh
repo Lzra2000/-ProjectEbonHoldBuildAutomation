@@ -42,7 +42,7 @@ if [ -d vendor/Auctionator ] && [ -f vendor/Auctionator/Auctionator.toc ]; then
     mkdir -p "$ATR_PKG"
     cp -r vendor/Auctionator/. "$ATR_PKG/"
     (cd "$STAGE" && zip -rq -X "$OLDPWD/dist/Auctionator.zip" Auctionator)
-    echo "Built dist/Auctionator.zip ($(du -h dist/Auctionator.zip | cut -f1))"
+    echo "Built dist/Auctionator.zip ($(du -h dist/Auctionator.zip | cut -f1)) — Project Ebonhold fork; see vendor/Auctionator/CREDITS.md"
 fi
 
 echo "Built dist/EbonBuilds.zip ($(du -h dist/EbonBuilds.zip | cut -f1))"

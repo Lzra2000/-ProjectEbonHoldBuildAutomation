@@ -121,7 +121,7 @@ function Atr_Buy_SendQuery ()
 
 		local queryString = zc.UTF8_Truncate (gAtr_Buy_ItemName,63);	-- attempting to reduce number of disconnects
 
-		QueryAuctionItems (queryString, "", "", nil, 0, 0, gAtr_Buy_CurPage, nil, nil);
+		AtrPE_SafeQueryAuctionItems (queryString, "", "", nil, 0, 0, gAtr_Buy_CurPage, nil, nil);
 	end
 		
 end
@@ -224,7 +224,7 @@ function Atr_Buy_CountMatches (andBuy)
 
 	while (true) do
 	
-		local name, _, count, _, _, _, _, _, buyoutPrice, _ = GetAuctionItemInfo ("list", i);
+		local name, _, count, _, _, _, _, _, buyoutPrice, _ = AtrPE_SafeGetAuctionItemInfo ("list", i);
 
 		if (name == nil) then
 			break;

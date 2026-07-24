@@ -43,6 +43,9 @@ function Bridge.GetAffixLinePrice(affixName)
 end
 
 function Bridge.BuildAffixSearchQuery(affixName)
+    if type(_G.AtrPE_BuildAffixSearchQuery) == "function" then
+        return _G.AtrPE_BuildAffixSearchQuery(affixName)
+    end
     affixName = tostring(affixName or ""):match("^%s*(.-)%s*$") or ""
     if affixName == "" then return "" end
     if affixName:lower():find("^of%s+", 1) then return affixName end

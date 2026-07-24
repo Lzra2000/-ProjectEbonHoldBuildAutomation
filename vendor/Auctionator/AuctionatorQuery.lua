@@ -50,7 +50,7 @@ function AtrQuery:CheckForDuplicatePage (pagenum)
 	
 	for x = 1, numBatchAuctions do
 	
-		local name, texture, count, quality, canUse, level, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, owner = GetAuctionItemInfo("list", x);
+		local name, texture, count, quality, canUse, level, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, owner = AtrPE_SafeGetAuctionItemInfo("list", x);
 
 		thisPage.items[x] = self:BuildItemIDstr (name, count, minBid, buyoutPrice, bidAmount);
 

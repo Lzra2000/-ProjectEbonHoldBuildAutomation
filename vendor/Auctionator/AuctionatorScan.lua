@@ -319,7 +319,7 @@ function AtrSearch:AnalyzeResultsPage()
 
 		for x = 1, numBatchAuctions do
 
-			local name, texture, count, quality, canUse, level, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, owner = GetAuctionItemInfo("list", x);
+			local name, texture, count, quality, canUse, level, minBid, minIncrement, buyoutPrice, bidAmount, highBidder, owner = AtrPE_SafeGetAuctionItemInfo("list", x);
 
 			if (owner == nil) then
 				numNilOwners = numNilOwners + 1;
@@ -581,7 +581,7 @@ function AtrSearch:Continue()
 
 		queryString = zc.UTF8_Truncate (queryString,63);	-- attempting to reduce number of disconnects
 
-		QueryAuctionItems (queryString, minLevel, maxLevel, nil, itemClass, itemSubclass, self.current_page, nil, nil);
+		AtrPE_SafeQueryAuctionItems (queryString, minLevel, maxLevel, nil, itemClass, itemSubclass, self.current_page, nil, nil);
 
 		self.query_sent_when	= gAtr_ptime;
 		self.processing_state	= KM_POSTQUERY;
@@ -717,7 +717,7 @@ function Atr_ClearBrowseListings()
 	while (time() - start < 5) do
 	
 		if (CanSendAuctionQuery()) then
-			QueryAuctionItems("xyzzy", 43, 43, 0, 7, 0);
+			AtrPE_SafeQueryAuctionItems("xyzzy", 43, 43, 0, 7, 0);
 			break;
 		end
 	end
@@ -1031,7 +1031,7 @@ function Atr_FullScanStart()
 		gNumAdded = 0;
 		gNumUpdated = 0;
 
-		QueryAuctionItems ("", nil, nil, 0, 0, 0, 0, 0, 0, true);
+		AtrPE_SafeQueryAuctionItems ("", nil, nil, 0, 0, 0, 0, 0, 0, true);
 	end
 
 end
@@ -1121,7 +1121,7 @@ function Atr_FullScanAnalyze()
 
 		for x = 1, numBatchAuctions do
 
-			local name, texture, count, quality, canUse, level, minBid, minIncrement, buyoutPrice = GetAuctionItemInfo("list", x);
+			local name, texture, count, quality, canUse, level, minBid, minIncrement, buyoutPrice = AtrPE_SafeGetAuctionItemInfo("list", x);
 
 			qualities[name] = quality;
 			
