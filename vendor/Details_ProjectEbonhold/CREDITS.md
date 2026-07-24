@@ -53,11 +53,12 @@ release zip).
   scrollable list, spell icons (client `GetSpellInfo` then PE `PerkDatabase` /
   `GetPerkData` from the server sync), real `%` column, no empty `()` when
   source is unknown.
-- **Left-click** a PE Proc Sources row opens a Details-styled breakdown
-  (status bars with spell icons, amount + %, Sources and Other procs sections —
-  same chrome patterns as native Player Details! Breakdown). Custom displays
-  (Details attribute 5) do not open the normal DPS player-details window — this
-  companion hooks `row_singleclick_overwrite[5]` for that index.
+- **Left-click** a PE Proc Sources row opens the **real** Details!
+  `DetailsPlayerDetailsWindow` (Player Details! Breakdown): Sources fill the
+  spell-bar panel, Other procs fill the Targets panel, right-side detail blocks
+  show damage/hits/average. Custom displays (attribute 5) do not call
+  `AbreJanelaInfo` — this companion hooks `row_singleclick_overwrite[5]` and
+  populates the native frame instead (no custom scroll-frame chrome).
 
 ### Icons
 
@@ -99,6 +100,13 @@ release zip).
   granted perk or PE-band combat hit.
 - Custom Display scripts run inside Details' sandbox; if Details updates break
   `InstallCustomObject`, labels still work via spellcache.
+
+## 1.0.5-pe1
+
+PE Proc Sources click now opens the **real** Details `DetailsPlayerDetailsWindow`
+(Player Details! Breakdown) instead of a custom framed popup — removes leaked
+`UIPanelScrollFrameTemplate` scroll icons, restores Targets panel / native header
+chrome. Custom Display script_version 6.
 
 ## 1.0.4-pe1
 
