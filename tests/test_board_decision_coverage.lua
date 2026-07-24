@@ -268,12 +268,10 @@ end
 -- Freeze penalty applies only below the freeze threshold (Automation scoring)
 ------------------------------------------------------------------------
 do
-    -- _ScoreChoice reads EbonBuilds.Scoring at call time; restore the stub so
-    -- penalty math is deterministic (real Scoring.lua stays loaded for tie-breaks).
-    addon.Scoring = {
-        Score = function() return 100 end,
-        ScorePerQuality = function() return 100 end,
-    }
+    -- _ScoreChoice reads EbonBuilds.Scoring at call time; stub only the score
+    -- functions so penalty math is deterministic while CompareCandidates stays real.
+    addon.Scoring.Score = function() return 100 end
+    addon.Scoring.ScorePerQuality = function() return 100 end
     local penaltySettings = { freezePenaltyPct = 10 }
     local worthyCarry = addon.Automation._ScoreChoice(
         { spellId = 401, quality = 0, isCarried = true, isFrozen = true }, penaltySettings, 90)
