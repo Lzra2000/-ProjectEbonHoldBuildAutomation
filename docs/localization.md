@@ -18,6 +18,8 @@ That scans every translation call site in the addon -- including alias lookups l
 
 **Terminology convention:** game-specific terms -- Echo, Build, Banish/Reroll/Freeze/Select, Autopilot -- stay in English across every language, matching the translated READMEs. Check the existing locale files for how your language already handles them in context.
 
+**Characters beyond Latin-1 (Polish):** stock 3.3.5a client fonts cover Latin-1 (é, ü, ñ, ó, ...) but not Latin Extended-A, so Polish ą ć ę ł ń ś ź ż would render as "?". Locale files still use the proper spelling -- `Locale.lua` probes the client font once per session and transparently folds those letters to ASCII (Postać -> Postac) only when the font can't draw them. Players with a Latin-Extended font pack installed see real diacritics.
+
 ## Checking coverage
 
 `sh scripts/i18n-report.sh` prints per-language coverage: missing keys and orphaned entries (registered but no longer looked up anywhere). The test suite additionally FAILS when a locale file misses a key the build editor actually uses, so a forgotten translation can't slip through a release.

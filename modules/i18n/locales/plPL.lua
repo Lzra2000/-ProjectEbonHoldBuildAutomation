@@ -7,8 +7,13 @@ local addonName, EbonBuilds = ...
 --
 -- Note: Polish is not an official WoW 3.3.5a client locale, so GetLocale()
 -- will never return "plPL" -- this is only ever selected via the saved
--- override (/ebb locale pl), same as the community README.pl.md exists
--- despite no Polish game client.
+-- override (Settings -> Interface), same as the community README.pl.md
+-- exists despite no Polish game client.
+--
+-- Write proper Polish here, diacritics included. Clients whose fonts lack
+-- the Latin-Extended-A glyphs (every stock 3.3.5a client -- they would
+-- render ą ć ę ł ń ś ź ż as "?") get an automatic ASCII fallback applied
+-- centrally in Locale.lua, so keep the correct spelling in this file.
 
 EbonBuilds.Locale.Register("plPL", {
     -- Build editor tabs

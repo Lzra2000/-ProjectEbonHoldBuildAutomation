@@ -51,6 +51,68 @@ local ALIASES = {
     ru = "ruRU", ["ruru"] = "ruRU", russian = "ruRU", ["русский"] = "ruRU",
 }
 
+-- No official Polish WoW 3.3.5a client exists, so Polish players run this
+-- addon on clients (usually enUS) whose fonts -- Fonts\FRIZQT__.TTF and
+-- friends -- cover Latin-1 but not Latin Extended-A. Every glyph the font
+-- lacks is drawn as "?" on the 3.3.5a client, which turned "Postać" into
+-- "Posta?" (GitHub issue #40). Latin-1 letters like ó/Ó render fine (the
+-- Spanish and French translations depend on that), so only the eight
+-- Latin-Extended-A Polish letters need a fallback.
+local POLISH_ASCII_FOLD = {
+    ["ą"] = "a", ["ć"] = "c", ["ę"] = "e", ["ł"] = "l", ["ń"] = "n",
+    ["ś"] = "s", ["ź"] = "z", ["ż"] = "z",
+    ["Ą"] = "A", ["Ć"] = "C", ["Ę"] = "E", ["Ł"] = "L", ["Ń"] = "N",
+    ["Ś"] = "S", ["Ź"] = "Z", ["Ż"] = "Z",
+}
+
+local foldCache = {}   -- translated string -> ASCII-folded string
+
+local function FoldPolishDiacritics(text)
+    local folded = foldCache[text]
+    if folded == nil then
+        folded = text
+        -- Each key is a two-byte UTF-8 sequence with no pattern-magic
+        -- characters, so a plain gsub per letter is byte-exact in Lua 5.1.
+        for sequence, ascii in pairs(POLISH_ASCII_FOLD) do
+            folded = folded:gsub(sequence, ascii)
+        end
+        foldCache[text] = folded
+    end
+    return folded
+end
+
+-- Probes, once per session, whether the client font actually contains the
+-- Polish Latin-Extended-A glyphs. Players who installed a font pack (e.g. a
+-- replaced Fonts\FRIZQT__.TTF with full coverage) keep proper diacritics;
+-- everyone else gets readable ASCII Polish instead of question marks.
+--
+-- Detection: the 3.3.5a client substitutes the font's own "?" glyph for any
+-- missing glyph, so a missing letter's rendered width equals the width of a
+-- literal "?". In any font that really contains them, "ł" is far narrower
+-- than "?" and "ą" is not "?"-shaped either -- both matching "?" exactly
+-- means the glyphs are absent. GetStringWidth() works on hidden
+-- FontStrings, so nothing flashes on screen.
+local fontRendersPolish   -- nil until probed, then boolean for the session
+local function ClientFontRendersPolish()
+    if fontRendersPolish ~= nil then return fontRendersPolish end
+    local ok, supported = pcall(function()
+        local probe = UIParent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        probe:Hide()
+        probe:SetText("?")
+        local questionWidth = probe:GetStringWidth()
+        probe:SetText("ł")
+        local lWidth = probe:GetStringWidth()
+        probe:SetText("ą")
+        local aWidth = probe:GetStringWidth()
+        probe:SetText("")
+        return lWidth ~= questionWidth or aWidth ~= questionWidth
+    end)
+    -- On any error (headless test runtime, stubbed widgets) assume no
+    -- support: folded ASCII is always safe to display.
+    fontRendersPolish = (ok and supported) and true or false
+    return fontRendersPolish
+end
+
 function EbonBuilds.Locale.Register(code, stringTable)
     translations[code] = stringTable
 end
@@ -114,11 +176,16 @@ end
 
 -- The read-through lookup table itself. Falls back to the raw key (the
 -- English string) whenever the active locale is English, has no table
--- registered, or has no entry for that particular key.
+-- registered, or has no entry for that particular key. Polish additionally
+-- folds diacritics to ASCII when the client font cannot render them (see
+-- POLISH_ASCII_FOLD above), so no string ever displays "?" placeholders.
 EbonBuilds.L = setmetatable({}, {
     __index = function(_, key)
         local t = translations[activeLocale]
         local value = t and t[key]
+        if value and activeLocale == "plPL" and not ClientFontRendersPolish() then
+            return FoldPolishDiacritics(value)
+        end
         return value or key
     end,
 })

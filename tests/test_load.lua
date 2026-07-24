@@ -256,6 +256,43 @@ print("Loaded " .. #files .. " TOC Lua files successfully.")
 print("Verified " .. #uiContracts .. " UI contracts successfully.")
 
 
+-- Polish diacritics (issue #40): no stock 3.3.5a client font contains the
+-- Latin-Extended-A glyphs, so plPL strings must fold ą ć ę ł ń ś ź ż to
+-- ASCII instead of letting the client draw "?" for each. The stub widgets
+-- report the same GetStringWidth() for every probe text, which is exactly
+-- what a font without those glyphs reports (missing glyphs all render as
+-- the "?" glyph), so the folded form is what EbonBuilds.L must return here.
+do
+    if not EbonBuilds.Locale.SetLocale("plPL") then
+        io.stderr:write("POLISH FOLD FAIL: plPL is not a supported locale\n")
+        os.exit(1)
+    end
+    local expectations = {
+        ["Character"] = "Postac",                       -- Postać
+        ["Save build"] = "Zapisz build",                -- no diacritics: unchanged
+        [" · Autopilot uses last saved settings"] =
+            " · Autopilot uzywa ostatnio zapisanych ustawien",  -- używa/ustawień
+    }
+    for key, expected in pairs(expectations) do
+        local got = EbonBuilds.L[key]
+        if got ~= expected then
+            io.stderr:write(string.format("POLISH FOLD FAIL: L[%q] = %q, expected %q\n",
+                key, tostring(got), expected))
+            os.exit(1)
+        end
+    end
+    if EbonBuilds.L["No such key anywhere"] ~= "No such key anywhere" then
+        io.stderr:write("POLISH FOLD FAIL: unknown keys must fall back to the English key\n")
+        os.exit(1)
+    end
+    EbonBuilds.Locale.SetLocale("enUS")
+    if EbonBuildsDB and EbonBuildsDB.globalSettings then
+        EbonBuildsDB.globalSettings.localeOverride = nil
+    end
+    print("Verified Polish diacritic ASCII fallback for fonts without the glyphs.")
+end
+
+
 -- Hover cleanup must never overwrite a view-owned text color. Earlier the
 -- shared button reset forced every ordinary button label to gold on OnLeave,
 -- so muted navigation and action labels stayed yellow after the pointer left.
