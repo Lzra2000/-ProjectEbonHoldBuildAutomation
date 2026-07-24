@@ -64,6 +64,7 @@ function EbonBuilds.BagAffixDots.IsEnabled()
 end
 
 local function SetButtonDot(button, classification)
+    if InCombatLockdown and InCombatLockdown() then return end
     local dot  = button._ebbAffixDot
     local back = button._ebbAffixBacking
     local color = classification and COLORS[classification]
@@ -121,10 +122,36 @@ local function GetBindLine(bag, slot)
     return "other" -- readable but neither line found (BoP already worn, unique, etc.)
 end
 
+-- 3.3.5a item-link quality colors (FrameXML ITEM_QUALITY_COLORS). Used only when
+-- GetItemInfo has not cached the item yet -- never read GetContainerItemInfo's
+-- 3rd return (that is `locked`, a boolean; container quality is the 4th return).
+local LINK_QUALITY = {
+    ["9d9d9d"] = 0, -- Poor
+    ["ffffff"] = 1, -- Common
+    ["1eff00"] = 2, -- Uncommon
+    ["0070dd"] = 3, -- Rare
+    ["a335ee"] = 4, -- Epic
+    ["ff8000"] = 5, -- Legendary
+}
+
+local function ItemQualityFromLink(link)
+    if not link then return nil end
+    local hex = link:match("|cff(%x%x%x%x%x%x)")
+    return hex and LINK_QUALITY[strlower(hex)] or nil
+end
+
+local function ResolveItemQuality(link)
+    local _, _, quality = GetItemInfo(link)
+    quality = tonumber(quality)
+    if quality then return quality end
+    return ItemQualityFromLink(link)
+end
+
 -- A soulbound Uncommon/Rare piece of gear that isn't an upgrade for the
 -- active build's spec is a reasonable disenchant candidate -- reuses the
 -- same spec-scoring GearScore already does for AutoSell's upgrade check.
 local function IsDisenchantCandidate(link, quality, equipLoc)
+    quality = tonumber(quality) or ItemQualityFromLink(link)
     if not (quality == 2 or quality == 3) then return false end -- Uncommon/Rare only
     if not equipLoc or equipLoc == "" then return false end -- not equippable gear
     if not (EbonBuilds.Build and EbonBuilds.GearScore) then return false end
@@ -171,8 +198,9 @@ local function DecideDot(bag, slot, link)
 
     -- GetItemInfo quality is the 3rd return in 3.3.5a. Do NOT take quality from
     -- GetContainerItemInfo's 3rd return -- that is `locked` (boolean); quality is 4th.
-    local _, _, quality, _, _, _, _, _, equipLoc = GetItemInfo(link)
+    local _, _, _, _, _, _, _, _, equipLoc = GetItemInfo(link)
     if not equipLoc or equipLoc == "" then return nil end -- not gear; nothing else to flag
+    local quality = ResolveItemQuality(link)
 
     local bind = GetBindLine(bag, slot)
     if bind == "boe" then return "boe_unbound" end
@@ -241,24 +269,49 @@ local bagAddonButtons
 -- in practice, but hooking both is harmless if someone somehow loads both).
 local bagAddonHooked = {}
 
-local function UpdateBagAddonButton(button)
-    -- hooksecurefunc fires even when Update() short-circuited on a hidden
-    -- button; mirror its visibility check.
-    if not button:IsVisible() then return end
-    bagAddonButtons[button] = true
-
-    -- Bagnon_Forever / Combuctor cached views of other characters (or the bank
-    -- while away) are not live containers; GetContainerItemLink would lie.
-    if button.IsCached and button:IsCached() then
-        button._ebbCachedLink = nil
-        SetButtonDot(button, nil)
-        return
+local function ButtonBag(button)
+    if type(button) ~= "table" and type(button) ~= "userdata" then return nil end
+    if button.GetBag then
+        local ok, bag = pcall(button.GetBag, button)
+        if ok and bag then return bag end
     end
+    if button.GetParent then
+        local ok, parent = pcall(button.GetParent, button)
+        if ok and parent and parent.GetID then
+            local ok2, bag = pcall(parent.GetID, parent)
+            if ok2 and bag then return bag end
+        end
+    end
+    return nil
+end
 
-    local bag = button.GetBag and button:GetBag()
-        or (button:GetParent() and button:GetParent():GetID())
-    if not bag then return end
-    UpdateButton(button, bag, button:GetID())
+local function UpdateBagAddonButton(button)
+    -- hooksecurefunc post-hooks must never throw back into the bag addon (taint /
+    -- error propagation). Combuctor/Bagnon are optional -- soft-fail on bad buttons.
+    local ok, err = pcall(function()
+        if InCombatLockdown and InCombatLockdown() then return end
+        if not button or not button.IsVisible or not button:IsVisible() then return end
+        if not bagAddonButtons then return end
+        bagAddonButtons[button] = true
+
+        if button.IsCached then
+            local cachedOk, cached = pcall(button.IsCached, button)
+            if cachedOk and cached then
+                button._ebbCachedLink = nil
+                SetButtonDot(button, nil)
+                return
+            end
+        end
+
+        local bag = ButtonBag(button)
+        if not bag or not button.GetID then return end
+        local slotOk, slot = pcall(button.GetID, button)
+        if not slotOk or not slot then return end
+        UpdateButton(button, bag, slot)
+    end)
+    if not ok and EbonBuilds.Debug and EbonBuilds.Debug.Log then
+        EbonBuilds.Debug.Log("BagAffixDots", "bag-addon button update failed: " .. tostring(err))
+    end
 end
 
 -- Hooks one bag addon's item-button class once it exists. Returns true when
@@ -275,8 +328,14 @@ local function TryHookBagAddon(addonName)
         -- Weak keys: buttons the addon frees can be collected without us holding on.
         bagAddonButtons = setmetatable({}, { __mode = "k" })
     end
+    local hookOk, hookErr = pcall(hooksecurefunc, itemClass, "Update", UpdateBagAddonButton)
+    if not hookOk then
+        if EbonBuilds.Debug and EbonBuilds.Debug.Log then
+            EbonBuilds.Debug.Log("BagAffixDots", addonName .. " ItemSlot hook failed: " .. tostring(hookErr))
+        end
+        return false
+    end
     bagAddonHooked[addonName] = true
-    hooksecurefunc(itemClass, "Update", UpdateBagAddonButton)
     return true
 end
 
@@ -293,7 +352,7 @@ function EbonBuilds.BagAffixDots.RefreshAll()
     end
     if bagAddonButtons then
         for button in pairs(bagAddonButtons) do
-            if button:IsVisible() then
+            if button and button.IsVisible and button:IsVisible() then
                 UpdateBagAddonButton(button)
             end
         end
@@ -327,7 +386,10 @@ function EbonBuilds.BagAffixDots.Init()
     if next(pending) and EbonBuilds.WoWEvents then
         local token
         token = EbonBuilds.WoWEvents.On("ADDON_LOADED", function(_, name)
-            if pending[name] and TryHookBagAddon(name) and token then
+            if not pending[name] then return end
+            local hooked = TryHookBagAddon(name)
+            pending[name] = nil
+            if (hooked or not next(pending)) and token then
                 EbonBuilds.WoWEvents.Off(token)
                 token = nil
             end
