@@ -75,6 +75,7 @@ Define a build with per-echo weights and policies. Autopilot evaluates every ech
 | Feature explanations | [FAQ](faq.md) |
 | Translations | [Localization](localization.md) |
 | Something went wrong | [Troubleshooting](troubleshooting.md) |
+| Downloads & install | [Releases](releases.md) |
 | Release history | [Changelog](changelog.md) |
 
 ### For contributors

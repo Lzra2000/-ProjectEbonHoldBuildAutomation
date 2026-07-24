@@ -78,6 +78,7 @@ nav:
     - FAQ: faq.md
     - Troubleshooting: troubleshooting.md
   - Project:
+    - Releases: releases.md
     - Changelog: changelog.md
     - Localization: localization.md
   - Contributors:
