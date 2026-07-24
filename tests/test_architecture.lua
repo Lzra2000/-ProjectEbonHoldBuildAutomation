@@ -30,8 +30,39 @@ for _, path in ipairs(tocFiles) do
     assertTrue(text:match("^local addonName, EbonBuilds = %.%.%."), path .. " does not use the private TOC namespace")
     assertTrue(not text:find("EbonBuilds%s*=%s*EbonBuilds%s*or%s*{}"), path .. " recreates a global addon table")
     if path ~= "core/WoWEvents.lua" then
-        assertTrue(not text:find(":RegisterEvent%s*%(", 1), path .. " registers a Blizzard event outside WoWEvents")
+        assertTrue(not text:find(":RegisterEvent%s*%(", 1),
+            path .. " calls frame:RegisterEvent(...) — route Blizzard events through core/WoWEvents.lua (EbonBuilds.WoWEvents.On/Off) so one-shot listeners can Off() cleanly and architecture stays centralized. Raw RegisterEvent breaks the ADDON_LOADED one-shot contract used by BagAffixDots (Bagnon/Combuctor late-load).")
     end
+end
+
+-- Lint: ban post-3.3.5a (build 12340) APIs that LLMs / retail muscle memory reach for.
+-- Mirrors scripts/check-335a-api.sh but fails inside the Lua suite with file context.
+local post335a = {
+    { "C_Timer%.", "C_Timer (MoP+) — use EbonBuilds.Scheduler or a Frame OnUpdate ticker" },
+    { "C_Map%.", "C_Map (retail) — use GetMapInfo/UpdateMapHighlight/GetPlayerMapPosition" },
+    { "C_ChatInfo%.", "C_ChatInfo (retail) — use SendAddonMessage / ChatFrame filters" },
+    { ":SetShown%s*%(", "Region:SetShown (Cataclysm+) — use Show()/Hide()" },
+    { "IsInGroup%s*%(", "IsInGroup (MoP+) — use GetNumPartyMembers()/GetNumRaidMembers()" },
+    { "IsInRaid%s*%(", "IsInRaid (MoP+) — use GetNumRaidMembers() > 0" },
+    { "GetNumGroupMembers%s*%(", "GetNumGroupMembers (MoP+) — use GetNumPartyMembers()/GetNumRaidMembers()" },
+}
+for _, path in ipairs(tocFiles) do
+    if path ~= "modules/data/FAQContent.lua" then
+        local text = read(path)
+        for _, rule in ipairs(post335a) do
+            assertTrue(not text:find(rule[1]),
+                path .. " uses " .. rule[2])
+        end
+    end
+end
+
+-- Forward-declaration contract for WorldIntegration RefreshMapPanel (nil upvalue crash class).
+do
+    local world = read("modules/ui/WorldIntegration.lua")
+    local decl = world:find("local RefreshMapPanel[%s,\n]")
+    local assign = world:find("function RefreshMapPanel%(")
+    assertTrue(decl and assign and decl < assign,
+        "WorldIntegration.lua must forward-declare `local RefreshMapPanel` before `function RefreshMapPanel()` (SetMapPanelEnabled/SetMapEnabled call it earlier)")
 end
 
 -- Lint: ban the `x and nil or y` pattern in shipped code. In Lua the
@@ -182,4 +213,4 @@ assertTrue(schedulerFrame.visible, "PLAYER_REGEN_ENABLED did not wake parked wor
 schedulerFrame.scripts.OnUpdate(schedulerFrame, 0)
 assertTrue(ranDeferred, "parked scheduler job did not run after combat")
 
-print("Architecture invariants passed: private namespace, centralized events, stable dispatch, native UI fallback, sync ownership, and the `and nil or` toggle ban.")
+print("Architecture invariants passed: private namespace, centralized events (RegisterEvent ban), post-3.3.5a API ban, stable dispatch, native UI fallback, sync ownership, RefreshMapPanel forward-decl, and the `and nil or` toggle ban.")

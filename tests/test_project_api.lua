@@ -114,12 +114,22 @@ local function loadAddonFile(path)
 end
 
 loadAddonFile("core/EventHub.lua")
+loadAddonFile("modules/automation/BoardStateMachine.lua")
 loadAddonFile("modules/integration/ProjectEbonholdAPI.lua")
 assertTrue(addon.ProjectAPI.Init(), "standalone request adapter did not initialize")
 assertEqual(addon.ProjectAPI.GetCapabilities().actionConfirmation, "request_only", "wrong action mode")
 assertTrue(not addon.ProjectAPI.HasActionObservers(), "unmodified base addon was reported as acknowledgement-capable")
 
 local caps = addon.ProjectAPI.GetCapabilities()
+assertTrue(caps.boardState, "boardState capability missing")
+assertTrue(not caps.serverBoardState, "serverBoardState should be false without PE boardState")
+local derived = addon.ProjectAPI.GetBoardState({
+    choices = { { spellId = 1 }, { spellId = 2, justFrozen = true } },
+    frozenCount = 1,
+})
+assertEqual(derived and derived.state, "CONFIRMED", "GetBoardState did not derive CONFIRMED")
+assertEqual(derived and derived.source, "derived", "GetBoardState source should be derived")
+
 assertTrue(caps.pendingRollsCount, "pendingRollsCount capability missing")
 assertTrue(caps.rollsDebugInfo, "rollsDebugInfo capability missing")
 assertTrue(caps.autoAcceptLoadoutEchoes, "autoAcceptLoadoutEchoes capability missing")

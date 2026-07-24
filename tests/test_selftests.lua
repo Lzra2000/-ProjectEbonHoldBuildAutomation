@@ -101,6 +101,12 @@ function GetChannelName() return 0 end
 function JoinChannelByName() end
 function SendAddonMessage() end
 function GetItemInfo() return nil end
+-- 3.3.5a auction class order (localized on real clients; English here for stubs).
+function GetAuctionItemClasses()
+    return "Weapon", "Armor", "Container", "Consumable", "Glyph",
+        "Trade Goods", "Projectile", "Quiver", "Recipe", "Gem",
+        "Miscellaneous", "Quest"
+end
 function GetInventoryItemLink() return nil end
 function GetContainerNumSlots() return 0 end
 function GetContainerItemLink() return nil end

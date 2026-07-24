@@ -1,8 +1,10 @@
 # Local checks & CI debugging
 
-How to run the same checks CI runs, iterate on a single failure quickly, and
-read GitHub Actions output. Companion to [development.md](development.md) and
-[`CONTRIBUTING.md`](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CONTRIBUTING.md).
+<p class="ebb-lead">
+Run the same checks CI runs, filter a single failure, and read GitHub Actions output.
+Companion to <a href="development.md">Development</a> and
+<a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.
+</p>
 
 ## Quick start
 

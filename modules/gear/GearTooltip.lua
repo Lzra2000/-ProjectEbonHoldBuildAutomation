@@ -48,6 +48,13 @@ local function AugmentTooltip(tooltip)
     local _, itemLink = tooltip:GetItem()
     if not itemLink then return end
 
+    local itemName = itemLink:match("%[(.-)%]")
+    if itemName and EbonBuilds.AuctionatorBridge and EbonBuilds.AuctionatorBridge.AppendTooltipLines then
+        local base, rank = EbonBuilds.AffixItemScan and EbonBuilds.AffixItemScan.ExtractSuffix(itemName)
+        local affixName = base and rank and (base .. " " .. rank) or nil
+        EbonBuilds.AuctionatorBridge.AppendTooltipLines(tooltip, itemLink, affixName)
+    end
+
     local info = EbonBuilds.GearScore.UpgradeInfo(itemLink, specKey)
     if not info then return end  -- not equippable, or no weights for this spec
 

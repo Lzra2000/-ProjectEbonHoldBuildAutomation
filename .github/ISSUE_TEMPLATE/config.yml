@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
+  - name: FAQ and documentation
+    url: https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/
+    about: Getting started, settings, searchable FAQ, troubleshooting.
   - name: Questions and build discussions
     url: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/discussions
     about: Not a bug or feature request? Ask in Discussions.
+  - name: Support guide (repo)
+    url: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/SUPPORT.md
+    about: Where to get help, report bugs, and find docs.

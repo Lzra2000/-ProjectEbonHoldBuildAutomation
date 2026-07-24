@@ -1,7 +1,12 @@
 name: Bug report
 description: Something is broken or behaving unexpectedly
+title: "[Bug]: "
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        See [SUPPORT.md](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/SUPPORT.md) and [troubleshooting](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/troubleshooting/) for common fixes before filing.
   - type: textarea
     id: what-happened
     attributes:
@@ -14,10 +19,9 @@ body:
     attributes:
       label: Error log output
       description: >
-        Settings (gear icon in the main window) -> Windows & Tools -> Error log.
-        If a click seemed to do nothing, attach the Click Trace log from the
-        same place as well. Paste the raw text; it is the single most useful
-        thing in a report.
+        Settings (gear icon) → Windows & tools → Error log.
+        If a click did nothing, attach the Click Trace log too.
+        Paste raw text — it is the fastest way to get a fix.
       render: text
     validations:
       required: true
@@ -25,12 +29,12 @@ body:
     id: version
     attributes:
       label: EbonBuilds version
-      description: Shown in the main window title and in the .toc.
-      placeholder: "3.72"
+      description: Main window title or `## Version` in EbonBuilds.toc.
+      placeholder: "3.84"
     validations:
       required: true
   - type: textarea
     id: context
     attributes:
       label: Anything else
-      description: Other addons involved, whether it happens every time, screenshots.
+      description: Other addons, reproducibility, screenshots, Logbook export for automation bugs.

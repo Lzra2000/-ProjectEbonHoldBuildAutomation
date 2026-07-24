@@ -222,6 +222,18 @@ function D.HasUnsecuredFreezeCandidate(board, selectionTarget)
 end
 
 function D.CanReroll(board)
+    local BSM = EbonBuilds.AutomationBoardStateMachine
+    if BSM then
+        local lifecycle = board.lifecycleState
+        if not lifecycle then
+            lifecycle = BSM.Attach(board, board)
+        end
+        if BSM.IsRerollBlocked(lifecycle) then
+            local message = BSM.RerollBlockMessage(lifecycle, board.lifecycleReasonCode)
+            return false, message or "board lifecycle blocks reroll"
+        end
+    end
+
     if (tonumber(board.frozenCount) or 0) > 0 then return false, "board contains a frozen Echo" end
     if board.pendingFreezeSlot then return false, "freeze confirmation is pending" end
     if board.pendingAction then return false, "another board action is pending" end
@@ -244,6 +256,14 @@ function D.Decide(board)
     if not board.isStable then return { action = "WAIT", reason = "board is not stable" } end
 
     D.RefreshFrozenState(board)
+
+    if EbonBuilds.AutomationBoardStateMachine then
+        EbonBuilds.AutomationBoardStateMachine.Attach(board, board)
+        local BSM = EbonBuilds.AutomationBoardStateMachine
+        if board.lifecycleState == BSM.STATE.FROZEN_PENDING then
+            return { action = "WAIT_FOR_FREEZE", reason = "board lifecycle is FROZEN_PENDING" }
+        end
+    end
 
     if board.pendingAction then
         return { action = "WAIT", reason = "another board action is pending" }

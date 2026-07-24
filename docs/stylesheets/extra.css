@@ -1,0 +1,83 @@
+/* EbonBuilds docs — restrained dark palette with gold accents (logo motif) */
+
+:root {
+  --ebb-gold: #c9a227;
+  --ebb-gold-light: #d4af37;
+  --ebb-charcoal: #141414;
+  --ebb-surface: #1c1c1c;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--ebb-charcoal);
+  --md-primary-fg-color--light: #252525;
+  --md-primary-fg-color--dark: #0d0d0d;
+  --md-accent-fg-color: var(--ebb-gold-light);
+  --md-default-bg-color: #121212;
+}
+
+[data-md-color-scheme="default"] {
+  --md-accent-fg-color: #8a7020;
+}
+
+/* Hero block on the home page */
+.ebb-hero {
+  text-align: center;
+  margin: 0 0 2.4rem;
+}
+
+.ebb-hero img {
+  border-radius: 0.2rem;
+  margin-bottom: 1.2rem;
+}
+
+.ebb-hero .ebb-tagline {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+  max-width: 40rem;
+  margin: 0 auto 1.4rem;
+}
+
+.ebb-hero .md-button {
+  margin: 0.2rem 0.25rem;
+}
+
+.ebb-meta {
+  font-size: 0.82rem;
+  color: var(--md-default-fg-color--lighter);
+  margin-top: 0.75rem;
+}
+
+.ebb-meta a {
+  color: var(--md-accent-fg-color);
+}
+
+/* Primary CTA — dark fill, gold border (not generic Material teal) */
+.md-typeset .md-button--primary {
+  background-color: var(--ebb-surface);
+  border: 1px solid var(--ebb-gold);
+  color: var(--ebb-gold-light);
+}
+
+.md-typeset .md-button--primary:hover,
+.md-typeset .md-button--primary:focus {
+  background-color: #2a2a2a;
+  border-color: var(--ebb-gold-light);
+  color: #f0d878;
+}
+
+/* Card grid spacing on the home page */
+.md-typeset .grid.cards {
+  margin-top: 1.5rem;
+}
+
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.2rem;
+}
+
+/* Page intros — consistent lead paragraph styling */
+.ebb-lead {
+  font-size: 1.02rem;
+  color: var(--md-default-fg-color--light);
+  margin-bottom: 1.6rem;
+}

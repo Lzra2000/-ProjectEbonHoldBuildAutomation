@@ -1,42 +1,83 @@
-# EbonBuilds — Changelog
+# Changelog
 
-One `### <version>` entry per release, newest first. scripts/release.sh
-refuses to tag unless this file changed, and the Release workflow and the
-in-game "What's new" page both read the newest entry from here.
+All notable changes to **EbonBuilds** are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and release numbers follow the project's `3.xx` convention. Each shipped version
+is a `### <version> (<date>) -- <summary>` block, newest first. Within an entry,
+group changes under `#### Added`, `#### Changed`, `#### Fixed`, or `#### Security`
+— never another `###` heading (release automation stops at the next `###` line).
+
+`scripts/release.sh` refuses to tag unless this file changed. The Release workflow
+and the in-game **What's new** page both read the topmost `###` entry from here.
+Install instructions and download links live on
+[GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
+and in [docs/releases.md](docs/releases.md).
+
+[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.84...HEAD
+
+### 3.86 (unreleased) -- Auctionator integration for affix shopping
+
+Optional companion integration with vendored Auctionator 2.6.3 (WotLK / Interface 30300).
+
+- **Packaging:** `vendor/Auctionator/` ships as a separate AddOn (`dist/Auctionator.zip`); EbonBuilds declares `## OptionalDeps: Auctionator`.
+- **AuctionatorBridge:** soft-fail price helpers (`Atr_GetAuctionBuyout` / `Atr_GetAuctionPrice`), Affixes tab AH search + shopping-list sync, tooltip buyout lines, gold bag dot for cheap missing-affix gear.
+- **Tests:** `tests/test_auctionator_bridge.lua` for query building, soft-deps, and shopping-list sync stubs.
 
 ### 3.85 (2026-07-24) -- Tome draw-pool toggle + permanent LockPerk APIs (#62)
 
+*Not yet released — on `main` ahead of [v3.84](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.84).*
+
 Wires ProjectEbonhold tome toggle and permanent echo lock APIs into EbonBuilds, capability-gated for older PE builds.
 
-- **Tome Atlas:** collected tomes show draw-pool state (collected vs pool off). Right-click at level 1 toggles via ToggleTomeEcho / IsTomeEchoDisabled.
-- **Build Overview:** new Permanent locks row from GetLockedPerks / GetMaximumPermanentEchoes. Click a permanent lock to unlock; right-click a build locked echo to request LockPerk.
-- **Snapshot Run:** optional one-click draft build from SnapshotCurrentEchoes (granted + permanent stacks).
-- **ProjectAPI:** wrappers + capability flags; graceful no-op when PE methods are absent.
+#### Added
+
+- **Tome Atlas:** collected tomes show draw-pool state (collected vs pool off). Right-click at level 1 toggles via `ToggleTomeEcho` / `IsTomeEchoDisabled`.
+- **Build Overview:** Permanent locks row from `GetLockedPerks` / `GetMaximumPermanentEchoes`. Click a permanent lock to unlock; right-click a build-locked echo to request `LockPerk`.
+- **Snapshot Run:** optional one-click draft build from `SnapshotCurrentEchoes` (granted + permanent stacks).
+- **ProjectAPI:** wrappers and capability flags; graceful no-op when PE methods are absent.
 
 ### 3.84 (2026-07-24) -- Bag dots, freeze persistence, server loadouts, and combat DPS in the Logbook
 
-Bug fixes and small features that landed right after 3.83: bag affix dots, map panel, Autopilot freeze state, Combuctor parity, freeze-penalty carry logic, Public Builds server loadouts, combat DPS in history, and broader tests.
+[Release v3.84](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.84)
 
-- **Teal disenchant dots never appeared (#56):** bag affix dots treated `GetContainerItemInfo`'s 3rd return as item quality; on 3.3.5a that value is `locked`, so Disenchant-candidate (teal) dots never matched. Quality now comes from `GetItemInfo`. Also replaced ManualTraining's broken nil-toggle expression with an explicit if/else.
-- **Combuctor bag affix dots (#63):** same Bagnon-style hooks for Combuctor ItemSlots so red/purple/teal/BoE dots draw on Combuctor bags too.
+Follow-up to 3.83: bag affix dots, map panel stability, Autopilot freeze persistence, Public Builds server loadouts, combat DPS in history, and broader test coverage.
+
+#### Added
+
+- **Public Builds → server loadouts (#64):** Save as server loadout / Apply wishlist on Overview and Public Builds inspect, mapping locked Echoes into ProjectEbonhold designed slots (capability-gated).
+- **Combat DPS in build history (#65 / #46):** optional `COMBAT_LOG` DPS logging attaches samples to the active run; Logbook shows best measured DPS (prefers longer benchmark segments). Toggle under Settings → Optional features.
+- **Combuctor bag affix dots (#63):** Bagnon-style hooks for Combuctor ItemSlots so red/purple/teal/BoE dots draw on Combuctor bags too.
+- **Test coverage (#60):** TOC lint bans the classic Lua nil-toggle antipattern; regressions for freeze-over-reroll, toggles, Bagnon bag-dot hooks, plus pure-module and export/import coverage.
+
+#### Fixed
+
+- **Teal disenchant dots never appeared (#56):** bag affix dots treated `GetContainerItemInfo`'s 3rd return as item quality; on 3.3.5a that value is `locked`, so Disenchant-candidate (teal) dots never matched. Quality now comes from `GetItemInfo`. ManualTraining's broken nil-toggle expression replaced with an explicit if/else.
 - **Zone panel crash with the world map open (#58):** toggling "Zone panel" called a nil `RefreshMapPanel` global. Forward-declared like the existing `ShowZonePins` fix. Minimap button drag angle now uses the minimap's effective scale instead of UIParent's.
 - **Frozen Echoes forgotten mid-run (#59):** when the server omitted freeze flags across board hide/show or identity churn, Autopilot could lose which Echoes were frozen and keep rerolling. Accepted freeze IDs now live in run-persistent `frozenEchoIDs`. Logs `Freeze not confirmed` when recovery resolves an unconfirmed freeze as unfrozen.
-- **Freeze penalty no longer demotes a worthy carry (#66):** while a frozen/carried Echo still scores at or above the freeze threshold, the freeze penalty is not applied -- excellent carries stop losing to slightly worse fresh offers.
-- **Public Builds to server loadouts (#64):** Save as server loadout / Apply wishlist on Overview and Public Builds inspect, mapping locked Echoes into ProjectEbonhold designed slots (capability-gated).
-- **Combat DPS in build history (#65 / #46):** optional COMBAT_LOG DPS logging attaches samples to the active run; Logbook shows best measured DPS (prefers longer benchmark segments). Toggle under Settings -> Optional features.
-- **Test coverage (#60):** bans the classic Lua nil-toggle antipattern via TOC lint, and adds regressions for freeze-over-reroll, toggles, Bagnon bag-dot hooks, plus pure-module and export/import coverage.
+- **Freeze penalty no longer demotes a worthy carry (#66):** while a frozen/carried Echo still scores at or above the freeze threshold, the freeze penalty is not applied — excellent carries stop losing to slightly worse fresh offers.
 
 ### 3.83 (2026-07-24) -- Autopilot speaks the server addon's language, plus a community bug-fix wave
 
-The freeze-first engine from 3.82's groundwork (PR #41) ships together with a round of fixes driven directly by Discord reports and GitHub issues.
+[Release v3.83](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.83)
 
-- **Server ProjectEbonhold API alignment (#42):** the server's distribution of ProjectEbonhold confirms a freeze by flagging the existing card (`justFrozen`) instead of resending the board, injects a guaranteed card from the active build slot (which refuses freeze/banish requests), and tracks its own in-flight requests. Autopilot now reads all three -- freezes confirm instantly instead of falling into recovery, no charge is ever wasted on the guaranteed card, and a locally refused duplicate request can no longer pause automation mid-run ("build not autorolling anymore").
-- **Keeps rerolling after freeze (#38, Discord logs):** verified against a player's Logbook export -- equal-weight boards now freeze/select deterministically left-to-right, and rerolls stay hard-blocked while anything on the board is frozen or a freeze is unconfirmed.
+The freeze-first engine from 3.82's groundwork (PR #41) ships together with fixes driven by Discord reports and GitHub issues.
+
+#### Changed
+
+- **Server ProjectEbonhold API alignment (#42):** the server's distribution of ProjectEbonhold confirms a freeze by flagging the existing card (`justFrozen`) instead of resending the board, injects a guaranteed card from the active build slot (which refuses freeze/banish requests), and tracks its own in-flight requests. Autopilot reads all three — freezes confirm instantly instead of falling into recovery, no charge is wasted on the guaranteed card, and a locally refused duplicate request can no longer pause automation mid-run.
+- **Freeze/select after freeze (#38):** equal-weight boards now freeze/select deterministically left-to-right; rerolls stay hard-blocked while anything on the board is frozen or a freeze is unconfirmed (verified against a player's Logbook export).
+
+#### Fixed
+
 - **"Caster: ON" could never be turned off (#39):** the family-protection toggle used `x and nil or true`, which in Lua always yields `true`. Protection now toggles both ways; the same broken pattern was fixed in the Echo table's family filter and in the talent-snapshot comparison (which always claimed "No saved talent snapshot").
-- **Grey boxes on the world map (#36):** the Tome Atlas continent tint now draws its zone highlights with additive blending, the same way the client's own map highlight does -- the highlight textures have no alpha channel, so the old blend mode painted their black background as solid grey rectangles.
+- **Grey boxes on the world map (#36):** the Tome Atlas continent tint now draws zone highlights with additive blending, matching the client's own map highlight — the highlight textures have no alpha channel, so the old blend mode painted their black background as solid grey rectangles.
 - **Bag affix dots with Bagnon / Combuctor (#37):** both replace the default bag frames entirely, so the dots never drew there. The module now detects Bagnon and Combuctor (same Tuller lineage) and hooks their item-button update path; default bags are unchanged, and cached views (other characters, bank while away) deliberately show no dots.
-- **Polish showed "?" for every diacritic (#40):** stock 3.3.5a fonts lack the Latin-Extended-A glyphs. The addon now probes the font once per session and folds ą ć ę ł ń ś ź ż to ASCII only when they genuinely cannot render -- players with a font pack keep real diacritics, everyone else reads "Postac" instead of "Posta?".
-- **FAQ:** two new entries answering questions from Discord -- whether Autopilot trains a build's values by itself (it never does; Training Mode and advisor proposals are the explicit channels), and how to delete a build plus where builds live in SavedVariables.
+- **Polish showed "?" for every diacritic (#40):** stock 3.3.5a fonts lack the Latin-Extended-A glyphs. The addon probes the font once per session and folds ą ć ę ł ń ś ź ż to ASCII only when they genuinely cannot render — players with a font pack keep real diacritics, everyone else reads "Postać" as "Postac" instead of "Posta?".
+
+#### Added
+
+- **FAQ:** two new entries from Discord — whether Autopilot trains a build's values by itself (it never does; Training Mode and advisor proposals are the explicit channels), and how to delete a build plus where builds live in SavedVariables.
 
 ### 3.82 (2026-07-21) -- Public Builds: full character view, search, and sort
 

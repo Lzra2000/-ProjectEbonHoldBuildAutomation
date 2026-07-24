@@ -11,7 +11,7 @@ local ROW_HEIGHT   = 30
 local VISIBLE_ROWS = 12
 
 local viewFrame, scrollFrame, scrollChild, scrollBar
-local searchBox, filterBtn, refreshBtn, countLabel, emptyText
+local searchBox, filterBtn, refreshBtn, syncAhBtn, countLabel, emptyText
 local rows = {}
 local state = { text = "", missingOnly = false }
 local offset = 0
@@ -82,6 +82,35 @@ local function CreateRow(parent)
     sub:SetTextColor(0.75, 0.75, 0.75, 1)
     row._sub = sub
 
+    local ahBtn = EbonBuilds.Theme.CreateButton(row)
+    ahBtn:SetSize(34, 18)
+    ahBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    ahBtn:SetText("AH")
+    ahBtn:Hide()
+    ahBtn:SetScript("OnClick", function(self)
+        local a = self:GetParent()._affix
+        if not a or a.learned then return end
+        local bridge = EbonBuilds.AuctionatorBridge
+        if not bridge then return end
+        local ok, reason = bridge.OpenAffixSearch(a.name)
+        if not ok and EbonBuilds.Toast and EbonBuilds.Toast.Show then
+            if reason == "missing" then
+                EbonBuilds.Toast.Show("Install Auctionator to search the AH from here.", "info")
+            elseif reason == "no-ah" then
+                EbonBuilds.Toast.Show("Open the Auction House first, then try again.", "info")
+            else
+                EbonBuilds.Toast.Show("Could not start an Auctionator search.", "info")
+            end
+        end
+    end)
+    ahBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Search Auctionator for gear with this affix", 1, 1, 1)
+        GameTooltip:Show()
+    end)
+    ahBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row._ahBtn = ahBtn
+
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
         local a = self._affix
@@ -100,6 +129,21 @@ local function CreateRow(parent)
         end
         if a.appliedCount and a.appliedCount > 0 then
             GameTooltip:AddLine(("Applied %d time(s)"):format(a.appliedCount), 0.7, 0.7, 0.7)
+        end
+        local bridge = EbonBuilds.AuctionatorBridge
+        if bridge and bridge.IsAvailable and bridge.IsAvailable() then
+            local linePrice = bridge.GetAffixLinePrice and bridge.GetAffixLinePrice(a.name)
+            if linePrice then
+                local formatted = bridge.FormatCopper and bridge.FormatCopper(linePrice)
+                if formatted then
+                    GameTooltip:AddLine("Auctionator (affix line): " .. formatted, 1, 0.82, 0)
+                end
+            elseif not a.learned then
+                GameTooltip:AddLine("Auctionator: no scan data for this affix line yet", 0.55, 0.55, 0.55)
+            end
+            if not a.learned then
+                GameTooltip:AddLine("Click AH to search the auction house", 0.55, 0.82, 1)
+            end
         end
         GameTooltip:Show()
     end)
@@ -134,6 +178,13 @@ local function Render()
                 row._statusDot:SetVertexColor(0.85, 0.2, 0.2, 1)
             end
             row._sub:SetText(a.weaponOnly and "Weapon-only" or "Armor / any slot")
+            if row._ahBtn then
+                if not a.learned and EbonBuilds.AuctionatorBridge and EbonBuilds.AuctionatorBridge.IsAvailable() then
+                    row._ahBtn:Show()
+                else
+                    row._ahBtn:Hide()
+                end
+            end
             row._stripe:SetVertexColor(1, 1, 1, (offset + i) % 2 == 0 and 0.05 or 0.02)
             row:Show()
         else
@@ -252,9 +303,35 @@ local function BuildViewFrame(parent)
         end
     end)
 
+    syncAhBtn = EbonBuilds.Theme.CreateButton(f)
+    syncAhBtn:SetSize(92, 20)
+    syncAhBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -8, 0)
+    syncAhBtn:SetText("Sync AH list")
+    syncAhBtn:SetScript("OnClick", function()
+        local bridge = EbonBuilds.AuctionatorBridge
+        if not bridge then return end
+        local ok, info = bridge.SyncMissingAffixShoppingList()
+        if EbonBuilds.Toast and EbonBuilds.Toast.Show then
+            if ok then
+                EbonBuilds.Toast.Show(("Updated Auctionator list (%d missing affixes)."):format(tonumber(info) or 0), "success")
+            elseif info == "missing" then
+                EbonBuilds.Toast.Show("Install Auctionator to maintain an affix shopping list.", "info")
+            else
+                EbonBuilds.Toast.Show("Could not update the Auctionator shopping list.", "info")
+            end
+        end
+    end)
+    syncAhBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Rebuild Auctionator shopping list", 1, 1, 1)
+        GameTooltip:AddLine("Creates/updates \"EbonBuilds Affixes\" with search terms for every missing affix.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    syncAhBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     filterBtn = EbonBuilds.Theme.CreateButton(f)
     filterBtn:SetSize(130, 20)
-    filterBtn:SetPoint("RIGHT", refreshBtn, "LEFT", -8, 0)
+    filterBtn:SetPoint("RIGHT", syncAhBtn, "LEFT", -8, 0)
     filterBtn:SetText("Show: All")
     filterBtn:SetScript("OnClick", function(self)
         state.missingOnly = not state.missingOnly

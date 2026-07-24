@@ -1,10 +1,13 @@
-# EbonBuilds — FAQ
+# FAQ
 
-*This file is updated with every release. Latest version: 3.84 — also available in-game via Settings (gear icon) under Windows & Tools. Release history lives in [CHANGELOG.md](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/CHANGELOG.md).*
-
----
-
-## FAQ
+<p class="ebb-lead">
+Detailed, searchable explanations of every EbonBuilds feature.
+Updated with each release (currently <strong>3.84</strong>) — also available in-game via
+<strong>Settings → Windows &amp; Tools</strong>.
+See <a href="changelog.md">Changelog</a> or
+<a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases">GitHub releases</a>
+for version history.
+</p>
 
 Jump to a category: [Getting Started](#getting-started) · [Automation & Decision Models](#automation-decision-models) · [Stats, Logbook & Missing Tab](#stats-logbook-missing-tab) · [Tome Atlas](#tome-atlas) · [Affixes & Character](#affixes-character) · [Sync, Sharing & Public Builds](#sync-sharing-public-builds) · [Settings, Diagnostics & Troubleshooting](#settings-diagnostics-troubleshooting)
 
@@ -53,6 +56,8 @@ Autopilot never changes your weights by itself. Running the same build on Autopi
 - **Tuning proposals and the Tuning Advisor** turn collected evidence into suggestions with a visible Apply button — nothing is written to the build until you apply it.
 
 So no: autopiloting a build does not silently train it. Use Training Mode when you want the addon to learn from your own choices, or review the advisor's proposals when you want evidence-based adjustments.
+
+**Autopilot vs Training at a glance:** only one can act on a choice screen. With **Autopilot ON** and **Training OFF**, EbonBuilds picks for you. With **Training ON**, Autopilot steps aside and you pick manually while the addon learns from your choices — a once-per-session toast reminds you the first time it happens. They are not two ways to train the same thing: Autopilot executes your saved weights; Training proposes weight changes from your manual picks.
 
 ### What do automatic tuning proposals do?
 **Prepare tuning proposals** is off by default. It periodically stages a small evidence-based proposal, but never changes the live build by itself. Review the current evidence and use the visible Apply controls deliberately. Rank-specific Manual Training evidence remains separate from family-level DPS evidence, and conflicting signals are combined rather than silently overwriting one another.
@@ -220,6 +225,17 @@ Project Ebonhold has two separate progression systems. **Echoes** are the run-ba
 ### How do I use the Affixes tab? (new in 2.7)
 Open via the **Affixes** button in the left panel or the Affixes reference (Settings, Windows & Tools). Every known affix is listed with a green dot (learned) or red dot (missing). Search by name, toggle *"Show: Missing only"*, and hover any entry for its full tooltip, weapon/armor restriction, apply cost, and use count. Press **Refresh** to request an updated list from the server (throttled to avoid spamming it).
 
+### How does Auctionator integration work? (optional)
+EbonBuilds optionally integrates with **Auctionator 2.6.3** (WotLK / Interface 30300) when you install it alongside EbonBuilds. The repo ships a vendored copy under `vendor/Auctionator/` (also packaged as `dist/Auctionator.zip` on release builds). EbonBuilds declares `## OptionalDeps: Auctionator` so the client loads Auctionator first when present; without it, every price/search feature soft-fails and the rest of EbonBuilds is unchanged.
+
+When Auctionator is installed and you have scan data:
+
+- **Affixes tab:** missing rows show an **AH** button that opens Auctionator's Buy tab and searches for gear `of <Affix Name>`. **Sync AH list** rebuilds an Auctionator shopping list named **EbonBuilds Affixes** with one search term per missing affix. Tooltips show Auctionator's affix-line price when available.
+- **Item tooltips:** gear hovers include an Auctionator buyout line (exact item name, falling back to the affix line).
+- **Bag affix dots:** a gold dot marks bag gear carrying a missing affix when Auctionator has a buyout price at or below that affix's apply cost (cheap learn/extract fodder).
+
+Affixes themselves are learned by extracting corrupted gear (ProjectEbonhold's Extraction UI) or buying pre-affixed gear on the AH -- EbonBuilds does not replace either workflow; it only surfaces prices and pre-fills Auctionator searches. Open the Auction House before using **AH** / **Sync AH list** if you are not already there.
+
 ### How does the visual Character tab work?
 The build editor's **Character** tab has three focused views:
 
@@ -299,6 +315,33 @@ Toggles, logs, and fixed issues.
 
 ### Autopilot and ProjectEbonhold "Auto-Accept Loadout Echoes" both seem to pick — what should I do?
 Turn **Auto-Accept Loadout Echoes** off in ProjectEbonhold's options if you want EbonBuilds Autopilot to own every pick. When that PE option is on, ProjectEbonhold auto-selects matching wishlist / active-loadout echoes about 180ms after a choice arrives — often before Autopilot would act. EbonBuilds detects the option, warns once when Autopilot is enabled, and **defers** on boards that PE will auto-accept so the two never double-select. Boards without a loadout match still run under Autopilot as usual.
+
+Applying a **foreign** build's wishlist or server loadout while Auto-Accept is on can auto-pick that author's locked echoes in combat — EbonBuilds shows a confirmation before doing that. Your own builds are unaffected.
+
+### Which ProjectEbonhold version does Autopilot need?
+Reliable autoroll needs the **server's ProjectEbonhold distribution** aligned with EbonBuilds **3.83+** (merged as server API alignment, #42). That build tracks in-flight requests on `ProjectEbonhold.Perks` (`pendingSelectSpellId`, `pendingFreezeIndex`, `pendingBanishIndex`, `pendingReroll`, and build-slot saves), confirms freezes via the `justFrozen` card flag instead of silently losing them, and marks guaranteed build-slot injects so Autopilot does not waste freeze/banish charges on them.
+
+**How to check:** in-game, `/run print("PE addonVersion", ProjectEbonhold and ProjectEbonhold.addonVersion, "modVersion", ProjectEbonhold and ProjectEbonhold.modVersion)` — your server team publishes the minimum pair that matches their core. EbonBuilds **3.84+** also expects `ProjectEbonholdOptionsService` (for Auto-Accept Loadout Echoes) and optional `GetPendingRollsCount` / `GetRollsDebugInfo` (#67). Older PE builds may still run, but missing pending flags or freeze confirmation is the usual cause of "Autopilot stopped mid-run" or duplicate-request stalls.
+
+**Server + client checklist:** update the server's ProjectEbonhold addon to the build your realm advertises, keep EbonBuilds current, reload after either update, and enable the Debug log (Settings, Windows & Tools) if a run stalls — look for `Deferring: ProjectEbonhold auto-accept…`, `Waiting for pending…`, or `Freeze not confirmed`.
+
+### Autopilot stopped mid-run — common ProjectEbonhold causes
+Most "it stopped autorolling" reports trace to the client and server disagreeing about board state, not bad weights:
+
+1. **Duplicate request while PE still has a pending flag** — ProjectEbonhold refuses a second select/freeze/banish/reroll until the first clears. EbonBuilds 3.83+ waits on `GetPendingAction()` instead of firing again; an outdated PE build that never clears those flags can still deadlock until `/reload`.
+2. **Auto-Accept Loadout Echoes vs Autopilot** — when a wishlist echo is on the board, PE may select it ~180ms after the choice arrives. EbonBuilds defers rather than racing a second select (#67). Turn Auto-Accept off for full Autopilot control, or expect loadout matches to be PE-owned.
+3. **Freeze confirmation drift** — if the server omits freeze flags across a board hide/show, EbonBuilds 3.84 keeps accepted freeze IDs in run-persistent state (#59), but an old PE build that never sends `justFrozen` can still make recovery noisy in the Debug log.
+4. **Guaranteed build-slot card** — an active designed loadout can inject a card the server refuses to freeze or banish; Autopilot skips those actions by design (#42).
+5. **Training Mode left ON** — Autopilot intentionally yields; check the build Overview toggle.
+
+If none of that fits, capture the Debug log from the stalled screen plus your PE `addonVersion` / `modVersion` printout above.
+
+### How do I use Combat DPS logging in the Logbook?
+Settings → **Optional features** → **Combat DPS logging** (character preference, on by default since 3.84). While enabled and you have an **active build run**, the addon listens to the combat log, builds combat segments from your damage (and pet/guardian damage), and attaches DPS samples to that run in SavedVariables — strictly informational; it never feeds Autopilot or scoring.
+
+**To record a benchmark:** start or continue a run with your build active, pull a training dummy (or any sustained fight), and stay in combat long enough for a meaningful segment — segments under ~10 seconds are discarded; segments of **60+ seconds** count as "benchmark grade" and are preferred when the Logbook picks a **best DPS** figure for the run row and summary strip. After combat ends, open the build's **Logbook**: the run browser shows best measured DPS; hover the summary DPS for a list of recent samples (duration, target name, dummy marker).
+
+**Separate from Echo DPS tracking:** the Tuning Advisor's **Track DPS by echo** (requires Details!) credits whole-loadout DPS to individual echoes for tuning suggestions. Combat DPS logging is per-run throughput only — no Details! required, no echo attribution. Turn Combat DPS logging off in Settings if you do not want combat-log processing.
 
 ### How do I remove a build, and where are builds stored on disk?
 Delete it in-game: open the build's **Overview** tab and click the red **Delete** button in the bottom-left corner; a confirmation popup follows. This is the recommended route because it also keeps public/sync bookkeeping consistent.

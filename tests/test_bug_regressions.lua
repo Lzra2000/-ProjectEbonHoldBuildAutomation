@@ -283,7 +283,8 @@ do
     addon.WoWEvents.Emit("ADDON_LOADED", "Bagnon")
     check(_G.Bagnon.ItemSlot.Update ~= originalUpdate,
         "late Bagnon load hooks ItemSlot.Update via ADDON_LOADED")
-    equal(#wowListeners, 0, "the one-shot ADDON_LOADED listener unregisters itself")
+    equal(#wowListeners, 0,
+        "BagAffixDots ADDON_LOADED late-load listener must call WoWEvents.Off(token) after a successful bag-addon hook (expected 0 listeners). Do not use frame:RegisterEvent; keep the one-shot via core/WoWEvents.lua. If multiple bag addons are pending (Bagnon/Combuctor), Off after the successful hook — they are mutually exclusive in practice.")
 
     -- A visible Bagnon button showing an affix item receives a dot even
     -- though no default ContainerFrame ever updates.

@@ -1,7 +1,7 @@
 ## Interface: 30300
 ## Title: EbonBuilds
 ## Version: 3.84
-## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced, EchoWishlist
+## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced, EchoWishlist, Auctionator
 ## SavedVariables: EbonBuildsDB
 ## SavedVariablesPerCharacter: EbonBuildsCharDB
 
@@ -30,6 +30,7 @@ modules/data/Families.lua
 modules/data/TalentCatalogData.lua
 modules/data/TalentCatalog.lua
 modules/build/CharacterSnapshot.lua
+modules/build/CharacterViewData.lua
 modules/talents/Talents.lua
 modules/data/Quality.lua
 core/TomeAtlas.lua
@@ -40,6 +41,7 @@ modules/gear/GearScore.lua
 modules/gear/GearTooltip.lua
 modules/data/SpecData.lua
 modules/integration/ProjectEbonholdAPI.lua
+modules/integration/AuctionatorBridge.lua
 modules/data/EchoIdentityData.lua
 modules/data/EchoSemanticsData.lua
 modules/data/EchoCorrectionFacts.lua
@@ -85,6 +87,8 @@ modules/session/Session.lua
 modules/session/DpsLog.lua
 modules/analytics/Aggregates.lua
 modules/analytics/StatsData.lua
+modules/analytics/SessionHistoryData.lua
+modules/analytics/BuildOverviewData.lua
 modules/build/Scoring.lua
 modules/build/ExportImport.lua
 modules/build/EWL.lua
@@ -114,6 +118,7 @@ modules/automation/Calibration.lua
 modules/automation/EchoSamples.lua
 modules/automation/EchoDeltaSync.lua
 modules/automation/EchoPerformance.lua
+modules/automation/BoardStateMachine.lua
 modules/automation/BoardDecision.lua
 modules/automation/Automation.lua
 modules/automation/ManualTraining.lua

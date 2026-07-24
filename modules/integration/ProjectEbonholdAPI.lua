@@ -707,11 +707,54 @@ function API.Init()
     return Service() ~= nil
 end
 
+function API.GetBoardState(context)
+    local BSM = EbonBuilds.AutomationBoardStateMachine
+    if not BSM then return nil end
+
+    local perks = ProjectEbonhold and ProjectEbonhold.Perks
+    if type(perks) == "table" and type(perks.GetBoardState) == "function" then
+        local ok, result = pcall(perks.GetBoardState)
+        if ok and type(result) == "table" and BSM.IsValidState(result.state) then
+            return {
+                state = result.state,
+                offerId = result.offerId,
+                reasonCode = result.reasonCode,
+                source = "server",
+            }
+        end
+    end
+    if type(perks) == "table" and BSM.IsValidState(perks.boardState) then
+        return {
+            state = perks.boardState,
+            offerId = perks.offerId,
+            source = "server",
+        }
+    end
+
+    local snapshot = type(context) == "table" and context or {}
+    if snapshot.choices == nil and type(API.GetCurrentChoice) == "function" then
+        snapshot.choices = API.GetCurrentChoice()
+    end
+    if snapshot.serverPendingAction == nil and type(API.GetPendingAction) == "function" then
+        snapshot.serverPendingAction = API.GetPendingAction()
+    end
+
+    local state, reasonCode, source = BSM.Derive(snapshot)
+    return {
+        state = state,
+        reasonCode = reasonCode,
+        offerId = snapshot.offerId,
+        source = source,
+    }
+end
+
 function API.GetCapabilities()
     local service = Service()
     local uploadReady = service and type(service.UploadServerBuildSlot) == "function"
     local runService = PlayerRunService()
     local options = OptionsService()
+    local perks = ProjectEbonhold and ProjectEbonhold.Perks
+    local BSM = EbonBuilds.AutomationBoardStateMachine
     return {
         addonVersion = API.GetAddonVersion(),
         perkDatabase = API.GetPerkDatabase() ~= nil,
@@ -746,5 +789,9 @@ function API.GetCapabilities()
         intensityData = (type(EbonholdIntensityData) == "table")
             or (runService and type(runService.GetIntensityData) == "function") or false,
         actionConfirmation = service and "request_only" or "unavailable",
+        boardState = EbonBuilds.AutomationBoardStateMachine ~= nil,
+        serverBoardState = (type(perks) == "table" and BSM and (
+            type(perks.GetBoardState) == "function" or BSM.IsValidState(perks.boardState)
+        )) or false,
     }
 end

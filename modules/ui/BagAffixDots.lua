@@ -39,10 +39,11 @@ local COLORS = {
     missing_upgrade     = { 0.64, 0.21, 0.93 }, -- purple
     boe_unbound         = { 0.20, 0.55, 0.95 }, -- blue
     disenchant_candidate = { 0.20, 0.80, 0.60 }, -- teal
+    affix_bargain       = { 0.95, 0.78, 0.12 }, -- gold (missing affix + AH price hint)
 }
 
 -- Checked in this order; the first match wins (only one dot per item).
-local PRIORITY = { "missing_new", "missing_upgrade", "boe_unbound", "disenchant_candidate" }
+local PRIORITY = { "affix_bargain", "missing_new", "missing_upgrade", "boe_unbound", "disenchant_candidate" }
 
 local enabled = true
 local dotVersion = 0
@@ -146,6 +147,26 @@ local function DecideDot(bag, slot, link)
     if not link or not enabled then return nil end
     local name = link:match("%[(.-)%]")
     local affixClass = name and EbonBuilds.AffixItemScan.Classify(name)
+    if affixClass == "missing_new" or affixClass == "missing_upgrade" then
+        local bridge = EbonBuilds.AuctionatorBridge
+        if bridge and bridge.IsAvailable and bridge.IsAvailable() then
+            local base, rank = EbonBuilds.AffixItemScan.ExtractSuffix(name)
+            local applyCost
+            if base and rank then
+                local full = strlower(base .. " " .. rank)
+                for _, a in ipairs(EbonBuilds.Affix.GetLearned()) do
+                    if a.name and strlower(a.name) == full then
+                        applyCost = a.applyCost
+                        break
+                    end
+                end
+            end
+            if bridge.GetBuyoutPrice(name) and bridge.IsAffixBargain(name, applyCost) then
+                return "affix_bargain"
+            end
+        end
+        return affixClass
+    end
     if affixClass then return affixClass end
 
     -- GetItemInfo quality is the 3rd return in 3.3.5a. Do NOT take quality from

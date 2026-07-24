@@ -1,140 +1,97 @@
 <p align="center">
-  <img src="../../assets/banner.svg" alt="EbonBuilds" width="100%">
+  <img src="../../assets/banner.svg" alt="EbonBuilds — Automatyzacja ech dla ProjectEbonhold" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/lua-syntax.yml"><img src="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/lua-syntax.yml/badge.svg" alt="Checks"></a>
-  <a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest"><img src="https://img.shields.io/github/v/release/Lzra2000/ProjectEbonHoldBuildAutomation?label=release&color=2a6e5a" alt="Latest release"></a>
+  <a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/lua-syntax.yml"><img src="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/lua-syntax.yml/badge.svg" alt="Sprawdzenia CI"></a>
+  <a href="https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest"><img src="https://img.shields.io/github/v/release/Lzra2000/ProjectEbonHoldBuildAutomation?label=release&color=2a6e5a" alt="Najnowsze wydanie"></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-EbonBuilds%20License-4a5568" alt="Licencja"></a>
   <img src="https://img.shields.io/badge/WoW-3.3.5a%20(12340)-4a7ab5" alt="WoW 3.3.5a">
-  <img src="https://img.shields.io/badge/Lua-5.1-8a5fc9" alt="Lua 5.1">
 </p>
 
 <p align="center">
   <a href="../../README.md">English</a> | <a href="README.de.md">Deutsch</a> | <a href="README.ru.md">Русский</a> | <a href="README.pt-BR.md">Português (Brasil)</a> | <a href="README.es.md">Español</a> | <a href="README.fr.md">Français</a> | <b>Polski</b>
 </p>
 
-Addon do World of Warcraft (3.3.5a) dla **ProjectEbonhold**, który automatyzuje wybory echa (Banish / Reroll / Freeze / Select) na podstawie zdefiniowanego przez ciebie builda i z czasem sam się dostraja na podstawie prawdziwych danych z gry.
+**EbonBuilds** to addon kliencki World of Warcraft **3.3.5a** dla graczy na prywatnych serwerach **[ProjectEbonhold](https://github.com/Lzra2000/ProjectEbonhold)**. Definiujesz build — wagi ech, polityki i intencję autopilota — a EbonBuilds ocenia każdy ekran wyboru echa (Banish / Reroll / Freeze / Select) w twoim imieniu, rejestruje, co się wydarzyło, i zamienia prawdziwe dane z runów w weryfikowalne sugestie dostrajania.
 
-Wymaga **ProjectEbonhold** lub **ProjectEbonhold Enhanced**. Niektóre funkcje dodatkowo korzystają z **[Details!](https://www.curseforge.com/wow/addons/details)**, jeśli jest zainstalowany.
+Stworzony dla raiderów i grinderów ech ProjectEbonhold, którzy chcą spójnej automatyzacji bez rezygnacji z kontroli: każda akcja jest logowana, rekomendacje wymagają twojej akceptacji, a Manual Training Mode pozwala addonowi uczyć się z przemyślanych wyborów.
 
+## Szybka instalacja
+
+1. Pobierz **`EbonBuilds.zip`** z [najnowszego wydania](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest).
+2. Rozpakuj archiwum. Folder musi nazywać się **`EbonBuilds`** (zgodnie z `EbonBuilds.toc`).
+3. Skopiuj go do `World of Warcraft/Interface/AddOns/`.
+4. Uruchom grę ponownie lub wpisz `/reload`.
+
+**Alternatywnie przez Git:**
+```
+cd "World of Warcraft/Interface/AddOns"
+git clone https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation.git EbonBuilds
+```
+
+**Wymaganie serwera:** ProjectEbonhold dostarcza własny addon serwerowy. Zainstaluj **ProjectEbonhold** lub **ProjectEbonhold Enhanced** po stronie klienta zgodnie z instrukcjami serwera — EbonBuilds zależy od niego w kwestii tablic ech, danych affixów i kilku funkcji integracyjnych. Bez niego EbonBuilds nie będzie działać.
+
+**Opcjonalnie:** **[Details!](https://www.curseforge.com/wow/addons/details)** włącza sugestie wag oparte na DPS i bogatsze statystyki. Logowanie DPS w walce w Logbooku (v3.84+) działa bez Details!, gdy jest włączone w Ustawieniach.
+
+Otwórz addon poleceniem **`/ebb`** lub **`/ebonbuilds`**.
+
+## Funkcje
+
+| Obszar | Co otrzymujesz |
+| --- | --- |
+| **Autopilot** | Presety intencji (Save charges / Balanced / Chase upgrades), scoring per echo, śledzenie freeze trwałe w runie oraz **Logbook** skoncentrowany na decyzjach z uzasadnieniem i zużyciem ładunków. |
+| **Builds** | Wagi per echo (w tym per rangi jakości), zablokowane/zbanowane sloty, snapshoty postaci (talenty, glify, ekwipunek), Tuning Advisor, Manual Training Mode, eksport EchoWishlist (`EWL1`) oraz zrzuty **Export (AI)** w postaci zwykłego tekstu. |
+| **Public Builds** | Przeglądaj buildy społeczności, inspekcja priorytetów i snapshotów, głosowanie, import oraz (gdy serwer to obsługuje) zapisywanie lub stosowanie **server loadouts**. |
+| **Affixes** | Panel referencyjny affixów, kropki affixów na torbach (domyślne torby, Bagnon, Combuctor) oraz modelowanie ekwipunku w zakładce Postać. |
+| **DPS i statystyki** | Opcjonalne próbki DPS w walce dołączone do runów i widoczne w Logbooku; śledzenie DPS przez Details! i synchronizacja częstotliwości pojawiania się po instalacji i zgodzie. Przestrzeń statystyk z Summary, Actions, Echoes i Recommendations popartymi dowodami. |
+| **Locales** | UI edytora buildów po niemiecku, hiszpańsku, francusku, polsku, brazylijskim portugalsku i rosyjsku — wykrywane automatycznie z klienta lub nadpisywane w Ustawieniach. |
+
+Inne narzędzia: **Tome Atlas** (lokalizacje dropów od społeczności), **Missing Echoes** (ważone echa, których jeszcze nie nauczyłeś), **budget pacing** na cały run oraz opcjonalna auto-sprzedaż u vendora.
 
 <p align="center">
-  <img src="../../assets/how-it-works.svg" alt="How it works" width="100%">
+  <img src="../../assets/how-it-works.svg" alt="Zdefiniuj build, Autopilot działa na ekranach wyboru, dane są śledzone, Tuning Advisor sugeruje korekty, i pętla się powtarza" width="100%">
 </p>
-
-## Co robi
-
-- **Definiowanie builda**: wagi dla każdego echa, bonusy jakości/rodziny/nowości, zablokowane sloty, zbanowane echa.
-- **Automatyzacja**: ocenia każdy ekran wyboru echa względem twojego builda i działa (banish/reroll/freeze/select) za ciebie.
-- **Tuning Advisor**: porównuje twoje progi Banish/Reroll/Freeze z tym, co twój build faktycznie dostaje w ofercie (nie z modelem teoretycznym), sugeruje lepsze wartości i może je stopniowo dostrajać automatycznie z czasem.
-- **Rozkładanie budżetu na cały run**: progi automatycznie stają się bardziej rygorystyczne, gdy ładunki Banish/Reroll/Freeze się kończą, żebyś nie wydał ostatnich ładunków na wątpliwe oferty.
-- **Śledzenie DPS i częstotliwości pojawiania się**: przy zainstalowanym Details! śledzi prawdziwy DPS dla każdego aktywnego echa; zawsze śledzi, jak często dane echo faktycznie pojawia się na ekranie wyboru. Oba te dane można opcjonalnie synchronizować z innymi graczami tej samej klasy.
-- **Manual Training Mode**: zawieś automatyzację dla builda, wybieraj ręcznie, a EbonBuilds uczy się na podstawie twoich wyborów, generując sugestie wag na podstawie tego, co faktycznie preferowałeś.
-- **Sugestie wag i bonusów**: dane DPS i ręczne wybory razem zasilają sugestie wag dla poszczególnych ech, a także (eksperymentalnie) sugestie bonusów jakości/rodziny.
-- **Export (AI)**: pełny zrzut tekstowy ustawień builda, wszystkich ech dostępnych dla twojej klasy z prawdziwymi opisami efektów oraz wszystkich danych dostrajania — pomyślany do wklejenia w czacie z AI do analizy.
-- **Tome Atlas**: lokalizacje dropów tomów echa, zebrane przez społeczność.
-- **Public Builds**: przeglądaj i importuj buildy udostępnione przez innych graczy.
-
-Szczegółowe wyjaśnienia każdej funkcji i pełną historię wersji znajdziesz w [FAQ](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/faq/) / [CHANGELOG.md](../../CHANGELOG.md).
 
 ## Zrzuty ekranu
 
-Przegląd podąża za rzeczywistym przepływem: skonfiguruj build, pozwól grać Autopilotowi, ucz się z danych.
+| Edytor builda — priorytety | Przegląd builda i Autopilot |
+| --- | --- |
+| <img src="../../assets/screenshots/editor-priorities.png" alt="Edytor priorytetów ech" width="100%"> | <img src="../../assets/screenshots/build-overview.png" alt="Przegląd builda" width="100%"> |
 
-### 1 · Konfiguracja builda
+| Logbook | Statystyki — rekomendacje |
+| --- | --- |
+| <img src="../../assets/screenshots/logbook.png" alt="Logbook decyzji" width="100%"> | <img src="../../assets/screenshots/stats-recommendations.png" alt="Rekomendacje poparte dowodami" width="100%"> |
 
-<img src="../../assets/screenshots/editor-priorities.png" alt="editor-priorities" width="100%">
+Więcej zrzutów i pełna trasa UI znajdują się w [`assets/screenshots/`](../../assets/screenshots/) oraz na [stronie dokumentacji](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/getting-started/).
 
-*Priorytety ech: wartości rang, zasady i finalne wyniki automatyzacji.*
+## Dokumentacja i wsparcie
 
-<img src="../../assets/screenshots/editor-modifiers.png" alt="editor-modifiers" width="100%">
+| Zasób | Link |
+| --- | --- |
+| Dokumentacja (Pierwsze kroki, Ustawienia, FAQ) | [lzra2000.github.io/ProjectEbonHoldBuildAutomation](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/) |
+| FAQ | [FAQ](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/faq/) |
+| Wydania i changelog | [Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases) · [`CHANGELOG.md`](../../CHANGELOG.md) |
+| Zgłoszenia błędów i propozycje funkcji | [Issues](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues) |
+| Bezpieczeństwo | [`SECURITY.md`](../../SECURITY.md) |
 
-*Modyfikatory: strategia rang, nacisk na role, bonus unikalnego echa.*
-
-<img src="../../assets/screenshots/editor-autopilot.png" alt="editor-autopilot" width="100%">
-
-*Autopilot: wybierz cel i dostrój progi.*
-
-### 2 · Zakładka Postać
-
-<img src="../../assets/screenshots/character-overview.png" alt="character-overview" width="100%">
-
-*Migawka postaci: talenty, glify i ekwipunek.*
-
-<img src="../../assets/screenshots/character-talents.png" alt="character-talents" width="100%">
-
-*Pełne drzewka talentów z rozkładem migawki.*
-
-<img src="../../assets/screenshots/character-gear.png" alt="character-gear" width="100%">
-
-*Ekwipunek z afiksami i modelowanymi wynikami.*
-
-### 3 · Uruchomienie
-
-<img src="../../assets/screenshots/build-overview.png" alt="build-overview" width="100%">
-
-*Przegląd builda: zablokowane echa, udostępnianie, eksporty.*
-
-<img src="../../assets/screenshots/logbook.png" alt="logbook" width="100%">
-
-*Dziennik: każda decyzja z uzasadnieniem i alternatywą.*
-
-### 4 · Nauka z danych
-
-<img src="../../assets/screenshots/stats-summary.png" alt="stats-summary" width="100%">
-
-*Podsumowanie statystyk zarejestrowanych przebiegów.*
-
-<img src="../../assets/screenshots/stats-actions.png" alt="stats-actions" width="100%">
-
-*Jak faktycznie użyto czterech akcji.*
-
-<img src="../../assets/screenshots/stats-recommendations.png" alt="stats-recommendations" width="100%">
-
-*Rekomendacje oparte na danych, z pewnością i odnośnikami.*
-
-<img src="../../assets/screenshots/missing-echoes.png" alt="missing-echoes" width="100%">
-
-*Brakujące ważone echa i ich źródła.*
-
-## Instalacja
-
-Katalog główny tego repozytorium *jest* folderem addonu (`EbonBuilds.toc`, `core/`, `modules/` znajdują się na najwyższym poziomie, nie w podfolderze).
-
-**Przez Git:**
-```
-cd "World of Warcraft/Interface/AddOns"
-git clone <this-repo-url> EbonBuilds
-```
-
-**Przez pobranie ZIP:** przycisk „Download ZIP” na GitHubie nazywa wypakowany folder zgodnie z nazwą gałęzi (np. `EbonBuilds-main`) — przed umieszczeniem go w `Interface/AddOns/` zmień nazwę dokładnie na `EbonBuilds`, żeby nazwa folderu pasowała do `EbonBuilds.toc`.
-
-Następnie zrestartuj grę lub wykonaj `/reload`.
-
-## Komendy
-
-Tylko `/ebb` (lub `/ebonbuilds`) — otwiera lub zamyka główne okno. Wszystko, co wcześniej było osobną komendą, znajduje się teraz pod ikoną zębatki (Ustawienia) w nagłówku okna, wszystko w jednym miejscu zamiast podkomend do zapamiętania: język, automatyczna sprzedaż, kropki afiksów w torbach, logowanie debugowania, Click Trace, logi debugowania/błędów/Click Trace, Tuning Advisor, Tome Atlas, spis afiksów, przewodnik po komendach oraz eksport EWL i reset Manual Training aktywnego builda.
-
-## Lokalizacja
-
-Zakładki, przyciski i podpowiedzi edytora buildów są przetłumaczone na niemiecki, hiszpański, francuski, polski, portugalski (Brazylia) i rosyjski. EbonBuilds wybiera język automatycznie na podstawie klienta; można go wymusić przez `/ebb locale <code>`. Dodanie języka: `sh scripts/new-locale.sh <code>` generuje wstępnie wypełniony plik startowy — pozostałe kroki opisuje `CONTRIBUTING.md`. Terminy z gry (Echo, Build, Banish/Reroll/Freeze/Select, Autopilot) pozostają po angielsku we wszystkich językach.
-
-## Dokumentacja
-
-[Strona dokumentacji](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/) obejmuje pierwsze kroki, wszystkie ustawienia, pełne przeszukiwalne FAQ, lokalizację, rozwój i rozwiązywanie problemów. Jej źródła leżą w [`docs/`](../../docs/), są wersjonowane razem z kodem i publikowane na GitHub Pages przy każdym merge'u do `main`. Kwestie bezpieczeństwa — wrogie payloady synchronizacji, złośliwe ciągi importu, zgoda na udostępnianie danych — mają własny kanał zgłoszeń: zobacz [SECURITY.md](../../SECURITY.md).
-
-## Zgłaszanie błędów
-
-Dołącz do zgłoszenia zawartość logu błędów lub logu debugowania (Ustawienia — ikona zębatki — Windows & Tools) — to zdecydowanie najszybszy sposób, by coś zostało naprawione, a nie zgadywane.
+Przy zgłaszaniu błędów dołącz wynik z **Ustawienia → Windows & tools → Error log** lub **Debug log** — to najszybsza droga do naprawy.
 
 ## Rozwój
 
-- Czysty Lua, API WotLK 3.3.5a (Interface 30300). Bez kroku budowania — katalog główny repo *jest* strukturą folderu oczekiwaną przez `Interface/AddOns/`.
-- Jednorazowo: `sh scripts/dev-setup.sh` instaluje narzędzia (`lua5.1`, `zip`; Debian/Ubuntu — na Windows przez WSL).
-- `sh scripts/check.sh` uruchamia te same kontrole co CI jednym poleceniem: składnia, zestaw testów, weryfikacja `.toc`, kontrola API 3.3.5a, nagłówki plików.
-- Wydania idą przez `sh scripts/release.sh <version>`; wypchnięty tag publikuje GitHub Release automatycznie przez workflow.
-- Pełny przewodnik (po angielsku): [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+Wkład jest mile widziany. Zobacz [`CONTRIBUTING.md`](../../CONTRIBUTING.md) w sprawie konfiguracji, konwencji i checklisty przed PR.
+
+Lokalne testy, zgodność z CI i debugowanie nieudanych uruchomień Actions — w **[`docs/dev-testing.md`](../../docs/dev-testing.md)**. Szybki start:
+
+```sh
+sh scripts/dev-setup.sh    # jednorazowa toolchain (Debian/Ubuntu; na Windows użyj WSL)
+sh scripts/check.sh        # szybka pętla lokalna (składnia, testy, .toc, lint API 3.3.5a)
+sh scripts/check.sh --full # pełna suite uruchamiana przez CI przed merge
+sh scripts/build-dist.sh   # tworzy dist/EbonBuilds.zip
+```
+
+Korzeń repozytorium to folder addonu (`EbonBuilds.toc`, `core/`, `modules/` na najwyższym poziomie). Tagi release uruchamiają [`.github/workflows/release.yml`](../../.github/workflows/release.yml), który publikuje `EbonBuilds.zip` na GitHub Releases.
 
 ## Licencja
 
-Zobacz [`LICENSE`](../../LICENSE). Użytek osobisty i w społecznościach serwerów prywatnych jest darmowy; rozpowszechnianie zmodyfikowanych wersji pod nazwą EbonBuilds lub użytek komercyjny wymaga uprzedniej zgody właściciela praw.
+Zobacz [`LICENSE`](../../LICENSE). Użytek osobisty i w społecznościach prywatnych serwerów jest dozwolony dla niezmienionych oficjalnych wydań. Redystrybucja zmodyfikowanych wersji pod nazwą EbonBuilds lub użytek komercyjny wymaga wcześniejszej zgody właściciela praw autorskich.

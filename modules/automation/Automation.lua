@@ -1000,7 +1000,7 @@ local function ResolveFreezeUncertainty(build, board, runData)
     return "resolved"
 end
 
-local function AttachRuntimeState(board)
+local function AttachRuntimeState(board, choices)
     board.pendingFreezeSlot = boardState.pendingFreezeSlot
     board.pendingFreezeEchoID = boardState.pendingFreezeEchoID
     board.frozenStateUncertain = boardState.frozenStateUncertain
@@ -1009,6 +1009,22 @@ local function AttachRuntimeState(board)
     board.frozenThisBoardEchoIDs = boardState.frozenThisBoardEchoIDs
     board.runFrozenEchoIDs = boardState.frozenEchoIDs
     board.pendingAction = boardState.pendingAction
+    board.choices = choices
+    board.boardVisible = board.isValid and #(board.slots or {}) > 0
+
+    local api = EbonBuilds.ProjectAPI
+    board.serverPendingAction = api and type(api.GetPendingAction) == "function"
+        and api.GetPendingAction() or nil
+
+    local perks = ProjectEbonhold and ProjectEbonhold.Perks
+    if type(perks) == "table" then
+        board.serverBoardState = perks.boardState
+        board.offerId = board.offerId or perks.offerId
+    end
+
+    if EbonBuilds.AutomationBoardStateMachine then
+        EbonBuilds.AutomationBoardStateMachine.Attach(board, board)
+    end
 end
 
 local function ResolvePendingAction(board)
@@ -1065,6 +1081,12 @@ local function LogBoardDecision(board, decision)
         end
     end
     EbonBuilds.DebugLog.AddF("Frozen: %d/%d", board.frozenCount or 0, board.maxFrozen or 2)
+    if board.lifecycleState then
+        EbonBuilds.DebugLog.AddF("Board lifecycle: %s (%s, %s)",
+            tostring(board.lifecycleState),
+            tostring(board.lifecycleReasonCode or "?"),
+            tostring(board.lifecycleSource or "derived"))
+    end
     EbonBuilds.DebugLog.Add("Pick target: " .. (pick and string.format("[%d] %s", pick.index, pick.name) or "none"))
     EbonBuilds.DebugLog.Add("Freeze candidate: " .. (freeze and string.format("[%d] %s", freeze.index, freeze.name) or "none"))
     EbonBuilds.DebugLog.Add("Pending action: " .. (board.pendingFreezeSlot and ("Freeze slot " .. board.pendingFreezeSlot) or "none"))
@@ -1172,6 +1194,12 @@ local function ExecuteDecision(build, board, decision)
             return true
         end
     elseif decision.action == "REROLL" then
+        local BSM = EbonBuilds.AutomationBoardStateMachine
+        if BSM and board.lifecycleState and BSM.IsRerollBlocked(board.lifecycleState) then
+            EbonBuilds.DebugLog.Add(BSM.RerollBlockMessage(board.lifecycleState, board.lifecycleReasonCode)
+                or "Reroll blocked: board lifecycle forbids reroll")
+            return false
+        end
         local allowed, reason = Decision.CanReroll(board)
         if not allowed then
             EbonBuilds.DebugLog.Add("Reroll blocked: " .. tostring(reason))
@@ -1267,7 +1295,7 @@ function EbonBuilds.Automation.Evaluate()
             Decision.RefreshFrozenState(board)
         end
         ObserveBoard(board)
-        AttachRuntimeState(board)
+        AttachRuntimeState(board, choices)
         boardState.state = Decision.STATE.EVALUATING
 
         local decision = Decision.Decide(board)

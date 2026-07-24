@@ -1,5 +1,10 @@
 # Troubleshooting
 
+<p class="ebb-lead">
+When something does not work as expected — from silent buttons to odd Autopilot decisions.
+For feature explanations, see the <a href="faq.md">FAQ</a>.
+</p>
+
 ## Something visibly failed
 
 Settings -> Windows & Tools -> **Error log**. If an error was caught, it's there with a stack trace -- paste it into a [bug report](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/new/choose). An empty error log next to something clearly broken is useful information too: say so in the report, it may point at a handler that isn't error-wrapped yet.

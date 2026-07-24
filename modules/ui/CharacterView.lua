@@ -8,6 +8,24 @@ local addonName, EbonBuilds = ...
 EbonBuilds.CharacterView = {}
 
 local V = EbonBuilds.CharacterView
+
+-- Pure data layer, split out to modules/build/CharacterViewData.lua (issue #19).
+-- Local aliases keep every existing call site and test hook unchanged.
+local Data = EbonBuilds.CharacterViewData
+local TalentPointsText = Data.TalentPointsText
+local HasCompleteTalentCatalog = Data.HasCompleteTalentCatalog
+local BuildGearSummary = Data.BuildGearSummary
+local ResolveViewportWidth = Data.ResolveViewportWidth
+local TalentCanvasWidth = Data.TalentCanvasWidth
+local TalentGridMetrics = Data.TalentGridMetrics
+local TalentStatusText = Data.TalentStatusText
+local GlyphPresentation = Data.GlyphPresentation
+local TalentDisplayRank = Data.TalentDisplayRank
+local SavedItemAffix = Data.SavedItemAffix
+local BuildGearAffixColumns = Data.BuildGearAffixColumns
+local BuildRecognizedStats = Data.BuildRecognizedStats
+local STAT_NAMES = Data.STAT_NAMES
+
 local Theme
 local viewFrame, pageHost, actionBar, snapshotStatus, adoptBtn, itemInfoToken
 local navButtons, pages = {}, {}
@@ -93,91 +111,16 @@ local function SetStatusText(label, text, kind)
     label:SetTextColor(unpack(color))
 end
 
-local function TalentPointsText(snapshot)
-    local values = {}
-    for tab = 1, 3 do
-        values[#values + 1] = tostring(snapshot and snapshot.talents and snapshot.talents[tab]
-            and snapshot.talents[tab].points or 0)
-    end
-    return table.concat(values, " / ")
-end
-
-local function HasCompleteTalentCatalog(snapshot)
-    local foundTree = false
-    for _, tree in pairs(snapshot and snapshot.talents or {}) do
-        foundTree = true
-        if tree.catalogComplete ~= true then return false end
-    end
-    return foundTree
-end
-
 V._HasCompleteTalentCatalogForTests = HasCompleteTalentCatalog
-
-local function ComparisonText(result)
-    if not result or result.reason == "NO_SNAPSHOT" then
-        return "No saved talent snapshot"
-    elseif result.reason == "CLASS_MISMATCH" then
-        return "Saved snapshot belongs to another class"
-    elseif not result.comparable then
-        return "Talent comparison unavailable"
-    elseif result.unknownTalentCount > 0 then
-        return string.format("Incomplete data · %d unresolved · %d ranks missing",
-            result.unknownTalentCount, result.missingRanks)
-    elseif result.missingRanks > 0 then
-        return string.format("Needs attention · %d ranks missing · %d additional",
-            result.missingRanks, result.additionalRanks)
-    elseif result.additionalRanks > 0 then
-        return string.format("Snapshot matched · %d additional ranks", result.additionalRanks)
-    end
-    return "Saved talent snapshot matched"
-end
-
-local function ComparisonKind(result)
-    if not result or not result.comparable then return "warning" end
-    if result.missingRanks > 0 or result.unknownTalentCount > 0 then return "warning" end
-    return "success"
-end
-
-local function BuildGearSummary(gear)
-    local equipped, resolved, pending = 0, 0, 0
-    for _, slot in ipairs(EbonBuilds.CharacterSnapshot.EQUIPMENT_SLOTS or {}) do
-        local item = gear and gear[slot.id]
-        if item then
-            equipped = equipped + 1
-            if item.resolved then resolved = resolved + 1 else pending = pending + 1 end
-        end
-    end
-    return {
-        total = #(EbonBuilds.CharacterSnapshot.EQUIPMENT_SLOTS or {}),
-        equipped = equipped,
-        resolved = resolved,
-        pending = pending,
-        empty = #(EbonBuilds.CharacterSnapshot.EQUIPMENT_SLOTS or {}) - equipped,
-    }
-end
-
 V._BuildGearSummaryForTests = BuildGearSummary
-V._LayoutForTests = function(width)
-    width = tonumber(width) or 0
-    return { compact = width < 620, inspectorWidth = width < 700 and 190 or 220 }
-end
+V._LayoutForTests = Data.LayoutBreakpoints
+V._ResolveViewportWidthForTests = ResolveViewportWidth
 
 -- Character subpages are hidden when another subview is active. A hidden
 -- frame can briefly report zero or a stale width when it is shown again,
 -- which previously made the same window alternate between desktop and
 -- compact layouts. Prefer the mounted viewport and its visible parent; the
 -- page width is only a last-resort fallback.
-local function ResolveViewportWidth(viewWidth, parentWidth, pageWidth)
-    local candidates = { viewWidth, parentWidth, pageWidth }
-    for _, candidate in ipairs(candidates) do
-        candidate = tonumber(candidate) or 0
-        if candidate > 1 then return candidate end
-    end
-    return 1
-end
-
-V._ResolveViewportWidthForTests = ResolveViewportWidth
-
 local function CharacterViewportWidth(page)
     local viewWidth = viewFrame and viewFrame:GetWidth() or 0
     local parentWidth = 0
@@ -415,68 +358,12 @@ local TUI = {
     arrowPool = {},
 }
 
--- The native WotLK picker uses a narrow four-column grid instead of
--- distributing columns across the whole window. At the addon's common 120%
--- scale these logical measurements land close to the original client's
--- roughly 40 px icons and 62 px center-to-center column spacing.
-local TALENT_NODE_SIZE = 34
-local TALENT_COLUMN_STEP = 52
-local TALENT_MAX_TIER_STEP = 52
-local TALENT_MIN_TIER_STEP = TALENT_NODE_SIZE + 4
-local TALENT_BACKGROUND_WIDTH = 254
-local TALENT_TOP_PADDING = 10
-local TALENT_BOTTOM_PADDING = 8
-
--- Hidden frames can report their old/default width for one frame after their
--- page is shown. Derive the canvas width from the page's own deterministic
--- layout instead, so the first render and the later OnSizeChanged render use
--- the same horizontal center.
-local function TalentCanvasWidth(pageWidth)
-    pageWidth = math.max(1, tonumber(pageWidth) or 0)
-    local areaWidth = math.max(1, pageWidth - 8) -- body has four-pixel side insets
-    if pageWidth >= 620 then
-        local inspectorWidth = pageWidth < 700 and 190 or 220
-        areaWidth = math.max(1, areaWidth - inspectorWidth - 7)
-    end
-    return math.max(320, math.floor(areaWidth - 34)) -- scrollbar plus child gutter
-end
-
 V._TalentCanvasWidthForTests = TalentCanvasWidth
+V._TalentGridMetricsForTests = TalentGridMetrics
 
 local function CurrentTalentCanvasWidth()
     return TalentCanvasWidth(CharacterViewportWidth(pages.talents))
 end
-
-local function TalentGridMetrics(canvasWidth, viewportHeight, maxTier)
-    canvasWidth = math.max(300, tonumber(canvasWidth) or 0)
-    viewportHeight = math.max(240, tonumber(viewportHeight) or 0)
-    maxTier = math.max(1, tonumber(maxTier) or 1)
-
-    local tierStep = TALENT_MAX_TIER_STEP
-    if maxTier > 1 then
-        local fitStep = math.floor((viewportHeight - TALENT_TOP_PADDING
-            - TALENT_BOTTOM_PADDING - TALENT_NODE_SIZE) / (maxTier - 1))
-        tierStep = math.max(TALENT_MIN_TIER_STEP, math.min(TALENT_MAX_TIER_STEP, fitStep))
-    end
-    local contentHeight = math.max(viewportHeight, TALENT_TOP_PADDING
-        + (maxTier - 1) * tierStep + TALENT_NODE_SIZE + TALENT_BOTTOM_PADDING)
-    local backgroundWidth = math.min(TALENT_BACKGROUND_WIDTH, canvasWidth - 12)
-    local backgroundLeft = math.floor((canvasWidth - backgroundWidth) / 2)
-    local gridWidth = TALENT_NODE_SIZE + 3 * TALENT_COLUMN_STEP
-    local gridLeft = backgroundLeft + math.floor((backgroundWidth - gridWidth) / 2)
-    return {
-        nodeSize = TALENT_NODE_SIZE,
-        columnStep = TALENT_COLUMN_STEP,
-        tierStep = tierStep,
-        contentHeight = contentHeight,
-        backgroundWidth = backgroundWidth,
-        backgroundLeft = backgroundLeft,
-        gridLeft = gridLeft,
-        top = TALENT_TOP_PADDING,
-    }
-end
-
-V._TalentGridMetricsForTests = TalentGridMetrics
 
 local function ActiveTree()
     return displayed.talents and displayed.talents[TUI.activeTree]
@@ -500,19 +387,8 @@ local function FindSelectedTalent()
     return first
 end
 
-local function TalentStatusText(state)
-    if not state then return "Saved snapshot allocation" end
-    if state.state == "exact" then return "Matches saved snapshot" end
-    if state.state == "missing" then return string.format("Missing %d saved ranks", -state.delta) end
-    if state.state == "additional" then return string.format("%d additional ranks", state.delta) end
-    if state.state == "unknown" then return "Saved talent could not be resolved" end
-    return "Unselected in both"
-end
-
 local function TalentSpellId(tab, talent)
-    return talent and (talent.spellId
-        or EbonBuilds.TalentCatalog and EbonBuilds.TalentCatalog.GetSpellId
-        and EbonBuilds.TalentCatalog.GetSpellId(displayed.classToken, tab, talent)) or nil
+    return Data.TalentSpellId(displayed.classToken, tab, talent)
 end
 
 V._TalentSpellIdForTests = TalentSpellId
@@ -551,32 +427,11 @@ local function ShowTalentTooltip(button)
     GameTooltip:Show()
 end
 
-local function GlyphPresentation()
-    local major, minor = {}, {}
-    for socket = 1, 6 do
-        local glyph = displayed.glyphs and (displayed.glyphs[socket]
-            or displayed.glyphs[tostring(socket)])
-        if glyph and glyph.spellId then
-            local name = glyph.name
-            if (not name or name == "") and GetSpellInfo then name = GetSpellInfo(glyph.spellId) end
-            local kind = glyph.kind or EbonBuilds.CharacterSnapshot.GLYPH_SOCKET_TYPE[socket]
-            local target = kind == "major" and major or minor
-            target[#target + 1] = name or ("Glyph " .. tostring(glyph.spellId))
-        end
-    end
-
-    local lines = {}
-    for _, name in ipairs(major) do lines[#lines + 1] = "|cffffd100M|r · " .. name end
-    for _, name in ipairs(minor) do lines[#lines + 1] = "|cff7fc8ffm|r · " .. name end
-    if #lines == 0 then lines[1] = "No glyphs stored in this snapshot." end
-    return string.format("Glyphs · Major %d/3 · Minor %d/3", #major, #minor), table.concat(lines, "\n")
+local function GlyphPresentationForDisplay()
+    return GlyphPresentation(displayed.glyphs)
 end
 
-V._GlyphPresentationForTests = GlyphPresentation
-
-local function TalentDisplayRank(talent, state)
-    return tonumber(talent.rank) or 0
-end
+V._GlyphPresentationForTests = GlyphPresentationForDisplay
 
 local function ApplyTalentNodeVisual(button)
     local talent, state = button._talent, button._comparison
@@ -640,7 +495,7 @@ local function RefreshTalentInspector()
 end
 
 local function RefreshGlyphSummary()
-    local title, body = GlyphPresentation()
+    local title, body = GlyphPresentationForDisplay()
     TUI.glyphTitle:SetText(title)
     TUI.glyphBody:SetText(body)
 end
@@ -650,7 +505,7 @@ local function CreateTalentNode(parent)
     if EbonBuilds.Debug and EbonBuilds.Debug.ProtectScript then
         EbonBuilds.Debug.ProtectScript(button, "CharacterView.TalentNode")
     end
-    button:SetSize(TALENT_NODE_SIZE, TALENT_NODE_SIZE)
+    button:SetSize(34, 34)
     Theme.ApplyCard(button)
     local icon = button:CreateTexture(nil, "ARTWORK")
     icon:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
@@ -816,7 +671,7 @@ local function RenderTalentTree()
     for _, button in ipairs(TUI.nodePool) do button:Hide() end
     if not tree then
         HideTalentConnections()
-        ConfigureTreeBackground(nil, 400, 440, 73, TALENT_BACKGROUND_WIDTH)
+        ConfigureTreeBackground(nil, 400, 440, 73, 254)
         TUI.canvasChild:SetHeight(math.max(420, TUI.canvasScroll:GetHeight() or 0))
         TUI.canvasBar:SetMinMaxValues(0, 0)
         return
@@ -1190,49 +1045,10 @@ local LEFT_SLOTS = { 1, 2, 3, 15, 5, 4, 19, 9 }
 local RIGHT_SLOTS = { 10, 6, 7, 8, 11, 12, 13, 14 }
 local BOTTOM_SLOTS = { 16, 17, 18 }
 
-local STAT_NAMES = {
-    ITEM_MOD_STRENGTH_SHORT = "Strength", ITEM_MOD_AGILITY_SHORT = "Agility",
-    ITEM_MOD_STAMINA_SHORT = "Stamina", ITEM_MOD_INTELLECT_SHORT = "Intellect",
-    ITEM_MOD_SPIRIT_SHORT = "Spirit", ITEM_MOD_ATTACK_POWER_SHORT = "Attack power",
-    ITEM_MOD_RANGED_ATTACK_POWER_SHORT = "Ranged attack power",
-    ITEM_MOD_SPELL_POWER_SHORT = "Spell power", ITEM_MOD_HIT_RATING_SHORT = "Hit",
-    ITEM_MOD_CRIT_RATING_SHORT = "Critical strike", ITEM_MOD_HASTE_RATING_SHORT = "Haste",
-    ITEM_MOD_EXPERTISE_RATING_SHORT = "Expertise",
-    ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = "Armor penetration",
-    ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = "Defense", ITEM_MOD_DODGE_RATING_SHORT = "Dodge",
-    ITEM_MOD_PARRY_RATING_SHORT = "Parry", ITEM_MOD_BLOCK_RATING_SHORT = "Block",
-    ITEM_MOD_MANA_REGENERATION_SHORT = "Mana regeneration",
-}
-
 local function SlotDefinition(slotId)
     for _, slot in ipairs(EbonBuilds.CharacterSnapshot.EQUIPMENT_SLOTS or {}) do
         if slot.id == slotId then return slot end
     end
-end
-
-local function SavedItemAffix(item)
-    if not item then return nil end
-    local itemName = item.name
-    if (not itemName or itemName == "") and item.link then
-        itemName = tostring(item.link):match("%[(.-)%]")
-    end
-    if not itemName or not EbonBuilds.AffixItemScan
-        or not EbonBuilds.AffixItemScan.ExtractSuffix then return nil end
-    local base, rank = EbonBuilds.AffixItemScan.ExtractSuffix(itemName)
-    return base and (base .. " " .. rank) or nil
-end
-
-local function BuildGearAffixColumns()
-    local entries = {}
-    for _, slot in ipairs(EbonBuilds.CharacterSnapshot.EQUIPMENT_SLOTS or {}) do
-        local affix = SavedItemAffix(displayed.gear and displayed.gear[slot.id])
-        if affix then entries[#entries + 1] = "|cffffd100" .. slot.name .. "|r · " .. affix end
-    end
-    if #entries == 0 then return "No affixes found in the saved equipment names.", "", 0 end
-    -- One full-width line per slot is more readable than two narrow columns:
-    -- long affix names otherwise receive the client's ambiguous trailing
-    -- ellipsis even though the complete value is present in the snapshot.
-    return table.concat(entries, "\n"), "", #entries
 end
 
 V._SavedItemAffixForTests = SavedItemAffix
@@ -1252,21 +1068,6 @@ local function ApplyGearSlotVisual(button)
     end
     if G.selectedSlot == button._slotId then border = Theme.ACCENT_GOLD end
     button:SetBackdropBorderColor(unpack(border))
-end
-
-local function BuildRecognizedStats(item, specKey)
-    if not item or not item.link or not item.resolved or not specKey then return {}, 0 end
-    local weights = EbonBuilds.GearScore.STAT_WEIGHTS[specKey]
-    if not weights then return {}, 0 end
-    local stats = GetItemStats and GetItemStats(item.link) or {}
-    local values = {}
-    for key, value in pairs(stats or {}) do
-        if weights[key] and type(value) == "number" then
-            values[#values + 1] = { name = STAT_NAMES[key] or key, value = value, weight = weights[key] }
-        end
-    end
-    table.sort(values, function(a, b) return a.name < b.name end)
-    return values, #values
 end
 
 local function RefreshGearInspector()
@@ -1596,7 +1397,7 @@ local function RefreshGear()
     local name = displayed.characterName or (StoredSnapshot() and "Saved character" or "No saved snapshot")
     local specKey = SpecKeyForContext()
     G.centerName:SetText(name .. (specKey and "\n" .. specKey:gsub("_", " · ") or ""))
-    local affixLeft, affixRight, affixCount = BuildGearAffixColumns()
+    local affixLeft, affixRight, affixCount = BuildGearAffixColumns(displayed.gear)
     G.affixTitle:SetText(string.format("Equipped affixes · %d", affixCount))
     G.affixLeft:SetText(affixLeft)
     G.affixRight:SetText(affixRight)

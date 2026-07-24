@@ -196,8 +196,49 @@ do
     equal(EbonBuilds.Locale.GetActiveLocale(), "enUS", "unsupported client locale falls back to English")
 end
 
+------------------------------------------------------------------------
+-- Polish ASCII fold (issue #40): headless fonts cannot render ł/ą/...
+-- UIParent is nil above, so ClientFontRendersPolish takes the safe
+-- "fold" path and L[] must never return raw Latin-Extended-A glyphs.
+------------------------------------------------------------------------
+do
+    local L = EbonBuilds.L
+    check(EbonBuilds.Locale.SetLocale("plPL"), "Polish locale activates")
+    -- Use a known plPL key that contains folded-needed letters when present;
+    -- if the translation is missing, L returns the English key (no fold needed).
+    local sampleKey = nil
+    local sampleValue = nil
+    for line in io.lines("modules/i18n/locales/plPL.lua") do
+        local en, pl = line:match('%["(.-)"%]%s*=%s*"(.-)"')
+        if en and pl and (pl:find("ł") or pl:find("ą") or pl:find("ć")
+            or pl:find("ę") or pl:find("ń") or pl:find("ś")
+            or pl:find("ź") or pl:find("ż") or pl:find("Ł")) then
+            sampleKey, sampleValue = en, pl
+            break
+        end
+    end
+    if sampleKey then
+        local folded = L[sampleKey]
+        check(folded ~= sampleValue, "Polish L[] folds diacritics when the font probe fails")
+        check(not folded:find("ł") and not folded:find("ą") and not folded:find("ń")
+            and not folded:find("ś") and not folded:find("ć") and not folded:find("ę")
+            and not folded:find("ź") and not folded:find("ż") and not folded:find("Ł"),
+            "folded Polish string has no Latin-Extended-A glyphs: " .. tostring(folded))
+        -- Spot-check known mappings on the folded result when the raw had them.
+        if sampleValue:find("ł", 1, true) then
+            check(folded:find("l", 1, true), "ł folds to l")
+        end
+    else
+        check(false, "plPL locale file should contain at least one diacritic for fold coverage")
+    end
+
+    -- English must never be folded.
+    check(EbonBuilds.Locale.SetLocale("enUS"), "restore English")
+    equal(L["Save build"], "Save build", "English lookup is never ASCII-folded")
+end
+
 if failures > 0 then
     io.stderr:write(string.format("%d i18n test(s) failed.\n", failures))
     os.exit(1)
 end
-print("Locale integrity passed: no dead keys, parity reported, registry behavior verified.")
+print("Locale integrity passed: no dead keys, parity reported, registry behavior verified, Polish fold checked.")

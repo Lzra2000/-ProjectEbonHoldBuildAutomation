@@ -125,4 +125,69 @@ assertTrue(sawContainer, "Bagnon-only Init dropped ContainerFrame_Update")
 assertTrue(sawBagnonUpdate, "Init did not hook Bagnon.ItemSlot.Update")
 assertTrue(not sawCombuctorUpdate, "Init hooked Combuctor when Combuctor was not loaded")
 
-print("BagAffixDots bag-addon hooks passed: default bags + Bagnon + Combuctor feature detection.")
+------------------------------------------------------------------------
+-- Architecture: WoWEvents one-shot + 3.3.5a quality arity (not RegisterEvent)
+------------------------------------------------------------------------
+assertTrue(src:find('WoWEvents.On("ADDON_LOADED"', 1, true)
+    or src:find("WoWEvents.On(\"ADDON_LOADED\"", 1, true),
+    "late bag-addon load must use WoWEvents.On(\"ADDON_LOADED\"), not frame:RegisterEvent")
+assertTrue(src:find("WoWEvents.Off(token)", 1, true),
+    "ADDON_LOADED listener must WoWEvents.Off(token) after a successful hook (one-shot)")
+assertTrue(not src:find(":RegisterEvent%s*%("),
+    "BagAffixDots must not call frame:RegisterEvent — route through core/WoWEvents.lua so architecture lint and one-shot Off stay enforceable (Bagnon/Combuctor late-load)")
+assertTrue(src:find("quality is 4th", 1, true) or src:find("quality is the 4th", 1, true),
+    "BagAffixDots must document GetContainerItemInfo quality as 4th return (3.3.5a; 3rd is locked)")
+
+-- Late-load: pending Combuctor registers then Offs after successful hook.
+do
+    local listeners = {}
+    local function WowOn(event, fn)
+        local token = { event = event, fn = fn }
+        listeners[#listeners + 1] = token
+        return token
+    end
+    local function WowOff(token)
+        for i = #listeners, 1, -1 do
+            if listeners[i] == token then table.remove(listeners, i) end
+        end
+    end
+    local function WowEmit(event, ...)
+        local snap = {}
+        for i, t in ipairs(listeners) do snap[i] = t end
+        for _, t in ipairs(snap) do
+            if t.event == event then t.fn(event, ...) end
+        end
+    end
+
+    function IsAddOnLoaded() return false end
+    function hooksecurefunc(owner, methodName, postHook)
+        if type(owner) == "string" then return end
+        local original = owner[methodName]
+        owner[methodName] = function(...)
+            original(...)
+            postHook(...)
+        end
+    end
+
+    local lateAddon = {
+        WoWEvents = { On = WowOn, Off = WowOff },
+        AffixItemScan = { Classify = function() return nil end },
+    }
+    EbonBuildsCharDB = EbonBuildsCharDB or {}
+    _G.Bagnon, _G.Combuctor = nil, nil
+    chunk, err = loadfile("modules/ui/BagAffixDots.lua")
+    if not chunk then fail(err) end
+    ok, result = pcall(chunk, "EbonBuilds", lateAddon)
+    if not ok then fail("late-load BagAffixDots: " .. tostring(result)) end
+    lateAddon.BagAffixDots.Init()
+    assertTrue(#listeners == 1, "ADDON_LOADED listener registered while bag addons are pending")
+
+    _G.Combuctor = { ItemSlot = { Update = function() end } }
+    local before = _G.Combuctor.ItemSlot.Update
+    WowEmit("ADDON_LOADED", "Combuctor")
+    assertTrue(_G.Combuctor.ItemSlot.Update ~= before, "late Combuctor load hooks ItemSlot.Update")
+    assertTrue(#listeners == 0,
+        "BagAffixDots ADDON_LOADED late-load listener must call WoWEvents.Off(token) after a successful bag-addon hook (got listeners still registered). Do not use frame:RegisterEvent; keep the one-shot via core/WoWEvents.lua. Bagnon and Combuctor are mutually exclusive in practice — Off after the first successful hook.")
+end
+
+print("BagAffixDots bag-addon hooks passed: default bags + Bagnon + Combuctor feature detection, WoWEvents one-shot, quality arity.")
