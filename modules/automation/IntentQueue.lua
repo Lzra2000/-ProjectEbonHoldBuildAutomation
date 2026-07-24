@@ -1,5 +1,7 @@
 local addonName, EbonBuilds = ...
 
+-- EbonBuilds: modules/automation/IntentQueue.lua
+-- Responsibility: client-side WP3 intent queue (one in-flight select/freeze/banish/reroll).
 -- Client-side stepping stone for WP3 (#52): one in-flight Autopilot intent
 -- (select / freeze / banish / reroll). Blocks duplicates, clears on board
 -- identity change, ProjectEbonhold pending-flag drop, or timeout. Full
