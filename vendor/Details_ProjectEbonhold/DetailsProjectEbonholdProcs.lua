@@ -18,8 +18,12 @@ end
 local PLAYER_GUID
 local recentCasts = {} -- { {spellId=, name=, t=}, ... }
 local recentCastIds = {} -- set of spellIds currently in the window
+-- Live attribution for the current Details segment (also referenced as
+-- combat.pe_proc_attribution). Overall Data merges per-segment tables.
 local attribution = {} -- [procId] = { [sourceId] = { amount=, hits= } }
 local MAX_RECENT = 24
+local ATTR_KEY = "pe_proc_attribution"
+local ATTR_MERGED_KEY = "pe_proc_overall_merged"
 -- Focus tint used by Details Player Details spell bars (129/125/69).
 local BREAKDOWN_FOCUS_COLOR = { 129 / 255, 125 / 255, 69 / 255, 1 }
 
@@ -112,28 +116,159 @@ local function IsPlayerSource(guid, flags)
     return false
 end
 
-function Procs.ResetCombatAttribution()
+local function IsOverallCombat(combat, details)
+    if type(combat) ~= "table" then
+        return false
+    end
+    details = details or (PE.GetDetails and PE.GetDetails())
+    if type(details) == "table" and combat == details.tabela_overall then
+        return true
+    end
+    if type(combat.GetCombatType) == "function" and DETAILS_SEGMENTTYPE_OVERALL then
+        local ok, ctype = pcall(combat.GetCombatType, combat)
+        if ok and ctype == DETAILS_SEGMENTTYPE_OVERALL then
+            return true
+        end
+    end
+    return false
+end
+
+local function AttachLiveToCombat(combat)
+    if type(combat) ~= "table" then
+        return
+    end
+    combat[ATTR_KEY] = attribution
+end
+
+-- Start a fresh live map for the new Details segment and pin it on the combat.
+function Procs.BeginCombatAttribution(combat)
     attribution = {}
+    recentCasts = {}
+    wipe(recentCastIds)
+    local details = PE.GetDetails and PE.GetDetails()
+    if type(combat) ~= "table" then
+        -- Only auto-resolve current combat while Details is in combat —
+        -- never overwrite a restored history/overall segment after /reload.
+        if type(details) == "table" and details.in_combat
+            and type(details.GetCurrentCombat) == "function" then
+            combat = details:GetCurrentCombat()
+        else
+            return
+        end
+    end
+    AttachLiveToCombat(combat)
+end
+
+-- Merge a finished segment into Details overall (once), matching Details DPS overall.
+function Procs.FinalizeCombatAttribution(combat)
+    if type(combat) ~= "table" then
+        return
+    end
+    -- Ensure the ended combat keeps its own table (not the next fight's live map).
+    if combat[ATTR_KEY] == attribution then
+        combat[ATTR_KEY] = Core.CopyProcAttribution(attribution)
+    elseif type(combat[ATTR_KEY]) ~= "table" then
+        combat[ATTR_KEY] = Core.CopyProcAttribution(attribution)
+    end
+
+    if combat[ATTR_MERGED_KEY] then
+        return
+    end
+    -- Only fold into overall when Details itself accepted the segment.
+    if not combat.overall_added then
+        return
+    end
+    local details = PE.GetDetails and PE.GetDetails()
+    local overall = details and details.tabela_overall
+    if type(overall) ~= "table" or overall == combat then
+        return
+    end
+    overall[ATTR_KEY] = Core.MergeProcAttribution(overall[ATTR_KEY] or {}, combat[ATTR_KEY])
+    combat[ATTR_MERGED_KEY] = true
+end
+
+-- Resolve which attribution map the Custom Display / breakdown should read.
+-- Overall Data: overall.pe_proc_attribution (+ live current fight while in combat).
+-- Segment / current: that combat's pe_proc_attribution (or live fallback).
+function Procs.GetAttributionForCombat(combat)
+    local details = PE.GetDetails and PE.GetDetails()
+    if type(combat) ~= "table" then
+        return attribution
+    end
+
+    if IsOverallCombat(combat, details) then
+        local merged = Core.CopyProcAttribution(combat[ATTR_KEY])
+        if type(details) == "table" and details.in_combat then
+            local current = type(details.GetCurrentCombat) == "function" and details:GetCurrentCombat()
+            if type(current) == "table" and current ~= combat and type(current[ATTR_KEY]) == "table" then
+                Core.MergeProcAttribution(merged, current[ATTR_KEY])
+            elseif attribution and next(attribution) then
+                Core.MergeProcAttribution(merged, attribution)
+            end
+        end
+        return merged
+    end
+
+    if type(combat[ATTR_KEY]) == "table" then
+        return combat[ATTR_KEY]
+    end
+
+    if type(details) == "table" and type(details.GetCurrentCombat) == "function" then
+        local current = details:GetCurrentCombat()
+        if combat == current then
+            AttachLiveToCombat(combat)
+            return attribution
+        end
+    end
+
+    return combat[ATTR_KEY] or {}
+end
+
+function Procs.ResetCombatAttribution()
+    Procs.BeginCombatAttribution(nil)
 end
 
 function Procs.GetAttribution()
     return attribution
 end
 
-function Procs.GetProcRows()
-    return Core.BuildProcRows(attribution, function(id)
+function Procs.GetProcRows(combat)
+    local attr = Procs.GetAttributionForCombat(combat)
+    return Core.BuildProcRows(attr, function(id)
         return PE.GetSpellName(id)
     end, function(id)
         return PE.GetSpellIcon(id)
     end)
 end
 
-function Procs.GetRowBreakdown(procId, sourceId)
-    return Core.BuildProcRowBreakdown(attribution, procId, sourceId, NameResolver)
+function Procs.GetRowBreakdown(procId, sourceId, combat)
+    local attr = Procs.GetAttributionForCombat(combat)
+    return Core.BuildProcRowBreakdown(attr, procId, sourceId, NameResolver)
+end
+
+-- Resolve combat object from a Details instance (showing segment).
+function Procs.GetInstanceCombat(instance)
+    if type(instance) ~= "table" then
+        return nil
+    end
+    if type(instance.showing) == "table" then
+        return instance.showing
+    end
+    if type(instance.GetCombat) == "function" then
+        local ok, combat = pcall(instance.GetCombat, instance)
+        if ok and type(combat) == "table" then
+            return combat
+        end
+    end
+    local details = PE.GetDetails and PE.GetDetails()
+    if type(details) == "table" and type(details.GetCurrentCombat) == "function" then
+        return details:GetCurrentCombat()
+    end
+    return nil
 end
 
 -- Resolve procId/sourceId from a Details custom-bar actor table.
-function Procs.ResolveActorPair(actor)
+function Procs.ResolveActorPair(actor, combat)
     if type(actor) ~= "table" then
         return nil, nil
     end
@@ -144,7 +279,7 @@ function Procs.ResolveActorPair(actor)
     end
     local key = actor.displayName or actor.nome or actor.name
     if type(key) == "string" and key ~= "" then
-        local rows = Procs.GetProcRows()
+        local rows = Procs.GetProcRows(combat)
         for i = 1, #rows do
             local row = rows[i]
             if row.key == key or row.procName == key then
@@ -176,12 +311,36 @@ local function AnnotateProcSpell(procId, sourceName)
     PE.SetSpellLabel(procId, label, PE.GetSpellIcon(procId))
 end
 
+local function EnsureLiveCombatAttach()
+    local details = PE.GetDetails and PE.GetDetails()
+    if type(details) ~= "table" or not details.in_combat then
+        return
+    end
+    if type(details.GetCurrentCombat) ~= "function" then
+        return
+    end
+    local combat = details:GetCurrentCombat()
+    if type(combat) ~= "table" then
+        return
+    end
+    if combat[ATTR_KEY] == attribution then
+        return
+    end
+    if type(combat[ATTR_KEY]) == "table" then
+        -- Resume the combat's store (e.g. mid-fight /reload) instead of wiping it.
+        attribution = combat[ATTR_KEY]
+    else
+        AttachLiveToCombat(combat)
+    end
+end
+
 local function OnDamage(spellId, spellName, amount)
     spellId = tonumber(spellId)
     amount = tonumber(amount) or 0
     if not spellId or amount <= 0 then
         return
     end
+    EnsureLiveCombatAttach()
     local now = Now()
     PruneRecent(now)
     if not Core.IsLikelyProc(spellId, recentCastIds) then
@@ -230,7 +389,7 @@ end
 
 local CUSTOM_NAME = "PE Proc Sources"
 -- Bump so Details InstallCustomObject replaces older scripts / tooltip copy.
-local CUSTOM_VERSION = 6
+local CUSTOM_VERSION = 7
 -- Soft minimum height so more proc rows are visible without scrolling immediately.
 local CUSTOM_MIN_HEIGHT = 260
 
@@ -536,8 +695,9 @@ end
 function Procs.OpenBreakdown(actor, instance)
     HideLegacyCustomBreakdown()
 
-    local procId, sourceId = Procs.ResolveActorPair(actor)
-    local bd = Procs.GetRowBreakdown(procId, sourceId)
+    local combat = Procs.GetInstanceCombat(instance)
+    local procId, sourceId = Procs.ResolveActorPair(actor, combat)
+    local bd = Procs.GetRowBreakdown(procId, sourceId, combat)
     if not bd then
         if type(DEFAULT_CHAT_FRAME) == "table" and DEFAULT_CHAT_FRAME.AddMessage then
             DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Details PE|r No proc attribution for this row yet.")
@@ -759,7 +919,8 @@ end
 if pe.Procs.BindCustomClickHandler then
     pe.Procs.BindCustomClickHandler()
 end
-local rows = pe.Procs.GetProcRows()
+-- Pass Details' selected segment (incl. Overall Data = tabela_overall).
+local rows = pe.Procs.GetProcRows(combat)
 for i = 1, #rows do
     local row = rows[i]
     local value = row.amount or 0
@@ -840,7 +1001,7 @@ local function fmt(v)
 end
 local procId = actor.peProcId or actor.id
 local sourceId = actor.peSourceId
-local bd = pe and pe.Procs and pe.Procs.GetRowBreakdown and pe.Procs.GetRowBreakdown(procId, sourceId)
+local bd = pe and pe.Procs and pe.Procs.GetRowBreakdown and pe.Procs.GetRowBreakdown(procId, sourceId, combat)
 if bd then
     GameCooltip:AddLine("Triggered by", bd.sourceName or "Unknown")
     Details:AddTooltipBackgroundStatusbar()
@@ -889,27 +1050,62 @@ end
 
 function Procs.Init()
     PLAYER_GUID = UnitGUID and UnitGUID("player")
-    Procs.ResetCombatAttribution()
+    attribution = {}
+    recentCasts = {}
+    wipe(recentCastIds)
     InstallCustomDisplay()
+    Procs.BindDetailsCombatListener()
 
     local f = CreateFrame("Frame")
     f:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-    f:RegisterEvent("PLAYER_REGEN_DISABLED")
     f:RegisterEvent("PLAYER_ENTERING_WORLD")
     f:SetScript("OnEvent", function(self, event, ...)
         if event == "PLAYER_ENTERING_WORLD" then
             PLAYER_GUID = UnitGUID and UnitGUID("player")
             BindCustomClickHandler()
-            return
-        end
-        if event == "PLAYER_REGEN_DISABLED" then
-            Procs.ResetCombatAttribution()
-            recentCasts = {}
-            wipe(recentCastIds)
+            Procs.BindDetailsCombatListener()
+            -- Re-attach live map if Details restored an in-progress combat after /reload.
+            EnsureLiveCombatAttach()
             return
         end
         if event == "COMBAT_LOG_EVENT_UNFILTERED" then
             OnCombatLog(self, event, ...)
         end
     end)
+end
+
+-- Details CreateEventListener: segment enter/leave + overall reset.
+-- Attribution lives on combat.pe_proc_attribution so Overall / history /
+-- /reload (Details SavedVariables) can show the same bars as DPS Overall.
+function Procs.BindDetailsCombatListener()
+    if Procs._detailsListenerBound then
+        return
+    end
+    local details = PE.GetDetails and PE.GetDetails()
+    if type(details) ~= "table" or type(details.CreateEventListener) ~= "function" then
+        return
+    end
+    local ok, listener = pcall(details.CreateEventListener, details)
+    if not ok or type(listener) ~= "table" or type(listener.RegisterEvent) ~= "function" then
+        return
+    end
+
+    local function onEnter(event, combat)
+        Procs.BeginCombatAttribution(combat)
+    end
+    local function onLeave(event, combat)
+        Procs.FinalizeCombatAttribution(combat)
+    end
+    local function onReset()
+        -- Details wiped segments / overall; drop live map only.
+        attribution = {}
+        recentCasts = {}
+        wipe(recentCastIds)
+    end
+
+    pcall(listener.RegisterEvent, listener, "COMBAT_PLAYER_ENTER", onEnter)
+    pcall(listener.RegisterEvent, listener, "COMBAT_PLAYER_LEAVE", onLeave)
+    pcall(listener.RegisterEvent, listener, "DETAILS_DATA_RESET", onReset)
+    Procs._detailsListenerBound = true
+    Procs._detailsListener = listener
 end

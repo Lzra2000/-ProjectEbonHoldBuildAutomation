@@ -27,6 +27,9 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 - **Details_ProjectEbonhold 1.0.4-pe1:** PE Proc Sources click summary now matches native **Player Details! Breakdown** chrome (status bars, spell icons, amount + %, Sources / Other procs sections). Custom Display script v5.
 - **Details_ProjectEbonhold 1.0.5-pe1:** PE Proc Sources click opens the real Details **Player Details! Breakdown** window (Sources + Other procs / Targets panel) instead of a custom popup ? removes stray scroll-frame icons and matches native chrome. Custom Display script v6.
 
+#### Fixed
+- **Details_ProjectEbonhold 1.0.6-pe1:** **PE Proc Sources** was empty on Details segment **Overall Data** (and wrong/empty after `/reload`) because attribution lived only in a wiped in-memory CLEU map. Proc rows now store on each Details combat (`pe_proc_attribution`), merge into overall when Details accepts the segment, and the Custom Display reads the selected combat ? same model as DPS Overall. Custom Display script v7.
+
 ### 3.86.4 (2026-07-24) -- Echo picker multi-select QoL
 
 #### Added

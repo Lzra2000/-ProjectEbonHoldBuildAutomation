@@ -113,6 +113,23 @@ equal(rows[2].icon, Core.QUESTION_ICON, "missing icon falls back to question")
 equal(rows[2].hits, 2, "two hits accumulated for ProcA")
 equal(rows[1].hits, 1, "one hit for ProcB")
 
+-- Copy + merge attribution (Overall Data aggregation)
+local fight1 = Core.RecordProcDamage(nil, 50001, 20, 1000)
+fight1 = Core.RecordProcDamage(fight1, 50001, 20, 500)
+local fight2 = Core.RecordProcDamage(nil, 50001, 20, 200)
+fight2 = Core.RecordProcDamage(fight2, 50002, 30, 900)
+local copied = Core.CopyProcAttribution(fight1)
+equal(copied[50001][20].amount, 1500, "copy preserves amount")
+equal(copied[50001][20].hits, 2, "copy preserves hits")
+copied[50001][20].amount = 1
+equal(fight1[50001][20].amount, 1500, "copy is deep (mutate safe)")
+local overall = Core.MergeProcAttribution(Core.CopyProcAttribution(fight1), fight2)
+equal(overall[50001][20].amount, 1700, "overall merges same proc+source")
+equal(overall[50001][20].hits, 3, "overall merges hits")
+equal(overall[50002][30].amount, 900, "overall keeps other proc")
+local emptyMerge = Core.MergeProcAttribution(nil, fight1)
+equal(emptyMerge[50001][20].amount, 1500, "merge from nil dest")
+
 -- Breakdown for click summary
 local bd = Core.BuildProcRowBreakdown(attr, 50001, 20, function(id)
     if id == 50001 then return "ProcA" end

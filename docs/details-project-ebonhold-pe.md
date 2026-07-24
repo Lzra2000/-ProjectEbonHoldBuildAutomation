@@ -10,7 +10,7 @@ Does **not** ship the Details! core (~22 MB) — install Details separately.
 | Area | Before | After |
 |------|--------|-------|
 | **Echo DPS** | Echo/secondary hits look like anonymous custom spell IDs in the Details spell list | Labeled `Name (Echo)`; optional breakdown API for EbonBuilds EchoPerformance |
-| **Procs** | Proc damage has no link to the cast that triggered it | Labeled `ProcName [SourceCast]`; Custom Display **PE Proc Sources**; **click a row** opens the real Details **Player Details! Breakdown** (Sources + Other procs / Targets panel) |
+| **Procs** | Proc damage has no link to the cast that triggered it; custom display empty on **Overall Data** | Labeled `ProcName [SourceCast]`; Custom Display **PE Proc Sources** (per-segment + Overall aggregate); **click a row** opens the real Details **Player Details! Breakdown** (Sources + Other procs / Targets panel) |
 | **Icons** | PE custom spells often lack client DBC icons | Icons from `GetSpellInfo`, then ProjectEbonhold `PerkDatabase` / `GetPerkData` (server sync), cached |
 | **Core** | Stock Details defaults | Soft PE defaults (`override_spellids` on, percent on); TinyThreat-style shim, not a full fork |
 
@@ -40,10 +40,11 @@ Targets-Panel).
 
 1. Details!-Core muss bereits unter `Interface/AddOns/Details` liegen
    (oder die komplette Suite **`Details.zip`** entpacken).
-2. Companion `Details_ProjectEbonhold` (1.0.5-pe1) unter
+2. Companion `Details_ProjectEbonhold` (1.0.6-pe1) unter
    `Interface/AddOns/Details_ProjectEbonhold` — liegt auch in **Details.zip**.
 3. `/reload` — Labels erscheinen in der Spell-Aufschlüsselung automatisch.
-4. Details-Fenster → Attribut **Custom** → **PE Proc Sources** → Zeile anklicken
-   (öffnet natives Player Details! Breakdown).
+4. Details-Fenster → Attribut **Custom** → **PE Proc Sources**.
+5. Segment **Overall Data** wählen — Balken zeigen die Summe über alle Overall-Fights
+   (wie DPS Overall). Zeile anklicken öffnet natives Player Details! Breakdown.
 
 Siehe auch: [Details!: Tiny Threat (PE)](details-tinythreat-pe.md).

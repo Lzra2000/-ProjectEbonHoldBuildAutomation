@@ -210,6 +210,57 @@ function Core.RecordProcDamage(attribution, procSpellId, sourceSpellId, amount)
     return attribution
 end
 
+-- Deep-copy attribution map (procId -> sourceId -> { amount, hits }).
+function Core.CopyProcAttribution(attribution)
+    local out = {}
+    if type(attribution) ~= "table" then
+        return out
+    end
+    for procId, bySource in pairs(attribution) do
+        if type(bySource) == "table" then
+            local copySources = {}
+            for sourceId, entry in pairs(bySource) do
+                local amount, hits = Core.NormalizeProcEntry(entry)
+                if amount > 0 then
+                    copySources[sourceId] = { amount = amount, hits = hits }
+                end
+            end
+            out[procId] = copySources
+        end
+    end
+    return out
+end
+
+-- Merge src into dest (amounts/hits sum). Mutates and returns dest.
+function Core.MergeProcAttribution(dest, src)
+    dest = dest or {}
+    if type(src) ~= "table" then
+        return dest
+    end
+    for procId, bySource in pairs(src) do
+        procId = tonumber(procId)
+        if procId and type(bySource) == "table" then
+            local destSources = dest[procId]
+            if not destSources then
+                destSources = {}
+                dest[procId] = destSources
+            end
+            for sourceId, entry in pairs(bySource) do
+                sourceId = tonumber(sourceId) or 0
+                local amount, hits = Core.NormalizeProcEntry(entry)
+                if amount > 0 then
+                    local prevAmount, prevHits = Core.NormalizeProcEntry(destSources[sourceId])
+                    destSources[sourceId] = {
+                        amount = prevAmount + amount,
+                        hits = prevHits + hits,
+                    }
+                end
+            end
+        end
+    end
+    return dest
+end
+
 -- Flatten attribution into sorted rows for UI / Custom Display:
 -- { key=, procName=, sourceName=, sourceSuffix=, procId=, sourceId=, amount=, hits=, icon= }
 -- nameResolver(id) -> string; iconResolver(id) -> texture path (optional).

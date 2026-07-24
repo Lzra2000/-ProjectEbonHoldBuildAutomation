@@ -101,6 +101,14 @@ release zip).
 - Custom Display scripts run inside Details' sandbox; if Details updates break
   `InstallCustomObject`, labels still work via spellcache.
 
+## 1.0.6-pe1
+
+**PE Proc Sources** now works on Details segment **Overall Data**: attributions are
+stored per combat (`pe_proc_attribution`), merged into overall when Details adds
+the segment, and the Custom Display passes the selected `combat` into
+`GetProcRows` / click breakdown. Survives `/reload` with Details' combat
+SavedVariables. Custom Display script_version 7.
+
 ## 1.0.5-pe1
 
 PE Proc Sources click now opens the **real** Details `DetailsPlayerDetailsWindow`
