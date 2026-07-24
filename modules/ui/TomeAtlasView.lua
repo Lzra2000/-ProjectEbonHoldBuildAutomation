@@ -11,7 +11,7 @@ local ROW_HEIGHT   = 34
 local VISIBLE_ROWS = 10
 
 local viewFrame, scrollFrame, scrollChild, scrollBar
-local searchBox, filterBtn, syncBtn, countLabel, emptyText, zoneSummary
+local searchBox, filterBtn, syncBtn, syncAhBtn, countLabel, emptyText, zoneSummary
 local zonePicker
 local rows = {}
 local state = { text = "", missingOnly = false, groupBy = "tome", zoneFilter = nil }
@@ -20,6 +20,22 @@ local Render -- forward decl: TryToggleTomePool schedules a refresh before Rende
 local function MatchesText(haystack)
     return state.text == "" or strlower(tostring(haystack or "")):find(state.text, 1, true) ~= nil
 end
+
+local function AuctionBridge()
+    return EbonBuilds.AuctionatorBridge
+end
+
+local function ShowAuctionToast(reason)
+    if not (EbonBuilds.Toast and EbonBuilds.Toast.Show) then return end
+    if reason == "missing" then
+        EbonBuilds.Toast.Show("Install Auctionator to search the AH from here.", "info")
+    elseif reason == "no-ah" then
+        EbonBuilds.Toast.Show("Open the Auction House first, then try again.", "info")
+    else
+        EbonBuilds.Toast.Show("Could not open that Auctionator search.", "info")
+    end
+end
+
 
 ------------------------------------------------------------------------
 -- Owned detection: a tome is "owned" when its taught echo is in the
@@ -303,10 +319,32 @@ local function CreateRow(parent)
     stripe:SetVertexColor(1, 1, 1, 0.03)
     row._stripe = stripe
 
+    local ahBtn = EbonBuilds.Theme.CreateButton(row)
+    ahBtn:SetSize(34, 18)
+    ahBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    ahBtn:SetText("AH")
+    ahBtn:Hide()
+    ahBtn:SetScript("OnClick", function(self)
+        local item = self:GetParent()._item
+        if not item or item.kind ~= "tome" or item.owned then return end
+        local bridge = AuctionBridge()
+        if not bridge or not bridge.OpenTomeSearch then return end
+        local ok, reason = bridge.OpenTomeSearch(item.title)
+        if not ok then ShowAuctionToast(reason) end
+    end)
+    ahBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Search Auctionator for this tome", 1, 1, 1)
+        GameTooltip:AddLine("Opens Auctionator Buy with the tome item name.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    ahBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row._ahBtn = ahBtn
+
     local name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     name:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
     name:SetJustifyH("LEFT")
-    name:SetPoint("RIGHT", row, "RIGHT", -92, 0)
+    name:SetPoint("RIGHT", ahBtn, "LEFT", -8, 0)
     -- A long name (unusually long tome title, or "Mob (Zone)" in mob mode)
     -- would otherwise wrap to a second line -- rows are a fixed height, so
     -- a wrapped title visually collides with the source text below it.
@@ -320,14 +358,14 @@ local function CreateRow(parent)
     row._owned = ownedTag
 
     local confidence = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    confidence:SetPoint("TOPRIGHT", row, "TOPRIGHT", -7, -5)
+    confidence:SetPoint("TOPRIGHT", ahBtn, "TOPLEFT", -8, 1)
     confidence:SetWidth(78)
     confidence:SetJustifyH("RIGHT")
     row._confidence = confidence
 
     local src = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     src:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 6, 4)
-    src:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    src:SetPoint("RIGHT", ahBtn, "LEFT", -8, 0)
     src:SetJustifyH("LEFT")
     src:SetTextColor(0.75, 0.75, 0.75, 1)
     src:SetWordWrap(false)
@@ -368,6 +406,20 @@ local function CreateRow(parent)
         else
             GameTooltip:AddLine(item.tooltipEmpty or "No data yet.", 0.6, 0.6, 0.6, true)
         end
+        if item.kind == "tome" and not item.owned then
+            local bridge = AuctionBridge()
+            if bridge and bridge.IsAvailable and bridge.IsAvailable() then
+                local price = bridge.GetBuyoutPrice and bridge.GetBuyoutPrice(item.title)
+                if price and bridge.FormatCopper then
+                    local formatted = bridge.FormatCopper(price)
+                    if formatted then
+                        GameTooltip:AddLine(" ")
+                        GameTooltip:AddLine("Auctionator: " .. formatted, 1, 0.82, 0)
+                    end
+                end
+                GameTooltip:AddLine("Click AH to search the auction house", 0.55, 0.82, 1)
+            end
+        end
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -379,6 +431,7 @@ local function CreateRow(parent)
 
     return row
 end
+
 
 ------------------------------------------------------------------------
 -- Rendering
@@ -460,13 +513,22 @@ Render = function()
             else
                 row._confidence:SetTextColor(unpack(EbonBuilds.Theme.TEXT_MUTED))
             end
+            if row._ahBtn then
+                if item.kind == "tome" and not item.owned then
+                    row._ahBtn:Show()
+                else
+                    row._ahBtn:Hide()
+                end
+            end
             row._stripe:SetVertexColor(1, 1, 1, (offset + i) % 2 == 0 and 0.05 or 0.02)
             row:Show()
         else
             row._item = nil
+            if row._ahBtn then row._ahBtn:Hide() end
             row:Hide()
         end
     end
+
 
     local total = #EbonBuilds.TomeAtlas.List()
     if state.groupBy == "zone" then
@@ -597,9 +659,41 @@ local function BuildViewFrame(parent)
         end
     end)
 
+    syncAhBtn = EbonBuilds.Theme.CreateButton(f)
+    syncAhBtn:SetSize(92, 20)
+    syncAhBtn:SetPoint("RIGHT", syncBtn, "LEFT", -8, 0)
+    syncAhBtn:SetText("Sync AH list")
+    syncAhBtn:SetScript("OnClick", function()
+        local bridge = AuctionBridge()
+        if not bridge or not bridge.SyncMissingTomeShoppingList then return end
+        local ok, info = bridge.SyncMissingTomeShoppingList()
+        if EbonBuilds.Toast and EbonBuilds.Toast.Show then
+            if ok then
+                EbonBuilds.Toast.Show(
+                    ("Updated Auctionator list (%d missing tomes)."):format(tonumber(info) or 0),
+                    "success"
+                )
+            elseif info == "missing" then
+                EbonBuilds.Toast.Show("Install Auctionator to maintain a tome shopping list.", "info")
+            else
+                EbonBuilds.Toast.Show("Could not update the Auctionator shopping list.", "info")
+            end
+        end
+    end)
+    syncAhBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Rebuild Auctionator shopping list", 1, 1, 1)
+        GameTooltip:AddLine(
+            "Creates/updates \"EbonBuilds Tomes\" with one search term per missing atlas tome.",
+            0.8, 0.8, 0.8, true
+        )
+        GameTooltip:Show()
+    end)
+    syncAhBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     filterBtn = EbonBuilds.Theme.CreateButton(f)
     filterBtn:SetSize(130, 20)
-    filterBtn:SetPoint("RIGHT", syncBtn, "LEFT", -8, 0)
+    filterBtn:SetPoint("RIGHT", syncAhBtn, "LEFT", -8, 0)
     filterBtn:SetText("Show: All")
     filterBtn:SetScript("OnClick", function(self)
         state.missingOnly = not state.missingOnly

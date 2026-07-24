@@ -48,6 +48,11 @@ assertEq(Bridge.BuildAffixSearchQuery("Keen Strikes III"), "of Keen Strikes III"
 assertEq(Bridge.BuildAffixSearchQuery("of Foo Bar I"), "of Foo Bar I", "preserve of-prefix")
 assertEq(Bridge.BuildAffixSearchQuery(""), "", "empty query")
 
+assertEq(Bridge.BuildTomeSearchQuery("Tome of Brittle Forging"), "Tome of Brittle Forging", "tome query")
+assertEq(Bridge.BuildTomeSearchQuery("Tome of Brittle Forging - Rare"), "Tome of Brittle Forging", "strip quality")
+assertEq(Bridge.BuildTomeSearchQuery("  Codex of Fire  "), "Codex of Fire", "trim tome")
+assertEq(Bridge.BuildTomeSearchQuery(""), "", "empty tome query")
+
 assertTrue(not Bridge.IsAvailable(), "available without Auctionator")
 assertNil(Bridge.GetBuyoutPrice("Foo"), "price nil when absent")
 assertNil(Bridge.GetAffixLinePrice("Keen Strikes III"), "line price nil when absent")
@@ -138,6 +143,57 @@ local openOk, reason = Bridge.OpenAffixSearch("Keen Strikes III")
 assertTrue(openOk, "open affix search")
 assertEq(reason, "ok", "open reason")
 assertEq(capturedQuery, "of Keen Strikes III", "search box query")
+
+-- Tome search + missing-tome shopping list (Bridge is addonSoft after soft-fail reload)
+addonSoft.TomeAtlas = {
+    List = function()
+        return {
+            { name = "Tome of Alpha", itemId = 1 },
+            { name = "Tome of Beta - Rare", itemId = 2 },
+            { name = "Tome of Owned", itemId = 3 },
+        }
+    end,
+}
+addonSoft.BuildOverview = {
+    GetOwnedEchoSets = function()
+        return { owned = true }
+    end,
+    _NormalizeEchoName = function(name)
+        if name == "Tome of Owned" then return "owned" end
+        return "missing:" .. tostring(name)
+    end,
+}
+
+local tomeTerms = Bridge.CollectMissingTomeSearchTerms()
+assertEq(#tomeTerms, 2, "two missing tome terms")
+assertEq(tomeTerms[1], "Tome of Alpha", "sorted first missing tome")
+assertEq(tomeTerms[2], "Tome of Beta", "quality stripped in collect")
+
+local tomeCreated
+_G.Atr_SList = {}
+function _G.Atr_SList.create(name)
+    if type(_G.AUCTIONATOR_SHOPPING_LISTS) ~= "table" then
+        _G.AUCTIONATOR_SHOPPING_LISTS = {}
+    end
+    tomeCreated = { name = name, items = {} }
+    function tomeCreated.AddItem(self, item) table.insert(self.items, item) end
+    table.insert(_G.AUCTIONATOR_SHOPPING_LISTS, tomeCreated)
+    return tomeCreated
+end
+_G.AUCTIONATOR_SHOPPING_LISTS = nil
+
+local tomeOk, tomeCount = Bridge.SyncMissingTomeShoppingList()
+assertTrue(tomeOk, "tome shopping list sync")
+assertEq(tomeCount, 2, "two missing tomes synced")
+assertEq(tomeCreated.name, "EbonBuilds Tomes", "tome list name")
+assertEq(tomeCreated.items[1], "Tome of Alpha", "first synced tome")
+assertEq(tomeCreated.items[2], "Tome of Beta", "second synced tome")
+
+capturedQuery = nil
+local tomeOpenOk, tomeReason = Bridge.OpenTomeSearch("Tome of Alpha - Epic")
+assertTrue(tomeOpenOk, "open tome search")
+assertEq(tomeReason, "ok", "tome open reason")
+assertEq(capturedQuery, "Tome of Alpha", "tome search box query")
 
 -- Plain SV list without metatable: AddItem is nil until Atr_ShoppingListsInit.
 -- Bridge must reattach Atr_SList or fall back to list.items insert.
