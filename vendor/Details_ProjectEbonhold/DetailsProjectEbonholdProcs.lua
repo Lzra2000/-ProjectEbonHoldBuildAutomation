@@ -389,7 +389,7 @@ end
 
 local CUSTOM_NAME = "PE Proc Sources"
 -- Bump so Details InstallCustomObject replaces older scripts / tooltip copy.
-local CUSTOM_VERSION = 10
+local CUSTOM_VERSION = 11
 -- Soft minimum height so more proc rows are visible without scrolling immediately.
 local CUSTOM_MIN_HEIGHT = 260
 -- Native Player Details right-side detail blocks (Details spellInfoSettings.amount).
@@ -400,6 +400,8 @@ local BREAKDOWN_DOCK_PAD_X = 12
 local PLAYER_DETAILS_STATUSBAR_HEIGHT = 20
 -- Minimum bottom inset so Targets does not sit under the status strip (classic skin uses 6).
 local TARGETS_MIN_BOTTOM_INSET = 6 + PLAYER_DETAILS_STATUSBAR_HEIGHT
+-- Exclusive Targets-panel title while PE owns Breakdown (stock QuestFont_Large).
+local PE_TARGETS_HEADER = "Procs from source:"
 -- Status-bar tint for secondary right-panel blocks (share / siblings).
 local DETAIL_SHARE_COLOR = { 0.55, 0.65, 0.95, 0.85 }
 local DETAIL_SIBLING_COLOR = { 0.75, 0.75, 0.55, 0.85 }
@@ -564,22 +566,197 @@ local function HidePlayerDetailsTabs(details, info)
     end
 end
 
-local function HideNoTargets(info)
-    if type(info) ~= "table" or type(info.no_targets) ~= "table" then
+local function IsUiObject(obj)
+    return type(obj) == "table" or type(obj) == "userdata"
+end
+
+local function SafeHideRegion(obj)
+    if not IsUiObject(obj) then
         return
     end
-    if info.no_targets.Hide then
-        info.no_targets:Hide()
+    if obj.Hide then
+        pcall(obj.Hide, obj)
     end
-    local text = info.no_targets.text
-    if type(text) == "table" then
+end
+
+local function PeOwnsBreakdown(info)
+    return type(info) == "table"
+        and type(info.jogador) == "table"
+        and info.jogador.peBreakdown ~= nil
+end
+
+-- Stock empty-state is a Texture + sibling FontString on SummaryWindowWidgets
+-- (not a child of the texture). Hide both; hook Show so Fade/skin cannot
+-- resurrect "No Targets" over PE sibling-proc bars.
+local function HideNoTargets(info)
+    if type(info) ~= "table" then
+        return
+    end
+    local tex = info.no_targets
+    if not IsUiObject(tex) then
+        return
+    end
+    SafeHideRegion(tex)
+    local text = tex.text
+    if IsUiObject(text) then
         if text.SetText then
-            text:SetText("")
+            pcall(text.SetText, text, "")
         end
-        if text.Hide then
-            text:Hide()
+        SafeHideRegion(text)
+    end
+end
+
+local function SuppressNoTargetsShow(info)
+    if type(info) ~= "table" then
+        return
+    end
+    local tex = info.no_targets
+    if not IsUiObject(tex) or tex._peShowSuppressed then
+        return
+    end
+    tex._peOrigShow = tex.Show
+    tex.Show = function(self)
+        if PeOwnsBreakdown(info) then
+            HideNoTargets(info)
+            return
+        end
+        if self._peOrigShow then
+            return self._peOrigShow(self)
         end
     end
+    local text = tex.text
+    if IsUiObject(text) and not text._peShowSuppressed then
+        text._peOrigShow = text.Show
+        text.Show = function(self)
+            if PeOwnsBreakdown(info) then
+                if self.SetText then
+                    pcall(self.SetText, self, "")
+                end
+                SafeHideRegion(self)
+                return
+            end
+            if self._peOrigShow then
+                return self._peOrigShow(self)
+            end
+        end
+        text._peShowSuppressed = true
+    end
+    tex._peShowSuppressed = true
+end
+
+local function IsStrayTargetsLabel(text)
+    if type(text) ~= "string" or text == "" then
+        return false
+    end
+    local lower = string.lower(text)
+    if lower == string.lower(PE_TARGETS_HEADER) then
+        return true
+    end
+    if lower:find("procs from", 1, true) then
+        return true
+    end
+    if lower:find("no target", 1, true) or lower:find("keine ziele", 1, true) then
+        return true
+    end
+    -- Stock Details Targets title (any locale starting with Targets/Ziele/…)
+    if lower:find("^targets") or lower:find("^ziele") or lower:find("^alvos")
+        or lower:find("^cibles") or lower:find("^objetivos") or lower:find("^цел") then
+        return true
+    end
+    return false
+end
+
+-- Own a single Targets header: stock info.targets (QuestFont_Large / Morpheus).
+-- Classic skin leaves an absolute TOPLEFT point; ElvUI adds a second without
+-- ClearAllPoints — that dual-anchor + any leftover GameFont empty-state label
+-- reads as overlapping "PROCS FROM SOURCE" (blocky + stylized).
+local function ApplyPeTargetsHeader(info)
+    if type(info) ~= "table" then
+        return
+    end
+    HideNoTargets(info)
+
+    if IsUiObject(info._peTargetsHeader) then
+        if info._peTargetsHeader.SetText then
+            pcall(info._peTargetsHeader.SetText, info._peTargetsHeader, "")
+        end
+        SafeHideRegion(info._peTargetsHeader)
+    end
+
+    local header = info.targets
+    if not IsUiObject(header) then
+        return
+    end
+
+    local alvos = info.container_alvos
+    if IsUiObject(alvos) and header.ClearAllPoints and header.SetPoint then
+        header:ClearAllPoints()
+        header:SetPoint("TOPLEFT", alvos, "TOPLEFT", 3, 18)
+    end
+    if header.SetFontObject then
+        pcall(header.SetFontObject, header, "QuestFont_Large")
+    end
+    if header.SetText then
+        header:SetText(PE_TARGETS_HEADER)
+    end
+    if header.Show then
+        header:Show()
+    end
+    if header.SetAlpha then
+        pcall(header.SetAlpha, header, 1)
+    end
+
+    local sww = info.SummaryWindowWidgets
+    if IsUiObject(sww) and type(sww.GetRegions) == "function" then
+        local ok, regions = pcall(function()
+            return { sww:GetRegions() }
+        end)
+        if ok and type(regions) == "table" then
+            for i = 1, #regions do
+                local r = regions[i]
+                if IsUiObject(r) and r ~= header and type(r.GetObjectType) == "function" then
+                    local okType, otype = pcall(r.GetObjectType, r)
+                    if okType and otype == "FontString" and type(r.GetText) == "function" then
+                        local okText, txt = pcall(r.GetText, r)
+                        if okText and IsStrayTargetsLabel(txt) then
+                            if r.SetText then
+                                pcall(r.SetText, r, "")
+                            end
+                            SafeHideRegion(r)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if header.SetText then
+        header:SetText(PE_TARGETS_HEADER)
+    end
+    if header.Show then
+        header:Show()
+    end
+end
+
+-- Fade(info, 0) / SWW:Show can race past a single Hide; re-assert briefly.
+local function ReassertPeChromeSoon(info)
+    if type(info) ~= "table" then
+        return
+    end
+    if not IsUiObject(info._peChromeAssertFrame) then
+        info._peChromeAssertFrame = CreateFrame("Frame", nil, info)
+    end
+    local f = info._peChromeAssertFrame
+    local elapsed = 0
+    f:SetScript("OnUpdate", function(self, e)
+        elapsed = elapsed + (tonumber(e) or 0)
+        if PeOwnsBreakdown(info) then
+            ApplyPeTargetsHeader(info)
+        end
+        if elapsed >= 0.45 or not PeOwnsBreakdown(info) then
+            self:SetScript("OnUpdate", nil)
+        end
+    end)
 end
 
 -- Details creates the footer status strip as an unnamed child of janela_info
@@ -687,7 +864,8 @@ local function PreparePeBreakdownInteraction(info)
         end
     end
 
-    HideNoTargets(info)
+    SuppressNoTargetsShow(info)
+    ApplyPeTargetsHeader(info)
 end
 
 -- Sibling proc rows live in barras2 (isAlvo). Stock Details only focuses
@@ -1068,7 +1246,7 @@ local function FillNativeBreakdown(details, info, instance, bd, actor)
     if type(gump.HidaAllBarrasAlvo) == "function" then
         gump:HidaAllBarrasAlvo()
     end
-    HideNoTargets(info)
+    ApplyPeTargetsHeader(info)
 
     if #procRows > 0 then
         local procTotal = 0
@@ -1128,14 +1306,9 @@ local function FillNativeBreakdown(details, info, instance, bd, actor)
                 barra:Show()
             end
         end
-        HideNoTargets(info)
+        ApplyPeTargetsHeader(info)
     else
-        HideNoTargets(info)
-        if info.no_targets and info.no_targets.Show then
-            -- Prefer an empty Targets list over the stock "No Targets" art
-            -- mixed under PE proc rows; leave the panel blank when no siblings.
-            info.no_targets:Hide()
-        end
+        ApplyPeTargetsHeader(info)
     end
 
     FillRightPanel(details, info, sourceRows[1], bd)
@@ -1224,7 +1397,7 @@ function Procs.OpenBreakdown(actor, instance)
     info.sub_atributo = 1
     info.jogador = peActor
     info.instancia = instance
-    info.target_text = "Procs from source:"
+    info.target_text = PE_TARGETS_HEADER
     info.target_member = "total"
     info.target_persecond = false
     info.mostrando = nil
@@ -1286,16 +1459,15 @@ function Procs.OpenBreakdown(actor, instance)
     if type(info.SummaryWindowWidgets) == "table" and info.SummaryWindowWidgets.Show then
         info.SummaryWindowWidgets:Show()
     end
-    if info.targets then
-        info.targets:SetText("Procs from source:")
-    end
+    SuppressNoTargetsShow(info)
+    ApplyPeTargetsHeader(info)
 
     PreparePeBreakdownInteraction(info)
 
     peActor:MontaInfo()
     -- Re-apply after MontaInfo in case TrocaBackgroundInfo / skin touched chrome.
     PreparePeBreakdownInteraction(info)
-    HideNoTargets(info)
+    ApplyPeTargetsHeader(info)
     PositionBreakdownNearInstance(info, instance)
 
     if type(gump) == "table" and type(gump.Fade) == "function" then
@@ -1312,6 +1484,9 @@ function Procs.OpenBreakdown(actor, instance)
     if info.Raise then
         info:Raise()
     end
+    -- Fade/Show can resurrect stock empty-state / dual header; re-assert briefly.
+    ApplyPeTargetsHeader(info)
+    ReassertPeChromeSoon(info)
 end
 
 -- Custom Display left-click never opens AbreJanelaInfo (attribute 5 → Report).

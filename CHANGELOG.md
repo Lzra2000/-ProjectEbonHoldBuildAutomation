@@ -20,19 +20,21 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 ### 3.86.7 (2026-07-24) -- Public Builds tabs, Tome shopping, sync/Auctionator fixes
 
-Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full Details! suite (ProjectEbonhold **1.0.10-pe1**). Auctionator remains **2.6.3-pe2**.
+Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full Details! suite (ProjectEbonhold **1.0.11-pe1**). Auctionator remains **2.6.3-pe2**.
 
 #### Kurznotiz (DE)
 - **Public Builds:** zwei Reiter -- **Peer Sync** und **Echo Journal** (nicht mehr eine gemischte Liste).
 - **Tome Atlas:** **Sync AH list** schreibt fehlende Tomes in Auctionator-Liste **EbonBuilds Tomes**; Zeilen-Button **AH** oeffnet Buy-Suche.
 - **Sync (#132):** nach Public Sync aktualisiert sich die Build-Wizard-Evidenz automatisch.
 - **Autopilot (#148):** Freeze leert IntentQueue, damit SELECT nicht 8s blockiert. Danach /reload.
+- **Details_ProjectEbonhold 1.0.11-pe1:** kein doppelter Targets-Header und kein "No Targets" ueber den Proc-Balken. Danach /reload.
 
 #### Highlights (EN)
 - **Public Builds tabs:** Peer Sync vs Echo Journal as separate lists; Evidence still uses both on class-wide widen.
 - **Tome Atlas Auctionator shopping:** Sync AH list + per-row AH for missing tomes.
 - **Public Sync (#132):** debounced `SYNC_REVISION_CHANGED` after remoteBuilds mutate.
 - **Autopilot (#148):** clear IntentQueue on freeze confirm; peer-sync strip / Auctionator AddItem / Public Builds sort from #149.
+- **Details_ProjectEbonhold 1.0.11-pe1:** single Targets header; stock empty-state stays hidden under PE proc lists.
 
 #### Added
 - **Tome Atlas Auctionator shopping:** toolbar **Sync AH list** rebuilds shopping list **EbonBuilds Tomes** with one search term per missing atlas tome; missing tome rows show an **AH** button (opens Auctionator Buy). Soft-fails with toast when Auctionator is missing. Prefer AH over PE vendor until `ItemPurchasePopup` is in TOC.
@@ -41,6 +43,7 @@ Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full 
 - **Public Builds:** Peer Sync and Echo Journal are separate tabs (no longer one merged list). CommunityEligibility still uses both sources for recommendations (class-wide widen for Journal loadouts).
 
 #### Fixed
+- **Details_ProjectEbonhold 1.0.11-pe1:** PE Proc Sources Breakdown bottom-left Targets -- only one "Procs from source:" header (stock `info.targets` re-anchored; stray SummaryWindowWidgets labels cleared); stock "No Targets" Show hooked so Fade/skin cannot overlay sibling proc bars. Prefer `Details.zip`. Custom Display script v11.
 - **Public Sync (#132):** storing/updating/clearing remote builds emits debounced `SYNC_REVISION_CHANGED` so Build Wizard community evidence refreshes without a local library edit.
 - **Autopilot (#148):** clear IntentQueue on freeze confirm so SELECT is not delayed by the 8s freeze TTL.
 - **Peer sync (#149):** oversized public builds (e.g. >36 KB with character snapshot) are auto-stripped for transfer (drop snapshot, then trim description) while the local SavedVariables copy stays complete; toast explains what was stripped. Only builds that remain over the ceiling after shrink are refused.
@@ -48,7 +51,7 @@ Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full 
 - **Public Builds sort (#149):** densify + table-typed CompareBuilds again (sparse holes); also nil-safe sorts in `Build.ListPublic` and `SharedLoadoutBridge.ListPseudoBuilds`.
 
 #### Release assets
-- **EbonBuilds.zip**, **Auctionator.zip** (2.6.3-pe2), **Details.zip** (full suite, flat folders, ProjectEbonhold **1.0.10-pe1**). Do not use companion-only Details_ProjectEbonhold.zip / Details_TinyThreat.zip as the primary install.
+- **EbonBuilds.zip**, **Auctionator.zip** (2.6.3-pe2), **Details.zip** (full suite, flat folders, ProjectEbonhold **1.0.11-pe1**). Do not use companion-only Details_ProjectEbonhold.zip / Details_TinyThreat.zip as the primary install.
 
 ### 3.86.6 (2026-07-24) -- Echo Journal bridge, Apply visible, Autopilot Select/Soul Ashes, Details PE 1.0.10-pe1
 

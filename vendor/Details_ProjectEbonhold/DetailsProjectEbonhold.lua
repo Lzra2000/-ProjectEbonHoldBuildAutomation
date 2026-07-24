@@ -9,7 +9,7 @@ DetailsProjectEbonhold = DetailsProjectEbonhold or {}
 local PE = DetailsProjectEbonhold
 local Core = DetailsProjectEbonholdCore
 
-PE.VERSION = "1.0.10-pe1"
+PE.VERSION = "1.0.11-pe1"
 PE._ready = false
 PE._defaultsApplied = false
 local QUESTION_ICON = Core.QUESTION_ICON or [[Interface\Icons\INV_Misc_QuestionMark]]
