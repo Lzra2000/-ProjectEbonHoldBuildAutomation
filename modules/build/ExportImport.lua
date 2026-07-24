@@ -652,7 +652,20 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
     -- are a bigger intervention and this data is noisier. Compares each
     -- echo against others currently sharing its exact weight value.
     if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled() then
-        local suggestions = EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
+        local status, statusMessage = EbonBuilds.EchoPerformance.GetTrackingStatus
+            and EbonBuilds.EchoPerformance.GetTrackingStatus()
+            or "collecting", nil
+        if status == "no_details" or status == "no_samples" or status == "collecting" then
+            add("--- Echo DPS tracking ---")
+            add(statusMessage or "Collecting combat samples.")
+            if status == "no_details" and EbonBuilds.EchoPerformance.HasStoredStats
+                and EbonBuilds.EchoPerformance.HasStoredStats() then
+                add("Earlier samples are still shown below; install Details! to collect new data.")
+            end
+            add("")
+        end
+        local ok, suggestions = pcall(EbonBuilds.EchoPerformance.SuggestWeightAdjustments, build)
+        suggestions = ok and suggestions or {}
         if #suggestions > 0 then
             add("--- Weight suggestions from DPS data (review before applying) ---")
             add("DPS is tracked by Echo family because some server builds do not expose the active rank.")
@@ -698,7 +711,8 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
     -- auto-apply path exists for this. Compares DPS-per-weight-point
     -- across quality tiers instead of individual echoes.
     if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled() then
-        local bonusSuggestions = EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment(build)
+        local okBonus, bonusSuggestions = pcall(EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment, build)
+        bonusSuggestions = okBonus and bonusSuggestions or {}
         if #bonusSuggestions > 0 then
             add("--- Quality Bonus suggestions (experimental, report only) ---")
             add("Compares average DPS-per-final-score-point across quality tiers. A tier still")
@@ -722,7 +736,8 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
         -- echo would need real regression -- this sidesteps that by
         -- simply not using ambiguous data, the same way co-active
         -- clusters are excluded above.
-        local familySuggestions = EbonBuilds.EchoPerformance.SuggestFamilyBonusAdjustment(build)
+        local okFamily, familySuggestions = pcall(EbonBuilds.EchoPerformance.SuggestFamilyBonusAdjustment, build)
+        familySuggestions = okFamily and familySuggestions or {}
         if #familySuggestions > 0 then
             add("--- Family Bonus suggestions (experimental, report only) ---")
             add("Same comparison as Quality Bonus, restricted to echoes with exactly ONE")
@@ -860,8 +875,14 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
 
     add("--- Class-eligible echoes (%d for %s, all rank weights 0 = currently unweighted) ---",
         #entries, build.class or "?")
-    local perfAvailable = EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled()
-        and EbonBuilds.EchoPerformance.IsDetailsAvailable()
+    local perfEnabled = EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled()
+    local perfAvailable = perfEnabled and (
+        (EbonBuilds.EchoPerformance.IsDetailsAvailable and EbonBuilds.EchoPerformance.IsDetailsAvailable())
+        or (EbonBuilds.EchoPerformance.HasStoredStats and EbonBuilds.EchoPerformance.HasStoredStats())
+    )
+    if perfEnabled and not perfAvailable then
+        add("Echo DPS tracking is ON but Details! is unavailable and no stored samples exist yet.")
+    end
     if perfAvailable then
         add("Format: Name | rank weights | highest quality | family/families | protection | appears in | avg DPS while active (samples) | effect")
         add("(DPS tracking is a rough signal, not a controlled measurement -- echoes stack together")
@@ -876,7 +897,11 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
         -- they can't be compared against each other from this data alone.
         local clusters = {}
         for _, e in ipairs(entries) do
-            local perf = EbonBuilds.EchoPerformance.GetStats(e.name)
+            local perf
+            if EbonBuilds.EchoPerformance.GetStats then
+                local okStats, result = pcall(EbonBuilds.EchoPerformance.GetStats, e.name)
+                perf = okStats and result or nil
+            end
             if perf then
                 local key = string.format("%.2f|%d", perf.avgDPS, perf.sampleCount)
                 clusters[key] = clusters[key] or {}
@@ -909,7 +934,11 @@ function EbonBuilds.ExportImport.GenerateAIText(build)
             end
         end
         if perfAvailable then
-            local perf = EbonBuilds.EchoPerformance.GetStats(e.name)
+            local perf
+            if EbonBuilds.EchoPerformance.GetStats then
+                local okStats, result = pcall(EbonBuilds.EchoPerformance.GetStats, e.name)
+                perf = okStats and result or nil
+            end
             local perfText
             if perf then
                 if perf.communityCount and perf.communityCount > 0 then

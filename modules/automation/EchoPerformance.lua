@@ -20,10 +20,16 @@ EbonBuilds.EchoPerformance = {}
 
 local SAMPLE_INTERVAL = 10  -- seconds between DPS samples while in combat
 local MAX_SAMPLES_PER_ECHO = 200
+local MIN_SAMPLES_FOR_WEIGHT_SUGGESTION = 8  -- per-echo, before suggestions consider it
 local normalizedStoreRef
 local dataRevision = 0
 local allStatsCacheRevision = -1
 local allStatsCache
+
+local function SafeCall(fn, ...)
+    if type(fn) ~= "function" then return false, "not callable" end
+    return pcall(fn, ...)
+end
 
 local function BumpRevision()
     dataRevision = dataRevision + 1
@@ -107,7 +113,53 @@ function EbonBuilds.EchoPerformance.SetEnabled(on)
 end
 
 function EbonBuilds.EchoPerformance.IsDetailsAvailable()
-    return Details ~= nil and Details.GetCurrentCombat ~= nil
+    if type(Details) ~= "table" then return false end
+    local ok, hasApi = pcall(function()
+        return type(Details.GetCurrentCombat) == "function"
+    end)
+    return ok and hasApi == true
+end
+
+-- UI/export empty-state helper: disabled | no_details | no_samples |
+-- collecting | ready. Second return is a short player-facing sentence.
+function EbonBuilds.EchoPerformance.GetTrackingStatus()
+    if not EbonBuilds.EchoPerformance.IsEnabled() then
+        return "disabled", "DPS tracking is off."
+    end
+    if not EbonBuilds.EchoPerformance.IsDetailsAvailable() then
+        return "no_details", "Details! is not installed or its API is unavailable."
+    end
+    local totalSamples = 0
+    for _, entry in pairs(GetStore()) do
+        if type(entry) == "table" then
+            totalSamples = totalSamples + (tonumber(entry.count) or 0)
+        end
+    end
+    if totalSamples == 0 then
+        return "no_samples", "No combat samples yet -- fight with echoes active to start collecting."
+    end
+    local build = EbonBuilds.Build and EbonBuilds.Build.GetActive and EbonBuilds.Build.GetActive()
+    if build and build.class then
+        local ok, stats = SafeCall(EbonBuilds.EchoPerformance.GetEvidenceStats, build.class)
+        if ok and type(stats) == "table" then
+            local reliable = 0
+            for _, perf in pairs(stats) do
+                if type(perf) == "table" and (tonumber(perf.sampleCount) or 0) >= MIN_SAMPLES_FOR_WEIGHT_SUGGESTION then
+                    reliable = reliable + 1
+                end
+            end
+            if reliable > 0 then
+                return "ready", string.format("%d echo(s) with enough evidence for suggestions.", reliable)
+            end
+        end
+    end
+    return "collecting", string.format("Collecting (%d sample(s) so far) -- more combat data needed for suggestions.", totalSamples)
+end
+
+function EbonBuilds.EchoPerformance.HasStoredStats()
+    local ok, stats = SafeCall(EbonBuilds.EchoPerformance.GetAllStats)
+    if not ok or type(stats) ~= "table" then return false end
+    return next(stats) ~= nil
 end
 
 function EbonBuilds.EchoPerformance.Clear()
@@ -160,7 +212,9 @@ function EbonBuilds.EchoPerformance.Sample()
     local dps = GetCurrentDPS()
     if not dps then return end
 
-    local granted = ProjectEbonhold.PerkService.GetGrantedPerks() or {}
+    local okGranted, granted = SafeCall(ProjectEbonhold.PerkService.GetGrantedPerks)
+    if not okGranted or type(granted) ~= "table" then return end
+
     local store = GetStore()
     local changed = false
     -- New model: one whole-set sample per tick (every active echo
@@ -174,8 +228,8 @@ function EbonBuilds.EchoPerformance.Sample()
         local n = GrantedEchoName(key, value)
         if n then setNames[#setNames + 1] = n end
     end
-    if #setNames > 0 then
-        EbonBuilds.EchoSamples.Record(setNames, dps)
+    if #setNames > 0 and EbonBuilds.EchoSamples and EbonBuilds.EchoSamples.Record then
+        SafeCall(EbonBuilds.EchoSamples.Record, setNames, dps)
     end
     for key, value in pairs(granted) do
         local name = GrantedEchoName(key, value)
@@ -355,8 +409,11 @@ function EbonBuilds.EchoPerformance.SerializeBatch(class, names)
 end
 
 function EbonBuilds.EchoPerformance.ParseBatch(payload)
-    local class, body = payload:match("^PRF|([^|]+)|(.+)$")
-    if not class then return nil end
+    if type(payload) ~= "string" or payload == "" then return nil end
+    local ok, class, body = pcall(function()
+        return payload:match("^PRF|([^|]+)|(.+)$")
+    end)
+    if not ok or not class or not body then return nil end
     local entries = {}
     for entry in body:gmatch("[^;]+") do
         local name, sum, count = entry:match("^(.+):(%-?%d+%.?%d*):(%d+)$")
@@ -364,6 +421,7 @@ function EbonBuilds.EchoPerformance.ParseBatch(payload)
             entries[#entries + 1] = { name = name, sum = tonumber(sum), count = tonumber(count) }
         end
     end
+    if #entries == 0 then return nil end
     return class, entries
 end
 
@@ -371,10 +429,11 @@ end
 -- incoming PRF message.
 function EbonBuilds.EchoPerformance.HandleBroadcast(payload, sender)
     if not EbonBuilds.EchoPerformance.IsEnabled() then return end
-    local class, entries = EbonBuilds.EchoPerformance.ParseBatch(payload)
-    if not class then return end
+    local ok, class, entries = SafeCall(EbonBuilds.EchoPerformance.ParseBatch, payload)
+    if not ok or not class or not entries then return end
     for _, e in ipairs(entries) do
-        EbonBuilds.EchoPerformance.MergeCommunityContribution(sender, class, e.name, e.sum, e.count)
+        SafeCall(EbonBuilds.EchoPerformance.MergeCommunityContribution,
+            sender, class, e.name, e.sum, e.count)
     end
 end
 
@@ -410,7 +469,8 @@ local function SendOneBatch()
 
     local payload = EbonBuilds.EchoPerformance.SerializeBatch(build.class, batch)
     if not payload then return false end
-    EbonBuilds.Sync.BroadcastPerfBatch(payload)
+    local ok = SafeCall(EbonBuilds.Sync.BroadcastPerfBatch, payload)
+    if not ok then return false end
     -- Transition dual-broadcast: one PRD batch (locally-reliable deltas
     -- only) rides along with every legacy PRF batch. Old clients ignore
     -- the unknown code; new clients prefer the delta evidence. PRF and
@@ -472,7 +532,6 @@ end
 -- duplicated across indistinguishable echoes, not independent evidence.
 ------------------------------------------------------------------------
 
-local MIN_SAMPLES_FOR_WEIGHT_SUGGESTION = 8  -- per-echo, before it's considered at all
 local MIN_TIER_BASELINE_SIZE = 2             -- how many clean data points a tier needs to have a baseline
 local MAX_CLUSTER_SIZE_TO_TRUST = 1          -- an echo's DPS signature must be unique (shared with nobody else) to be trusted for a weight suggestion
 local WEIGHT_SUGGESTION_DEVIATION = 0.25     -- min fractional deviation from tier average to flag
@@ -798,12 +857,12 @@ end
 local elapsed = 0
 local function OnTick(dt)
     if not EbonBuilds.EchoPerformance.IsEnabled() then return end
-    MaybeBroadcast(dt)
+    SafeCall(MaybeBroadcast, dt)
     if not UnitAffectingCombat("player") then return end
     elapsed = elapsed + dt
     if elapsed < SAMPLE_INTERVAL then return end
     elapsed = 0
-    EbonBuilds.EchoPerformance.Sample()
+    SafeCall(EbonBuilds.EchoPerformance.Sample)
 end
 
 function EbonBuilds.EchoPerformance.Init()

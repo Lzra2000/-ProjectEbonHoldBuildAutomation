@@ -709,7 +709,8 @@ local function BuildRecommendations(build, manualSuggestions)
     end
 
     if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.SuggestWeightAdjustments then
-        for _, suggestion in ipairs(EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build) or {}) do
+        local ok, weightSuggestions = pcall(EbonBuilds.EchoPerformance.SuggestWeightAdjustments, build)
+        for _, suggestion in ipairs(ok and weightSuggestions or {}) do
             local current = tonumber(suggestion.currentWeight) or 0
             local suggested = tonumber(suggestion.suggestedWeight) or current
             local refKey = ResolveRecommendationRef(build, suggestion.refKey, suggestion.name)
@@ -756,7 +757,8 @@ local function BuildRecommendations(build, manualSuggestions)
     end
 
     if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment then
-        for _, suggestion in ipairs(EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment(build) or {}) do
+        local ok, qualitySuggestions = pcall(EbonBuilds.EchoPerformance.SuggestQualityBonusAdjustment, build)
+        for _, suggestion in ipairs(ok and qualitySuggestions or {}) do
             local current = tonumber(suggestion.currentBonus) or 0
             local suggested = tonumber(suggestion.suggestedBonus) or current
             AddRecommendation(out, {
@@ -911,8 +913,11 @@ local function GenerateCache(build)
     local manualSuggestions = EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.SuggestWeightAdjustments
         and EbonBuilds.ManualTraining.SuggestWeightAdjustments(build) or {}
     local manualSamples = EbonBuilds.ManualTraining and EbonBuilds.ManualTraining.GetSampleCount and EbonBuilds.ManualTraining.GetSampleCount(build.id) or 0
-    local performanceStats = EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.GetAllStats
-        and EbonBuilds.EchoPerformance.GetAllStats() or {}
+    local performanceStats = {}
+    if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.GetAllStats then
+        local ok, stats = pcall(EbonBuilds.EchoPerformance.GetAllStats)
+        if ok and type(stats) == "table" then performanceStats = stats end
+    end
     local appearanceStats = EbonBuilds.Calibration and EbonBuilds.Calibration.GetAllAppearanceStats
         and EbonBuilds.Calibration.GetAllAppearanceStats(build.class) or {}
     local echoRows = BuildEchoRows(build, manualSuggestions, performanceStats, appearanceStats)

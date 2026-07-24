@@ -714,7 +714,8 @@ function EbonBuilds.Calibration.MaybeAutoTune()
         end
 
         if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled() then
-            AddSuggestionList(EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build))
+            local ok, suggestions = pcall(EbonBuilds.EchoPerformance.SuggestWeightAdjustments, build)
+            if ok then AddSuggestionList(suggestions) end
         end
         if EbonBuilds.ManualTraining then
             AddSuggestionList(EbonBuilds.ManualTraining.SuggestWeightAdjustments(build))
@@ -959,12 +960,18 @@ local function BuildWindow()
     end)
     perfCB:SetScript("OnLeave", function() GameTooltip:Hide() end)
     perfCB:SetScript("OnClick", function(self)
-        if self:GetChecked() and not EbonBuilds.EchoPerformance.IsDetailsAvailable() then
+        local detailsOk = EbonBuilds.EchoPerformance.IsDetailsAvailable
+            and EbonBuilds.EchoPerformance.IsDetailsAvailable()
+        if self:GetChecked() and not detailsOk then
             EbonBuilds.Toast.Show("Details! not found -- install it to use DPS tracking")
             self:SetChecked(false)
             return
         end
-        EbonBuilds.EchoPerformance.SetEnabled(self:GetChecked() and true or false)
+        local ok = pcall(EbonBuilds.EchoPerformance.SetEnabled, self:GetChecked() and true or false)
+        if not ok then
+            EbonBuilds.Toast.Show("Could not update DPS tracking -- try again after /reload")
+            self:SetChecked(EbonBuilds.EchoPerformance.IsEnabled())
+        end
     end)
 
     local appearCB = EbonBuilds.Theme.CreateCheckbox(f, "Share echo appearance rates")
@@ -1125,7 +1132,14 @@ function EbonBuilds.Calibration.RefreshWindow()
     local countText = string.format("%d samples (%d best-offer) collected for %s",
         EbonBuilds.Calibration.SampleCount(), EbonBuilds.Calibration.BestSampleCount(), build.title or "this build")
     if EbonBuilds.EchoPerformance and EbonBuilds.EchoPerformance.IsEnabled() then
-        local weightSuggestions = EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)
+        if EbonBuilds.EchoPerformance.GetTrackingStatus then
+            local status, statusMessage = EbonBuilds.EchoPerformance.GetTrackingStatus()
+            if statusMessage and status ~= "ready" then
+                countText = countText .. " -- DPS: " .. statusMessage
+            end
+        end
+        local ok, weightSuggestions = pcall(EbonBuilds.EchoPerformance.SuggestWeightAdjustments, build)
+        weightSuggestions = ok and weightSuggestions or {}
         if #weightSuggestions > 0 then
             countText = countText .. string.format(" -- %d weight suggestion(s) available, see Export (AI)", #weightSuggestions)
         end

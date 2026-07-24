@@ -109,7 +109,13 @@ local function BuildPanel()
     acceptBtn:SetPoint("TOPLEFT", consentText, "BOTTOMLEFT", 0, -8)
     acceptBtn:SetText("Enable tracking & sharing")
     acceptBtn:SetScript("OnClick", function()
-        EbonBuilds.EchoPerformance.SetEnabled(true)
+        if EbonBuilds.EchoPerformance.IsDetailsAvailable
+            and not EbonBuilds.EchoPerformance.IsDetailsAvailable() then
+            EbonBuilds.Toast.Show("Details! not found -- install it to collect DPS samples")
+            EbonBuilds.EchoPerformance.SetEnabled(false)
+        else
+            EbonBuilds.EchoPerformance.SetEnabled(true)
+        end
         EbonBuilds.LoginPanel._RefreshConsentBlock()
     end)
 
