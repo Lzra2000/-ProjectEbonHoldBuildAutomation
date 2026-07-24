@@ -175,31 +175,34 @@ do
 end
 
 ------------------------------------------------------------------------
--- Public Builds merge prefers peer title over PE duplicate
+-- UI lists stay separate; Evidence still sees both
 ------------------------------------------------------------------------
 do
     EbonBuildsDB.remoteBuilds.peer1 = {
         id = "uuid-peer", title = "Bear", author = "Grass", class = "SHAMAN",
         spec = 2, isPublic = true, lockedEchoes = { 1 }, lastModified = "2026-07-24",
     }
-    local out = EbonBuilds.Build.ListPublic()
-    local seenTitle = {}
-    for _, b in ipairs(out) do
-        local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        if key ~= "" then seenTitle[key] = true end
+    local peer = EbonBuilds.Build.ListPublic()
+    equal(#peer, 1, "peer ListPublic is remote only")
+    equal(peer[1].title, "Bear", "peer list has the synced build")
+
+    local journal = Bridge.ListPseudoBuilds()
+    equal(#journal, 3, "journal list is bridge-only")
+    local journalTitles = {}
+    for _, b in ipairs(journal) do journalTitles[b.title] = true end
+    check(journalTitles.Bear == true, "journal still has PE Bear (not collapsed into peer UI)")
+    check(journalTitles["14.7m sec"] == true, "unique PE title on journal list")
+
+    -- Same-title peer + PE may both exist as separate UI sources; Evidence
+    -- CollectSources still admits PE on class-wide widen.
+    local classWide = Eligibility.CollectSources("SHAMAN", 2, { anySpec = true })
+    local hasPeer, hasPe = false, false
+    for _, b in ipairs(classWide) do
+        if b.id == "uuid-peer" then hasPeer = true end
+        if b.peSharedLoadout then hasPe = true end
     end
-    for _, b in ipairs(Bridge.ListPseudoBuilds()) do
-        local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        if key == "" or not seenTitle[key] then
-            out[#out + 1] = b
-            if key ~= "" then seenTitle[key] = true end
-        end
-    end
-    local titles = {}
-    for _, b in ipairs(out) do titles[b.title] = (titles[b.title] or 0) + 1 end
-    equal(titles.Bear, 1, "duplicate PE title collapsed behind peer build")
-    equal(titles["14.7m sec"], 1, "unique PE title still present")
-    equal(titles["Arcane BiS"], 1, "other-class PE title still present in unfiltered merge")
+    check(hasPeer, "Evidence cohort includes peer build")
+    check(hasPe, "Evidence cohort still includes Echo Journal loadouts")
 end
 
 if failures > 0 then

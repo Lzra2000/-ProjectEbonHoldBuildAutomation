@@ -54,9 +54,15 @@ local CLASS_TOKENS = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATH
 
 local classDropdown, specDropdown, refreshBtn, sortDropdown
 local searchBox, searchPlaceholder
+local peerTabBtn, journalTabBtn
 local filterClass, filterSpec
 local filterText = ""
 local sortMode = "votes"  -- "votes" | "newest" | "itemlevel" | "trending"
+-- UI source tabs: peer sync vs PE Echo Journal (CommunityEligibility still
+-- uses both independently for recommendations).
+local SOURCE_PEER = "peer"
+local SOURCE_JOURNAL = "journal"
+local listSource = SOURCE_PEER
 local SORT_LABELS = {
     votes     = "Most Votes",
     newest    = "Newest",
@@ -68,34 +74,41 @@ local SORT_LABELS = {
 -- Data source
 ------------------------------------------------------------------------
 
-local function FetchPublicBuilds()
-    -- Peer/local public builds only from ListPublic (also what Sync relays).
-    -- PE Echo Journal shared loadouts are merged here as ephemeral cards --
-    -- never written into remoteBuilds, so they are not rebroadcast.
+local function FetchPeerBuilds()
+    -- Local public + remoteBuilds only (also what Sync relays). Never merge
+    -- Echo Journal pseudo-builds into this list.
     local out = EbonBuilds.Build.ListPublic()
-    local bridge = EbonBuilds.SharedLoadoutBridge
-    if not (bridge and bridge.ListPseudoBuilds) then return out end
-
-    local seenTitle = {}
     local dense = {}
     for _, b in ipairs(out) do
-        if type(b) == "table" then
-            dense[#dense + 1] = b
-            local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            if key ~= "" then seenTitle[key] = true end
-        end
-    end
-    for _, b in ipairs(bridge.ListPseudoBuilds()) do
-        if type(b) == "table" then
-            local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            -- Prefer richer peer-synced copies when titles collide.
-            if key == "" or not seenTitle[key] then
-                dense[#dense + 1] = b
-                if key ~= "" then seenTitle[key] = true end
-            end
-        end
+        if type(b) == "table" then dense[#dense + 1] = b end
     end
     return dense
+end
+
+local function FetchJournalBuilds()
+    local bridge = EbonBuilds.SharedLoadoutBridge
+    if not (bridge and bridge.ListPseudoBuilds) then return {} end
+    local dense = {}
+    for _, b in ipairs(bridge.ListPseudoBuilds() or {}) do
+        if type(b) == "table" then dense[#dense + 1] = b end
+    end
+    return dense
+end
+
+local function FetchPublicBuilds()
+    if listSource == SOURCE_JOURNAL then
+        return FetchJournalBuilds()
+    end
+    return FetchPeerBuilds()
+end
+
+EbonBuilds.PublicBuildsView._FetchPublicBuildsForTest = FetchPublicBuilds
+EbonBuilds.PublicBuildsView._SetListSourceForTest = function(source)
+    if source == SOURCE_JOURNAL then
+        listSource = SOURCE_JOURNAL
+    else
+        listSource = SOURCE_PEER
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1421,7 +1434,7 @@ local function BuildViewFrame(parent)
     local pageHeader = EbonBuilds.Theme.CreatePageHeader(
         f,
         "Public Builds",
-        "Browse community loadouts, filter by class and specialization, then import a copy to customize."
+        "Browse peer-synced builds or Echo Journal community loadouts, then import a copy to customize."
     )
 
     noBuildsLabel = EbonBuilds.Theme.CreateEmptyState(
@@ -1430,6 +1443,48 @@ local function BuildViewFrame(parent)
         "Try another class or specialization, or reload community data when sync is available."
     )
     noBuildsLabel:Hide()
+
+    -- Source tabs: Peer Sync (EbonBuilds WNT/BLD) vs Echo Journal (PE shared).
+    local tabBar = CreateFrame("Frame", nil, f)
+    tabBar:SetPoint("TOPLEFT", pageHeader, "BOTTOMLEFT", 0, -7)
+    tabBar:SetPoint("RIGHT", f, "RIGHT", -10, 0)
+    tabBar:SetHeight(28)
+
+    local function UpdateSourceTabs()
+        EbonBuilds.Theme.SetTabSelected(peerTabBtn, listSource == SOURCE_PEER)
+        EbonBuilds.Theme.SetTabSelected(journalTabBtn, listSource == SOURCE_JOURNAL)
+        if listSource == SOURCE_JOURNAL then
+            noBuildsLabel._title:SetText("No Echo Journal loadouts")
+            noBuildsLabel._body:SetText("Open ProjectEbonhold Echo Journal community loadouts, or press Reload on this tab.")
+        else
+            noBuildsLabel._title:SetText("No public builds found")
+            noBuildsLabel._body:SetText("Try another class or specialization, or reload community data when sync is available.")
+        end
+    end
+
+    local function SetListSource(source)
+        if source ~= SOURCE_JOURNAL then source = SOURCE_PEER end
+        if listSource == source then return end
+        listSource = source
+        UpdateSourceTabs()
+        RefreshView()
+    end
+
+    peerTabBtn = EbonBuilds.Theme.CreateTab(tabBar, "Peer Sync")
+    peerTabBtn:SetSize(112, 26)
+    peerTabBtn:SetPoint("LEFT", tabBar, "LEFT", 0, 0)
+    peerTabBtn:SetScript("OnClick", function() SetListSource(SOURCE_PEER) end)
+
+    journalTabBtn = EbonBuilds.Theme.CreateTab(tabBar, "Echo Journal")
+    journalTabBtn:SetSize(130, 26)
+    journalTabBtn:SetPoint("LEFT", peerTabBtn, "RIGHT", 6, 0)
+    journalTabBtn:SetScript("OnClick", function() SetListSource(SOURCE_JOURNAL) end)
+
+    EbonBuilds.Theme.AttachTooltip(peerTabBtn, "Peer Sync",
+        "Public builds shared by nearby EbonBuilds players via peer sync (local public + remoteBuilds).")
+    EbonBuilds.Theme.AttachTooltip(journalTabBtn, "Echo Journal",
+        "ProjectEbonhold Echo Journal community loadouts (ephemeral; not rebroadcast via peer sync).")
+    UpdateSourceTabs()
 
     -- Bottom bar: pagination controls
     local bottomBar = CreateFrame("Frame", nil, f)
@@ -1469,7 +1524,7 @@ local function BuildViewFrame(parent)
 
     -- Filter bar: class dropdown, spec dropdown, refresh button
     local filterBar = CreateFrame("Frame", nil, f)
-    filterBar:SetPoint("TOPLEFT", pageHeader, "BOTTOMLEFT", 0, -8)
+    filterBar:SetPoint("TOPLEFT", tabBar, "BOTTOMLEFT", 0, -8)
     filterBar:SetPoint("RIGHT",   f,   "RIGHT",     -10, 0)
     filterBar:SetHeight(24)
 
@@ -1490,18 +1545,30 @@ local function BuildViewFrame(parent)
     refreshBtn:SetPoint("LEFT", specDropdown, "RIGHT", 8, 0)
     refreshBtn:SetText("Reload")
     refreshBtn:SetScript("OnClick", function()
+        if listSource == SOURCE_JOURNAL then
+            if EbonBuilds.SharedLoadoutBridge then
+                EbonBuilds.SharedLoadoutBridge.Request(filterClass or "")
+                EbonBuilds.SharedLoadoutBridge.RefreshFromService()
+            end
+            RefreshView()
+            return
+        end
         if filterClass then
             EbonBuilds.Sync.RequestSync(filterClass)
         else
             EbonBuilds.Sync.RequestSyncAllClasses()
         end
-        -- Also refresh PE Echo Journal community loadouts (separate source).
-        if EbonBuilds.SharedLoadoutBridge then
-            EbonBuilds.SharedLoadoutBridge.Request(filterClass or "")
-            EbonBuilds.SharedLoadoutBridge.RefreshFromService()
-        end
     end)
     refreshBtn:SetScript("OnUpdate", function(self, dt)
+        -- Peer Sync uses Sync cooldown; Echo Journal reloads freely.
+        if listSource == SOURCE_JOURNAL then
+            if self._lastRemaining ~= -1 then
+                self._lastRemaining = -1
+                refreshBtn:Enable()
+                refreshBtn:SetText("Reload")
+            end
+            return
+        end
         -- Throttle: the cooldown label only shows whole seconds, so per-frame
         -- string building + SetText is wasted garbage churn.
         self._throttle = (self._throttle or 0) + dt
@@ -1782,6 +1849,52 @@ if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
         end
         if scoreOf(3600, 0) ~= 0 then
             error("a build with zero votes must always score zero, regardless of age")
+        end
+    end)
+
+    EbonBuilds.Debug.RegisterTest("PublicBuildsView source tabs keep Peer Sync and Echo Journal lists separate", function()
+        local fetch = EbonBuilds.PublicBuildsView._FetchPublicBuildsForTest
+        local setSource = EbonBuilds.PublicBuildsView._SetListSourceForTest
+        if type(fetch) ~= "function" or type(setSource) ~= "function" then
+            error("expected FetchPublicBuilds test hooks")
+        end
+        local prevRemote = EbonBuildsDB.remoteBuilds
+        EbonBuildsDB.remoteBuilds = {
+            peerTab = {
+                id = "peer-tab-id", title = "Peer Only", author = "A", class = "MAGE",
+                isPublic = true, lockedEchoes = { 1 },
+            },
+        }
+        local prevBridge = EbonBuilds.SharedLoadoutBridge
+        EbonBuilds.SharedLoadoutBridge = {
+            ListPseudoBuilds = function()
+                return {
+                    {
+                        id = "pe-shared:x:MAGE:Journal Only", title = "Journal Only",
+                        author = "J", class = "MAGE", peSharedLoadout = true,
+                        lockedEchoes = { 2 },
+                    },
+                }
+            end,
+        }
+        setSource("peer")
+        local peer = fetch()
+        setSource("journal")
+        local journal = fetch()
+        setSource("peer")
+        EbonBuildsDB.remoteBuilds = prevRemote
+        EbonBuilds.SharedLoadoutBridge = prevBridge
+        if #peer ~= 1 or peer[1].title ~= "Peer Only" then
+            error("Peer Sync tab must list only ListPublic builds")
+        end
+        if peer[1].peSharedLoadout then
+            error("Peer Sync tab must not include Echo Journal cards")
+        end
+        if #journal ~= 1 or journal[1].title ~= "Journal Only" then
+            error("Echo Journal tab must list only SharedLoadoutBridge builds")
+        end
+        if not journal[1].peSharedLoadout then
+            error("Echo Journal tab must keep peSharedLoadout marker")
         end
     end)
 

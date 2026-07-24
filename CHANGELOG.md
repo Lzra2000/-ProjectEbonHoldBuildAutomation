@@ -18,12 +18,15 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 [Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.6...HEAD
 
-### 3.86.7 (unreleased) -- sync transfer strip, Auctionator AddItem, Public Builds sort
+### 3.86.7 (unreleased) -- sync transfer strip, Auctionator AddItem, Public Builds tabs
+
+#### Changed
+- **Public Builds:** Peer Sync and Echo Journal are separate tabs (no longer one merged list). CommunityEligibility still uses both sources for recommendations (class-wide widen for Journal loadouts).
 
 #### Fixed
 - **Peer sync:** oversized public builds (e.g. >36 KB with character snapshot) are auto-stripped for transfer (drop snapshot, then trim description) while the local SavedVariables copy stays complete; toast explains what was stripped. Only builds that remain over the ceiling after shrink are refused.
 - **AuctionatorBridge:** shopping-list sync no longer crashes with `AddItem` nil on Auctionator 2.6.3-pe2 SavedVariables tables -- reattach `Atr_SList` metatable or fall back to `list.items` insert.
-- **Public Builds sort:** densify + table-typed CompareBuilds again (Echo Journal merge / sparse holes); also nil-safe sorts in `Build.ListPublic` and `SharedLoadoutBridge.ListPseudoBuilds`.
+- **Public Builds sort:** densify + table-typed CompareBuilds again (sparse holes); also nil-safe sorts in `Build.ListPublic` and `SharedLoadoutBridge.ListPseudoBuilds`.
 
 ### 3.86.6 (2026-07-24) -- Echo Journal bridge, Apply visible, Autopilot Select/Soul Ashes, Details PE 1.0.10-pe1
 
