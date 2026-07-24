@@ -99,11 +99,39 @@ function Bridge.OpenAffixSearch(affixName)
     return true, "ok"
 end
 
+-- SavedVariables restore plain tables; Atr_ShoppingListsInit reattaches the
+-- Atr_SList metatable. Bridge calls can race that, so re-attach when missing.
+local function EnsureListMethods(list)
+    if type(list) ~= "table" then return nil end
+    if type(list.AddItem) == "function" then return list end
+    if type(_G.Atr_SList) == "table" then
+        setmetatable(list, _G.Atr_SList)
+    end
+    return list
+end
+
+-- Correct Add path for Auctionator 2.6.3-pe2: Atr_SList:AddItem. Falls back to
+-- inserting into list.items when the metatable is still unavailable.
+local function AddShoppingItem(list, itemName)
+    if type(list) ~= "table" or itemName == nil or itemName == "" then return false end
+    list = EnsureListMethods(list)
+    if type(list.AddItem) == "function" then
+        local ok = pcall(list.AddItem, list, itemName)
+        return ok == true
+    end
+    if type(list.items) ~= "table" then
+        list.items = {}
+    end
+    table.insert(list.items, itemName)
+    list.isSorted = false
+    return true
+end
+
 local function FindShoppingList()
     if type(_G.AUCTIONATOR_SHOPPING_LISTS) ~= "table" then return nil end
     for _, slist in ipairs(_G.AUCTIONATOR_SHOPPING_LISTS) do
         if slist and slist.name == SHOPPING_LIST_NAME then
-            return slist
+            return EnsureListMethods(slist)
         end
     end
     return nil
@@ -122,7 +150,7 @@ local function EnsureShoppingList()
         return nil
     end
     shoppingListEnsured = true
-    return created
+    return EnsureListMethods(created)
 end
 
 -- Rebuilds Auctionator's "EbonBuilds Affixes" shopping list from affixes the
@@ -140,8 +168,7 @@ function Bridge.SyncMissingAffixShoppingList()
     for _, affix in ipairs(EbonBuilds.Affix.GetLearned()) do
         if affix and not affix.learned and affix.name and affix.name ~= "" then
             local query = Bridge.BuildAffixSearchQuery(affix.name)
-            if query ~= "" then
-                list:AddItem(query)
+            if query ~= "" and AddShoppingItem(list, query) then
                 added = added + 1
             end
         end
@@ -152,6 +179,10 @@ function Bridge.SyncMissingAffixShoppingList()
     end
     return true, added
 end
+
+-- Test hooks (metatable reattach + AddItem fallback).
+Bridge._EnsureListMethodsForTest = EnsureListMethods
+Bridge._AddShoppingItemForTest = AddShoppingItem
 
 function Bridge.AppendTooltipLines(tooltip, itemRef, affixName)
     if not tooltip or not Bridge.IsAvailable() then return end

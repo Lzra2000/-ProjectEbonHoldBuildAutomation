@@ -139,6 +139,27 @@ assertTrue(openOk, "open affix search")
 assertEq(reason, "ok", "open reason")
 assertEq(capturedQuery, "of Keen Strikes III", "search box query")
 
+-- Plain SV list without metatable: AddItem is nil until Atr_ShoppingListsInit.
+-- Bridge must reattach Atr_SList or fall back to list.items insert.
+do
+    local plain = { name = "EbonBuilds Affixes", items = { "stale" } }
+    _G.Atr_SList = {}
+    _G.Atr_SList.__index = _G.Atr_SList
+    function _G.Atr_SList.AddItem(self, itemName)
+        table.insert(self.items, itemName)
+        self.isSorted = false
+    end
+    local ensured = Bridge._EnsureListMethodsForTest(plain)
+    assertTrue(type(ensured.AddItem) == "function", "EnsureListMethods attaches AddItem")
+    assertTrue(Bridge._AddShoppingItemForTest(plain, "of Keen Strikes III"), "AddShoppingItem via metatable")
+    assertEq(plain.items[#plain.items], "of Keen Strikes III", "item appended via AddItem")
+
+    local noMeta = { name = "X", items = {} }
+    _G.Atr_SList = nil -- no metatable available: fall back to items insert
+    assertTrue(Bridge._AddShoppingItemForTest(noMeta, "of Foo"), "AddShoppingItem falls back to items insert")
+    assertEq(noMeta.items[1], "of Foo", "fallback insert works when AddItem missing")
+end
+
 loadedAddons.Auctionator = nil
 _G.Atr_GetAuctionBuyout = nil
 openOk, reason = Bridge.OpenAffixSearch("Keen Strikes III")

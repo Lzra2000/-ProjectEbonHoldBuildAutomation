@@ -484,12 +484,12 @@ function EbonBuilds.Build.ListPublic()
     local out = {}
     -- Local public builds
     for _, b in pairs(EbonBuildsDB.builds) do
-        if b.isPublic then out[#out + 1] = b end
+        if type(b) == "table" and b.isPublic then out[#out + 1] = b end
     end
     -- Remote builds (received via sync)
     if EbonBuildsDB.remoteBuilds then
         for _, b in pairs(EbonBuildsDB.remoteBuilds) do
-            out[#out + 1] = b
+            if type(b) == "table" then out[#out + 1] = b end
         end
     end
 
@@ -502,22 +502,30 @@ function EbonBuilds.Build.ListPublic()
     local byTitle = {}
     local deduped = {}
     for _, b in ipairs(out) do
-        local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        if key == "" then
-            deduped[#deduped + 1] = b -- never collapse untitled builds against each other
-        else
-            local existing = byTitle[key]
-            if not existing then
-                byTitle[key] = b
-            elseif (b.lastModified or "") < (existing.lastModified or "") then
-                byTitle[key] = b
+        if type(b) == "table" then
+            local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            if key == "" then
+                deduped[#deduped + 1] = b -- never collapse untitled builds against each other
+            else
+                local existing = byTitle[key]
+                if not existing then
+                    byTitle[key] = b
+                elseif (b.lastModified or "") < (existing.lastModified or "") then
+                    byTitle[key] = b
+                end
             end
         end
     end
-    for _, b in pairs(byTitle) do deduped[#deduped + 1] = b end
+    for _, b in pairs(byTitle) do
+        if type(b) == "table" then deduped[#deduped + 1] = b end
+    end
 
     -- Author-reported locally run-tested builds first, then by recency.
     table.sort(deduped, function(a, b)
+        if type(a) ~= "table" or type(b) ~= "table" then
+            if type(a) ~= "table" and type(b) ~= "table" then return false end
+            return type(b) ~= "table"
+        end
         local av = a.validated and 1 or 0
         local bv = b.validated and 1 or 0
         if av ~= bv then return av > bv end

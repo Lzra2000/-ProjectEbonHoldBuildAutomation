@@ -939,12 +939,20 @@ local function BuildViewFrame()
                 characterSnapshot = state.characterSnapshot,
                 author = UnitName("player"),
             }
-            local bytes = EbonBuilds.Sync.EncodedBuildSize(draft)
             local limit = EbonBuilds.Sync.GetMaxBuildTransfer and EbonBuilds.Sync.GetMaxBuildTransfer() or 36000
-            if bytes and bytes > limit and EbonBuilds.Toast and EbonBuilds.Toast.Show then
-                EbonBuilds.Toast.Show(string.format(
-                    "This build is %.0f KB — peer sync only allows %.0f KB. Shorten the description or remove the character snapshot before sharing.",
-                    math.ceil(bytes / 1024), math.ceil(limit / 1024)))
+            local fullFn = EbonBuilds.Sync.EncodedBuildSizeFull or EbonBuilds.Sync.EncodedBuildSize
+            local bytesFull = fullFn(draft)
+            local bytesTransfer = EbonBuilds.Sync.EncodedBuildSize(draft)
+            if bytesFull and bytesFull > limit and EbonBuilds.Toast and EbonBuilds.Toast.Show then
+                if bytesTransfer and bytesTransfer <= limit then
+                    EbonBuilds.Toast.Show(string.format(
+                        "This build is %.0f KB full-size; peer sync will auto-drop snapshot/trim description (%.0f KB). Local copy stays complete.",
+                        math.ceil(bytesFull / 1024), math.ceil(bytesTransfer / 1024)))
+                else
+                    EbonBuilds.Toast.Show(string.format(
+                        "This build is %.0f KB — peer sync only allows %.0f KB even after auto-shrink. Shorten weights or locked echoes before sharing.",
+                        math.ceil((bytesTransfer or bytesFull) / 1024), math.ceil(limit / 1024)))
+                end
             end
         end
     end)
