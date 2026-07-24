@@ -27,6 +27,8 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 - **Public Builds:** Peer Sync and Echo Journal are separate tabs (no longer one merged list). CommunityEligibility still uses both sources for recommendations (class-wide widen for Journal loadouts).
 
 #### Fixed
+- **Public Sync (#132):** storing/updating/clearing remote builds emits debounced `SYNC_REVISION_CHANGED` so Build Wizard community evidence refreshes without a local library edit.
+- **Autopilot (#148):** clear IntentQueue on freeze confirm so SELECT is not delayed by the 8s freeze TTL.
 - **Peer sync:** oversized public builds (e.g. >36 KB with character snapshot) are auto-stripped for transfer (drop snapshot, then trim description) while the local SavedVariables copy stays complete; toast explains what was stripped. Only builds that remain over the ceiling after shrink are refused.
 - **AuctionatorBridge:** shopping-list sync no longer crashes with `AddItem` nil on Auctionator 2.6.3-pe2 SavedVariables tables -- reattach `Atr_SList` metatable or fall back to `list.items` insert.
 - **Public Builds sort:** densify + table-typed CompareBuilds again (sparse holes); also nil-safe sorts in `Build.ListPublic` and `SharedLoadoutBridge.ListPseudoBuilds`.

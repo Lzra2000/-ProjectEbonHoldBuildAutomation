@@ -843,6 +843,8 @@ do
         "function EbonBuilds.Sync.SetChatMessagesEnabled(enabled)",
         "if not force and not ChatMessagesEnabled() then return end",
         "local function CommandLog(msg)",
+        "NotifyRecommendationSourcesChanged()",
+        'EbonBuilds.EventHub.Bump("SYNC_REVISION_CHANGED")',
     }
     for _, fragment in ipairs(requiredSync) do
         if not syncSource:find(fragment, 1, true) then
