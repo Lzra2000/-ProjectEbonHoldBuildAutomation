@@ -174,8 +174,25 @@ end
 -- getItemInfo(link) -> name, _, quality, _, _, itemType, _, _, equipLoc, _, sellPrice
 -- (injected for testability, matching the pattern used by
 -- AffixItemScan/Talents).
-local TRADE_GOODS_TYPE = TRADE_GOODS or "Trade Goods"
-local RECIPE_TYPE = RECIPE or "Recipe"
+--
+-- Category names must match GetItemInfo's localized itemType. Hardcoded
+-- English ("Trade Goods" / "Recipe") or the TRADE_GOODS / RECIPE globals
+-- (English-only on many private-server clients) miss on deDE/frFR/etc.
+-- GetAuctionItemClasses() returns the same localized labels in a fixed
+-- 3.3.5a order: 6 = Trade Goods, 9 = Recipe (Projectile/Quiver still
+-- occupy 7–8 before Cata removed them).
+local AUCTION_CLASS_TRADE_GOODS = 6
+local AUCTION_CLASS_RECIPE = 9
+
+local function AuctionItemClass(index, englishFallback)
+    if type(GetAuctionItemClasses) == "function" then
+        local name = select(index, GetAuctionItemClasses())
+        if type(name) == "string" and name ~= "" then
+            return name
+        end
+    end
+    return englishFallback
+end
 
 function EbonBuilds.AutoSell.ShouldSell(link, getItemInfo)
     if not link then return false end
@@ -184,8 +201,12 @@ function EbonBuilds.AutoSell.ShouldSell(link, getItemInfo)
     if not name then return false end -- not cached client-side yet; skip, don't guess
     if sellPrice and sellPrice > 0 then return false end -- has real value, not junk
     if categories.poorOnly and quality and quality ~= 0 then return false end
-    if categories.excludeTradeGoods and itemType == TRADE_GOODS_TYPE then return false end
-    if categories.excludeRecipes and itemType == RECIPE_TYPE then return false end
+    if categories.excludeTradeGoods and itemType == AuctionItemClass(AUCTION_CLASS_TRADE_GOODS, "Trade Goods") then
+        return false
+    end
+    if categories.excludeRecipes and itemType == AuctionItemClass(AUCTION_CLASS_RECIPE, "Recipe") then
+        return false
+    end
     if EbonBuilds.AutoSell.IsKept(name) then return false end
     if EbonBuilds.AffixItemScan.IsProtectedFromSelling(name) then return false end
     if IsGearUpgrade(equipLoc, link) then return false end
@@ -452,33 +473,74 @@ if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
 
     EbonBuilds.Debug.RegisterTest("AutoSell: keep-list overrides an otherwise-sellable item", function()
         EbonBuilds.AutoSell.AddToKeepList("Ruined Pelt")
-        local should = EbonBuilds.AutoSell.ShouldSell("Ruined Pelt", StubInfo(0, "Junk", "", 0))
+        local ok, err = pcall(function()
+            local should = EbonBuilds.AutoSell.ShouldSell("Ruined Pelt", StubInfo(0, "Junk", "", 0))
+            if should then error("kept item was still marked sellable") end
+            EbonBuilds.AutoSell.RemoveFromKeepList("Ruined Pelt")
+            local afterRemove = EbonBuilds.AutoSell.ShouldSell("Ruined Pelt", StubInfo(0, "Junk", "", 0))
+            if not afterRemove then error("item stayed protected after being removed from the keep-list") end
+        end)
+        -- Always clear the test entry so a failed assert cannot leak into
+        -- the real per-character SavedVariables keep-list.
         EbonBuilds.AutoSell.RemoveFromKeepList("Ruined Pelt")
-        if should then error("kept item was still marked sellable") end
-        local afterRemove = EbonBuilds.AutoSell.ShouldSell("Ruined Pelt", StubInfo(0, "Junk", "", 0))
-        if not afterRemove then error("item stayed protected after being removed from the keep-list") end
+        if not ok then error(err) end
     end)
 
     EbonBuilds.Debug.RegisterTest("AutoSell: keep-list matching is case-insensitive", function()
         EbonBuilds.AutoSell.AddToKeepList("Broken Fang")
-        local kept = EbonBuilds.AutoSell.IsKept("broken fang")
+        local ok, err = pcall(function()
+            local kept = EbonBuilds.AutoSell.IsKept("broken fang")
+            if not kept then error("keep-list lookup was case-sensitive") end
+        end)
         EbonBuilds.AutoSell.RemoveFromKeepList("Broken Fang")
-        if not kept then error("keep-list lookup was case-sensitive") end
+        if not ok then error(err) end
     end)
 
     EbonBuilds.Debug.RegisterTest("AutoSell: poorOnly category restricts to Poor quality", function()
+        local previous = EbonBuilds.AutoSell.GetCategory("poorOnly")
         EbonBuilds.AutoSell.SetCategory("poorOnly", true)
-        local grayOk = EbonBuilds.AutoSell.ShouldSell("Gray Item", StubInfo(0, "Junk", "", 0))
-        local whiteBlocked = EbonBuilds.AutoSell.ShouldSell("White Item", StubInfo(1, "Junk", "", 0))
-        EbonBuilds.AutoSell.SetCategory("poorOnly", false)
-        if not grayOk then error("Poor-quality zero-value item was blocked with poorOnly on") end
-        if whiteBlocked then error("Common-quality zero-value item was not blocked with poorOnly on") end
+        local ok, err = pcall(function()
+            local grayOk = EbonBuilds.AutoSell.ShouldSell("Gray Item", StubInfo(0, "Junk", "", 0))
+            local whiteBlocked = EbonBuilds.AutoSell.ShouldSell("White Item", StubInfo(1, "Junk", "", 0))
+            if not grayOk then error("Poor-quality zero-value item was blocked with poorOnly on") end
+            if whiteBlocked then error("Common-quality zero-value item was not blocked with poorOnly on") end
+        end)
+        EbonBuilds.AutoSell.SetCategory("poorOnly", previous)
+        if not ok then error(err) end
     end)
 
     EbonBuilds.Debug.RegisterTest("AutoSell: excludeTradeGoods/excludeRecipes default on", function()
-        local tradeGood = EbonBuilds.AutoSell.ShouldSell("Some Ore", StubInfo(1, TRADE_GOODS_TYPE, "", 0))
-        local recipe = EbonBuilds.AutoSell.ShouldSell("Some Recipe", StubInfo(1, RECIPE_TYPE, "", 0))
+        local tradeGoods = AuctionItemClass(AUCTION_CLASS_TRADE_GOODS, "Trade Goods")
+        local recipeType = AuctionItemClass(AUCTION_CLASS_RECIPE, "Recipe")
+        local tradeGood = EbonBuilds.AutoSell.ShouldSell("Some Ore", StubInfo(1, tradeGoods, "", 0))
+        local recipe = EbonBuilds.AutoSell.ShouldSell("Some Recipe", StubInfo(1, recipeType, "", 0))
         if tradeGood then error("Trade Goods item was sellable despite excludeTradeGoods defaulting on") end
         if recipe then error("Recipe item was sellable despite excludeRecipes defaulting on") end
+    end)
+
+    EbonBuilds.Debug.RegisterTest("AutoSell: category filters match localized auction class names", function()
+        local previousGetAuctionItemClasses = GetAuctionItemClasses
+        GetAuctionItemClasses = function()
+            -- German 3.3.5a order (Projectile/Quiver still present).
+            return "Waffe", "Rüstung", "Behälter", "Verbrauchbar", "Glyphe",
+                "Handwerkswaren", "Projektil", "Köcher", "Rezept", "Edelstein",
+                "Verschiedenes", "Quest"
+        end
+        local ok, err = pcall(function()
+            local tradeGood = EbonBuilds.AutoSell.ShouldSell(
+                "Some Ore", StubInfo(1, "Handwerkswaren", "", 0))
+            local recipe = EbonBuilds.AutoSell.ShouldSell(
+                "Some Recipe", StubInfo(1, "Rezept", "", 0))
+            if tradeGood then error("localized Trade Goods item was sellable") end
+            if recipe then error("localized Recipe item was sellable") end
+            -- English labels must not match a German client's auction classes.
+            local englishMiss = EbonBuilds.AutoSell.ShouldSell(
+                "English Ore", StubInfo(1, "Trade Goods", "", 0))
+            if not englishMiss then
+                error("English Trade Goods label incorrectly matched on a localized client")
+            end
+        end)
+        GetAuctionItemClasses = previousGetAuctionItemClasses
+        if not ok then error(err) end
     end)
 end
