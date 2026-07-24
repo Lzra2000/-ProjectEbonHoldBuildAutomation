@@ -46,7 +46,7 @@ Last updated from `main` after **v3.85** (`v3.85..HEAD`), **2026-07-24** (post-[
 
 Short title at publish time: **`EbonBuilds 3.86`**
 
-Body below matches the target `### 3.86` section in [`CHANGELOG.md`](../CHANGELOG.md)
+Body below matches the target `### 3.86` section in [Changelog](changelog.md)
 **plus** the install preamble that `scripts/publish-github-release.sh` / the Release
 workflow prepends. Replace `(Unreleased)` with the ship date when cutting the release.
 

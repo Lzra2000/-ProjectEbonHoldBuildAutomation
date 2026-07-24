@@ -22,7 +22,7 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 [Release v3.86](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.86)
 
-Follow-up to 3.85: client-side automation work packages WP2?WP5 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, optional Details!: Tiny Threat PE fork, ProjectEbonhold Anvil affix acquisition bridge, EchoPerformance / Details! hardening, expanded automation and regression test coverage, reliability fixes for bag dots / AutoSell / SessionHistory / FAQ, and original WotLK-inspired GitHub Pages branding. Release prep: [docs/release-386-prep.md](docs/release-386-prep.md).
+Follow-up to 3.85: client-side automation work packages WP2?WP5 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, optional Details!: Tiny Threat PE fork, ProjectEbonhold Anvil affix acquisition bridge, EchoPerformance / Details! hardening, expanded automation and regression test coverage, reliability fixes for bag dots / AutoSell / SessionHistory / FAQ, and original WotLK-inspired GitHub Pages branding. Release prep: [release-386-prep.md](release-386-prep.md).
 
 #### Added
 
