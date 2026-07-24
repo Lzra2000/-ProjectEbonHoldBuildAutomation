@@ -28,7 +28,7 @@ jobs:
           EBB_LOG_DIR: .cache/check-logs
         run: sh scripts/check.sh --full --verbose
 
-      - name: Verify dist zip builds cleanly
+      - name: Build and smoke-check dist zip (TOC paths, locale BOMs, media)
         run: sh scripts/build-dist.sh
 
       - name: Upload check logs on failure

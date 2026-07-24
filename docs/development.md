@@ -24,6 +24,8 @@ On Windows: `powershell -File scripts/check.ps1` (or `bash scripts/check.sh` fro
 | Script | What it does |
 |---|---|
 | `check.sh` / `check.ps1` | Syntax + test suite + TOC + 3.3.5a API + headers (`--full` = CI; `--only` for one group) |
+| `build-dist.sh` | Packages `dist/EbonBuilds.zip` (+ optional `dist/Auctionator.zip`; see `vendor/Auctionator/CREDITS.md`) |
+| `verify-package.sh` | Post-build smoke: TOC paths inside the zip, locale UTF-8 BOM rejection, required media, no dev leaks |
 | `check-load-order.sh` | Flags file-scope references to modules the `.toc` hasn't loaded yet |
 | `find-orphans.sh` | Files the TOC never loads (hard fail) and exports with no visible caller (review list) |
 | `i18n-report.sh` | Per-language translation coverage, missing and orphaned keys |

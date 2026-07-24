@@ -36,7 +36,7 @@ Workflow: [`.github/workflows/lua-syntax.yml`](https://github.com/Lzra2000/Proje
 
 1. `sh scripts/dev-setup.sh`
 2. `sh scripts/check.sh --full --verbose` with `EBB_ANNOTATE=1`
-3. `sh scripts/build-dist.sh`
+3. `sh scripts/build-dist.sh` (includes `scripts/verify-package.sh`: TOC paths inside the zip, no UTF-8 BOM on locale files, required media, no dev-only leaks; optional `dist/Auctionator.zip` when vendored)
 4. On failure: uploads `.cache/check-logs/` as a workflow artifact
 
 Lua test failures also emit GitHub Actions `::error file=...,line=...::`
@@ -52,6 +52,7 @@ annotations when possible, so they show up on the PR Files changed view.
 | One test file by name | `sh tests/run.sh --only freeze_recovery` |
 | 3.3.5a API blocklist | `sh scripts/check.sh --only api` |
 | TOC paths exist | `sh scripts/check.sh --only toc` |
+| Package smoke (zip TOC + BOM + media) | `sh scripts/check.sh --only package` |
 | File headers | `sh scripts/check.sh --only headers` |
 | Full suite including 70k sim | `sh scripts/check.sh --full` |
 | Verbose runner context | `VERBOSE=1 sh scripts/check.sh --only tests` |

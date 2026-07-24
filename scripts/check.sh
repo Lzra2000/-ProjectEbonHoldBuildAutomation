@@ -38,6 +38,7 @@ Check groups for --only / FILTER:
   syntax       Lua 5.1 syntax (luac5.1 -p) over core/modules (not tests/)
   tests        tests/run.sh (honours --full / FILTER for individual files)
   toc          Every .lua listed in EbonBuilds.toc exists on disk
+  package      Build dist/EbonBuilds.zip and run scripts/verify-package.sh
   api          Post-3.3.5a WoW API blocklist (scripts/check-335a-api.sh)
   headers      File header convention in core/ and modules/
   media        Required media/*.tga files exist on disk
@@ -97,7 +98,7 @@ want() {
 # Non-group filters (e.g. architecture, freeze) mean "tests only".
 is_known_group() {
     case "$1" in
-        syntax|tests|toc|api|headers|media|architecture) return 0 ;;
+        syntax|tests|toc|api|headers|media|package|architecture) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -334,6 +335,30 @@ if [ "$run_tests_only" -eq 0 ] && want media; then
         failed_checks="$failed_checks media"
         log_err "FAILED: media -- re-run: sh scripts/check.sh --only media"
         log_err "Or: python3 scripts/generate-media.py"
+    fi
+    log ""
+fi
+
+# ---- 7. Package smoke ------------------------------------------------------
+if [ "$run_tests_only" -eq 0 ] && want package; then
+    log "== Package smoke (build-dist + verify-package) =="
+    pkg_log="$LOG_DIR/package-${RUN_STAMP}.log"
+    set +e
+    sh scripts/build-dist.sh >"$pkg_log" 2>&1
+    rc=$?
+    set -e
+    cat "$pkg_log" | tee -a "$SUMMARY_LOG"
+    if [ "$rc" -ne 0 ]; then
+        overall_fail=1
+        failed_checks="$failed_checks package"
+        log_err "FAILED: package -- re-run: sh scripts/build-dist.sh && sh scripts/verify-package.sh"
+        if [ "$ANNOTATE" = "1" ]; then
+            grep -E '^::error::' "$pkg_log" 2>/dev/null | while IFS= read -r line; do
+                printf '%s\n' "$line"
+            done
+        fi
+    else
+        log "OK: dist zip built and verified"
     fi
     log ""
 fi

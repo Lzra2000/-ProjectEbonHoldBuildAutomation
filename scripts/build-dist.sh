@@ -46,3 +46,5 @@ if [ -d vendor/Auctionator ] && [ -f vendor/Auctionator/Auctionator.toc ]; then
 fi
 
 echo "Built dist/EbonBuilds.zip ($(du -h dist/EbonBuilds.zip | cut -f1))"
+
+sh scripts/verify-package.sh

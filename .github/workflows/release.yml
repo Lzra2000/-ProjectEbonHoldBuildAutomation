@@ -43,7 +43,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Build dist zip
+      - name: Build dist zip and run package smoke check
         run: sh scripts/build-dist.sh
 
       - name: Extract release notes from CHANGELOG.md

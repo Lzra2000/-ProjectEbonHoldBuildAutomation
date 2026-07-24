@@ -60,6 +60,32 @@ for _, path in ipairs(localeFiles) do
     assert(loadfile(path))("EbonBuilds", EbonBuilds)
 end
 
+-- Shipped locale files must not carry a UTF-8 BOM. luac5.1 treats it as a
+-- syntax error and WoW 3.3.5a's loader is equally unhappy.
+do
+    local function HasUtf8Bom(path)
+        local f = assert(io.open(path, "rb"))
+        local prefix = f:read(3)
+        f:close()
+        return prefix == "\239\187\191"
+    end
+    for _, path in ipairs(localeFiles) do
+        check(not HasUtf8Bom(path), path .. " must not start with a UTF-8 BOM")
+    end
+    local auctionatorLocales = {
+        "vendor/Auctionator/Locales/deDE.lua",
+        "vendor/Auctionator/Locales/esES.lua",
+    }
+    for _, path in ipairs(auctionatorLocales) do
+        local f = io.open(path, "rb")
+        if f then
+            local prefix = f:read(3)
+            f:close()
+            check(prefix ~= "\239\187\191", path .. " must not start with a UTF-8 BOM")
+        end
+    end
+end
+
 local expectedCodes = { "deDE", "esES", "frFR", "plPL", "ptBR", "ruRU" }
 for _, code in ipairs(expectedCodes) do
     check(type(registered[code]) == "table", code .. " registered a translation table")
