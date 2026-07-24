@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and release numbers follow the project's `3.xx` convention. Each shipped version
 is a `### <version> (<date>) -- <summary>` block, newest first. Within an entry,
 group changes under `#### Added`, `#### Changed`, `#### Fixed`, or `#### Security`
-— never another `###` heading (release automation stops at the next `###` line).
+? never another `###` heading (release automation stops at the next `###` line).
 
 `scripts/release.sh` refuses to tag unless this file changed. The Release workflow
 and the in-game **What's new** page both read the topmost `###` entry from here.
@@ -18,23 +18,34 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 [Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.85...HEAD
 
-### 3.86 (Unreleased) -- Automation server redesign stepping stones and docs artwork
+### 3.86 (Unreleased) -- Automation stepping stones, Auctionator PE, and reliability fixes
 
-Follow-up to 3.85: client-side automation work packages WP2–WP4 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, tightened ProjectEbonhold capability probes, expanded BoardDecision test vectors, and original WotLK-inspired GitHub Pages branding.
+Follow-up to 3.85: client-side automation work packages WP2?WP5 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, optional Details!: Tiny Threat PE fork, ProjectEbonhold Anvil affix acquisition bridge, expanded BoardDecision test coverage, reliability fixes for bag dots / AutoSell / SessionHistory / FAQ, and original WotLK-inspired GitHub Pages branding. Release prep: [docs/release-386-prep.md](docs/release-386-prep.md).
 
 #### Added
 
-- **Intent queue WP3 (#89 / #52):** new `IntentQueue` module — one in-flight autopilot intent (select/freeze/banish/reroll) with duplicate blocking; ack via board identity fingerprint, `GetPendingAction()` pending-flag drop, or 8s TTL. Wired into `Automation.ExecuteDecision` / `RequestFreeze` ahead of server intent-ack support. `ProjectAPI.GetCapabilities` exposes `intentQueueClient` and `serverIntentAck`. Docs in `docs/intent-queue-wp3.md`; tests in `tests/test_intent_queue.lua`.
-- **Shared tie-break policy WP2 (#90 / #51):** centralized score → optional PE `rank` → slot index → spell ID → frozen-preference ordering in `Scoring` (`CompareCandidates` / `IsBetterCandidate`), wired through `BoardDecision` and `Automation.TrySelect` so equal-weight boards pick deterministically and align with the server redesign. Optional per-card `rank` from ProjectEbonhold offers; missing ranks fall back to slot-index ordering. `DebugServerRankMismatch` flags rank disagreements. Tests in `tests/test_tie_break.lua`.
-- **Dry-run simulator WP4 (#93 / #53):** new `AutomationDryRun` module — pure offline evaluator returning policy verdicts (`select`/`freeze`/`banish`/`reroll`/`wait`) from board snapshots without calling ProjectEbonhold `Request*`. Transcript parser/replay for fixture directives and DebugLog/Logbook line hooks; checked-in #38-class fixture. Docs in `docs/dry-run-wp4.md`; tests in `tests/test_dry_run.lua`.
-- **WotLK-inspired docs artwork (#88):** locally generated hero background, runic dividers, slate texture, favicon, and feature-card icon silhouettes via `scripts/generate-docs-art.py` — no Blizzard client assets. Homepage hero, framed sections, and gold/frost chrome in `extra.css`; favicon updated in `mkdocs.yml`.
+- **Intent queue WP3 (#89 / #52):** new `IntentQueue` module ? one in-flight autopilot intent (select/freeze/banish/reroll) with duplicate blocking; ack via board identity fingerprint, `GetPendingAction()` pending-flag drop, or 8s TTL. Wired into `Automation.ExecuteDecision` / `RequestFreeze` ahead of server intent-ack support. `ProjectAPI.GetCapabilities` exposes `intentQueueClient` and `serverIntentAck`. Docs in `docs/intent-queue-wp3.md`; tests in `tests/test_intent_queue.lua`.
+- **Shared tie-break policy WP2 (#90 / #51):** centralized score ? optional PE `rank` ? slot index ? spell ID ? frozen-preference ordering in `Scoring` (`CompareCandidates` / `IsBetterCandidate`), wired through `BoardDecision` and `Automation.TrySelect` so equal-weight boards pick deterministically and align with the server redesign. Optional per-card `rank` from ProjectEbonhold offers; missing ranks fall back to slot-index ordering. `DebugServerRankMismatch` flags rank disagreements. Tests in `tests/test_tie_break.lua`.
+- **Dry-run simulator WP4 (#93 / #53):** new `AutomationDryRun` module ? pure offline evaluator returning policy verdicts (`select`/`freeze`/`banish`/`reroll`/`wait`) from board snapshots without calling ProjectEbonhold `Request*`. Transcript parser/replay for fixture directives and DebugLog/Logbook line hooks; checked-in #38-class fixture. Docs in `docs/dry-run-wp4.md`; tests in `tests/test_dry_run.lua`.
+- **Constraints client WP5 (#97 / #54):** new `AutomationConstraints` module packs Autopilot prefs (protect families, echo policies, thresholds, bans/whitelist, reroll hints) into a versioned table, compact wire blob, and stable `constraintsHash`. Constraints attach on each board eval; `IntentQueue` stores the hash on in-flight intents and clears the queue when prefs change mid-board. `GetCapabilities()` exposes `constraintsClient`; `serverConstraints` and `serverPolicy` stay false until ProjectEbonhold ships upload/policy. Docs in `docs/constraints-wp5.md`; tests in `tests/test_constraints.lua`.
+- **WotLK-inspired docs artwork (#88):** locally generated hero background, runic dividers, slate texture, favicon, and feature-card icon silhouettes via `scripts/generate-docs-art.py` ? no Blizzard client assets. Homepage hero, framed sections, and gold/frost chrome in `extra.css`; favicon updated in `mkdocs.yml`.
 - **Auctionator ProjectEbonhold adaptation (#92):** vendored fork **2.6.3-pe1** with affix search helpers (`AtrPE_BuildAffixSearchQuery`), PE hooks for **EbonBuilds Affixes** shopping-list sync, defensive AH scan/query wrappers, and **AuctionatorBridge** query delegation. Tests in `tests/test_auctionator_pe.lua`.
+- **Details!: Tiny Threat PE fork (#103):** optional vendored `Details_TinyThreat` for WotLK 3.3.5a with PE compatibility fixes (threat/name API polyfills, realm-qualified names in `Threater()`). Ships as `Details_TinyThreat.zip` when the release workflow includes it; install guide in `docs/details-tinythreat-pe.md`.
+- **Affix Anvil bridge (#102):** new `ProjectEbonholdAffixBridge` soft integration with PE ExtractionService / Enchanted Anvil ? capability-gated **Anvil** / **Shop** row buttons and toolbar shortcuts on the Affixes tab (Vendor hidden until PE loads `ItemPurchasePopup`; see [#112](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/112)). Tests in `tests/test_pe_affix_bridge.lua`.
 
 #### Changed
 
-- **Automation server redesign docs:** WP2 tie-break chain, WP3 intent-queue stepping stone, and WP4 dry-run transcript schema documented in `docs/automation-server-redesign.md`, `docs/intent-queue-wp3.md`, and `docs/dry-run-wp4.md` to match landed client behavior.
+- **Automation server redesign docs:** WP2 tie-break chain, WP3 intent-queue stepping stone, WP4 dry-run transcript schema, and WP5 constraints wire format documented in `docs/automation-server-redesign.md`, `docs/intent-queue-wp3.md`, `docs/dry-run-wp4.md`, and `docs/constraints-wp5.md` to match landed client behavior.
 - **ProjectEbonhold capability audit (#96):** tightened `ProjectAPI.GetCapabilities()` probes against live PE exports (`pendingFlags` requires `Perks` + `SelectPerk`; `pendingBuildSlot` follows the build-slot API family; `activeLoadout` requires both loadout setters and spell checks); explicit `serverPolicy = false` placeholder for the planned server oracle. Documented server-side gaps in `docs/capabilities.md`. Tests in `tests/test_capabilities_audit.lua`.
-- **BoardDecision test coverage (#94):** `tests/test_board_decision_coverage.lua` — freeze-first reroll locks, equal-score tie-break ordering (slot index, server rank, frozen preference), pending/slot-busy waits via BSM + IntentQueue, and freeze-penalty threshold scoring through mocked BoardDecision/Automation paths.
+- **BoardDecision test coverage (#94):** `tests/test_board_decision_coverage.lua` ? freeze-first reroll locks, equal-score tie-break ordering (slot index, server rank, frozen preference), pending/slot-busy waits via BSM + IntentQueue, and freeze-penalty threshold scoring through mocked BoardDecision/Automation paths.
+- **SessionHistory logbook UX (#101):** harden Logbook rendering against nil access and scroll edge cases during long runs.
+- **Docs site (#99):** fix broken GitHub Pages links and align the releases page with v3.85 shipping state.
+
+#### Fixed
+
+- **In-game FAQ content (#100):** restore the full generated FAQ after an MkDocs title change truncated in-game pages.
+- **Combuctor bag affix dots (#104):** harden quality-dot integration for 3.3.5a quality detection and combat-lockdown / taint safety on Combuctor item buttons.
+- **AutoSell auction categories (#107):** harden `GetAuctionItemClasses` edge cases so locale/category filters stay stable on 3.3.5a clients.
 
 
 ### 3.85 (2026-07-24) -- Autopilot reliability, Auctionator affix shopping, and UI/data refactors
@@ -71,8 +82,8 @@ Follow-up to 3.83: bag affix dots, map panel stability, Autopilot freeze persist
 
 #### Added
 
-- **Public Builds → server loadouts (#64):** Save as server loadout / Apply wishlist on Overview and Public Builds inspect, mapping locked Echoes into ProjectEbonhold designed slots (capability-gated).
-- **Combat DPS in build history (#65 / #46):** optional `COMBAT_LOG` DPS logging attaches samples to the active run; Logbook shows best measured DPS (prefers longer benchmark segments). Toggle under Settings → Optional features.
+- **Public Builds ? server loadouts (#64):** Save as server loadout / Apply wishlist on Overview and Public Builds inspect, mapping locked Echoes into ProjectEbonhold designed slots (capability-gated).
+- **Combat DPS in build history (#65 / #46):** optional `COMBAT_LOG` DPS logging attaches samples to the active run; Logbook shows best measured DPS (prefers longer benchmark segments). Toggle under Settings ? Optional features.
 - **Combuctor bag affix dots (#63):** Bagnon-style hooks for Combuctor ItemSlots so red/purple/teal/BoE dots draw on Combuctor bags too.
 - **Test coverage (#60):** TOC lint bans the classic Lua nil-toggle antipattern; regressions for freeze-over-reroll, toggles, Bagnon bag-dot hooks, plus pure-module and export/import coverage.
 
@@ -81,7 +92,7 @@ Follow-up to 3.83: bag affix dots, map panel stability, Autopilot freeze persist
 - **Teal disenchant dots never appeared (#56):** bag affix dots treated `GetContainerItemInfo`'s 3rd return as item quality; on 3.3.5a that value is `locked`, so Disenchant-candidate (teal) dots never matched. Quality now comes from `GetItemInfo`. ManualTraining's broken nil-toggle expression replaced with an explicit if/else.
 - **Zone panel crash with the world map open (#58):** toggling "Zone panel" called a nil `RefreshMapPanel` global. Forward-declared like the existing `ShowZonePins` fix. Minimap button drag angle now uses the minimap's effective scale instead of UIParent's.
 - **Frozen Echoes forgotten mid-run (#59):** when the server omitted freeze flags across board hide/show or identity churn, Autopilot could lose which Echoes were frozen and keep rerolling. Accepted freeze IDs now live in run-persistent `frozenEchoIDs`. Logs `Freeze not confirmed` when recovery resolves an unconfirmed freeze as unfrozen.
-- **Freeze penalty no longer demotes a worthy carry (#66):** while a frozen/carried Echo still scores at or above the freeze threshold, the freeze penalty is not applied — excellent carries stop losing to slightly worse fresh offers.
+- **Freeze penalty no longer demotes a worthy carry (#66):** while a frozen/carried Echo still scores at or above the freeze threshold, the freeze penalty is not applied ? excellent carries stop losing to slightly worse fresh offers.
 
 ### 3.83 (2026-07-24) -- Autopilot speaks the server addon's language, plus a community bug-fix wave
 
@@ -91,19 +102,19 @@ The freeze-first engine from 3.82's groundwork (PR #41) ships together with fixe
 
 #### Changed
 
-- **Server ProjectEbonhold API alignment (#42):** the server's distribution of ProjectEbonhold confirms a freeze by flagging the existing card (`justFrozen`) instead of resending the board, injects a guaranteed card from the active build slot (which refuses freeze/banish requests), and tracks its own in-flight requests. Autopilot reads all three — freezes confirm instantly instead of falling into recovery, no charge is wasted on the guaranteed card, and a locally refused duplicate request can no longer pause automation mid-run.
+- **Server ProjectEbonhold API alignment (#42):** the server's distribution of ProjectEbonhold confirms a freeze by flagging the existing card (`justFrozen`) instead of resending the board, injects a guaranteed card from the active build slot (which refuses freeze/banish requests), and tracks its own in-flight requests. Autopilot reads all three ? freezes confirm instantly instead of falling into recovery, no charge is wasted on the guaranteed card, and a locally refused duplicate request can no longer pause automation mid-run.
 - **Freeze/select after freeze (#38):** equal-weight boards now freeze/select deterministically left-to-right; rerolls stay hard-blocked while anything on the board is frozen or a freeze is unconfirmed (verified against a player's Logbook export).
 
 #### Fixed
 
 - **"Caster: ON" could never be turned off (#39):** the family-protection toggle used `x and nil or true`, which in Lua always yields `true`. Protection now toggles both ways; the same broken pattern was fixed in the Echo table's family filter and in the talent-snapshot comparison (which always claimed "No saved talent snapshot").
-- **Grey boxes on the world map (#36):** the Tome Atlas continent tint now draws zone highlights with additive blending, matching the client's own map highlight — the highlight textures have no alpha channel, so the old blend mode painted their black background as solid grey rectangles.
+- **Grey boxes on the world map (#36):** the Tome Atlas continent tint now draws zone highlights with additive blending, matching the client's own map highlight ? the highlight textures have no alpha channel, so the old blend mode painted their black background as solid grey rectangles.
 - **Bag affix dots with Bagnon / Combuctor (#37):** both replace the default bag frames entirely, so the dots never drew there. The module now detects Bagnon and Combuctor (same Tuller lineage) and hooks their item-button update path; default bags are unchanged, and cached views (other characters, bank while away) deliberately show no dots.
-- **Polish showed "?" for every diacritic (#40):** stock 3.3.5a fonts lack the Latin-Extended-A glyphs. The addon probes the font once per session and folds ą ć ę ł ń ś ź ż to ASCII only when they genuinely cannot render — players with a font pack keep real diacritics, everyone else reads "Postać" as "Postac" instead of "Posta?".
+- **Polish showed "?" for every diacritic (#40):** stock 3.3.5a fonts lack the Latin-Extended-A glyphs. The addon probes the font once per session and folds ? ? ? ? ? ? ? ? to ASCII only when they genuinely cannot render ? players with a font pack keep real diacritics, everyone else reads "Posta?" as "Postac" instead of "Posta?".
 
 #### Added
 
-- **FAQ:** two new entries from Discord — whether Autopilot trains a build's values by itself (it never does; Training Mode and advisor proposals are the explicit channels), and how to delete a build plus where builds live in SavedVariables.
+- **FAQ:** two new entries from Discord ? whether Autopilot trains a build's values by itself (it never does; Training Mode and advisor proposals are the explicit channels), and how to delete a build plus where builds live in SavedVariables.
 
 ### 3.82 (2026-07-21) -- Public Builds: full character view, search, and sort
 
@@ -621,7 +632,7 @@ Contributed by ha99dfs (PR #4), building on 3.15's category tabs.
 
 Repo-only release, nothing changes in-game.
 
-- All six translated READMEs (Deutsch, Español, Français, Polski, Português (Brasil), Русский) now open with the same banner, status badges, and how-it-works diagram as the English one, with the language bar bolding its own language.
+- All six translated READMEs (Deutsch, Espa?ol, Fran?ais, Polski, Portugu?s (Brasil), ???????) now open with the same banner, status badges, and how-it-works diagram as the English one, with the language bar bolding its own language.
 - While touching them anyway, their Commands and bug-reporting sections were finally brought up to date with 3.15's slash-command removal -- they'd still been showing the full table of removed `/ebb` subcommands. Each now describes the Settings popup instead, translated in the same register the rest of that README already uses.
 
 ### 3.16 (2026-07-19) -- Repo page: banner, diagram, badges
@@ -702,7 +713,7 @@ Added while investigating a bug report that the "AI report" button in the build 
 
 ### 3.07 (2026-07-18) -- Publish actual GitHub Releases, not just tags
 
-- Added `scripts/publish-github-release.sh`, which creates a real GitHub Release (the page under `/releases`, with notes) for an already-pushed tag. Pushing a git tag alone only creates a ref — it does not appear as a Release. The script pulls its title and notes directly from the matching `### <version>` section of this file.
+- Added `scripts/publish-github-release.sh`, which creates a real GitHub Release (the page under `/releases`, with notes) for an already-pushed tag. Pushing a git tag alone only creates a ref ? it does not appear as a Release. The script pulls its title and notes directly from the matching `### <version>` section of this file.
 - Wired into `scripts/release.sh`'s final output and documented in the README.
 
 ### 3.06 (2026-07-18) -- Developer tooling: packaging and local checks
@@ -934,7 +945,7 @@ Compared with the uploaded 2.59 build:
 
 ### 2.45 (2026-07-16) -- weight suggestions from DPS data (Export (AI), read-only)
 
-- **New: `EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)`.** Compares each tracked echo's average DPS against other echoes currently sharing its exact weight value; if one deviates by 25%+ from that tier's average, suggests a modest (±10) weight nudge. Echoes from a co-active cluster larger than 3 (see 2.43) are excluded from both the comparison and the tier baseline, so one inflated/deflated group can't skew the whole tier.
+- **New: `EbonBuilds.EchoPerformance.SuggestWeightAdjustments(build)`.** Compares each tracked echo's average DPS against other echoes currently sharing its exact weight value; if one deviates by 25%+ from that tier's average, suggests a modest (?10) weight nudge. Echoes from a co-active cluster larger than 3 (see 2.43) are excluded from both the comparison and the tier baseline, so one inflated/deflated group can't skew the whole tier.
 - Deliberately a **read-only report, not auto-applied** like the threshold Tuning Advisor -- weight changes are a bigger, more visible intervention, and this data carries more inherent noise (fight variance, the cluster limitation) than the offer-distribution data thresholds are tuned against. Shown in Export (AI) under a new "Weight suggestions from DPS data" section when Echo Performance tracking is on and there's enough data; the Tuning Advisor window also notes the count when suggestions exist, pointing to Export (AI).
 - Verified in isolation with a mock tier containing a clear over-performer, a clear under-performer, two near-average echoes, and a 4-member cluster: the two averages were correctly left unflagged, the outliers correctly flagged with the right nudge direction, and the cluster correctly excluded from both suggestions and the tier baseline entirely.
 - Confirmed for anyone wondering: Freeze has been part of Continuous Auto-Tune since 2.35, in both Classic and Smart mode -- no change needed there.
@@ -1098,12 +1109,12 @@ Reviewed the full ProjectEbonhold and ProjectEbonhold Enhanced addon source (bot
 
 ### 2.13 (2026-07-16)
 
-- **New: class-filtered sync requests.** `/ebb` Public Builds Reload now sends the currently-selected class filter along with the sync request, so peers only send back builds for that class instead of their entire public/relayed collection. Old clients (pre-2.13) that receive this extra field simply ignore it and answer as before — fully backward compatible. Tome Atlas sync (which needs all classes) is unaffected.
+- **New: class-filtered sync requests.** `/ebb` Public Builds Reload now sends the currently-selected class filter along with the sync request, so peers only send back builds for that class instead of their entire public/relayed collection. Old clients (pre-2.13) that receive this extra field simply ignore it and answer as before ? fully backward compatible. Tome Atlas sync (which needs all classes) is unaffected.
 
 ### 2.12 (2026-07-16)
 
 - **Fixed: eight complete modules existed on disk but were never loaded.** `ClickTrace`, `ErrorLog`, `AffixItemScan`, `GearScore`, `Talents`, `TalentAutoLearn`, `BagAffixDots`, and `AutoSell` were fully written (including the `/ebb autosell` opt-in the code itself documented) but missing from `EbonBuilds.toc`, so none of them ever ran. All eight are now wired into the load order (dependency-safe), bootstrapped from `core/Init.lua`, and reachable via `/ebb autosell`, `/ebb bagdots`, `/ebb errors`, `/ebb clicktrace`.
-- **Fixed: ClickTrace's own click-logging hook didn't exist.** Its header comment described logging every click via a hook in `Theme.CreateButton`, but that hook was never implemented — even once loaded, it would have silently recorded nothing. Added the hook to `Theme.CreateButton` and a view-transition hook to `ViewRouter.Show`.
+- **Fixed: ClickTrace's own click-logging hook didn't exist.** Its header comment described logging every click via a hook in `Theme.CreateButton`, but that hook was never implemented ? even once loaded, it would have silently recorded nothing. Added the hook to `Theme.CreateButton` and a view-transition hook to `ViewRouter.Show`.
 
 ### 2.11 (2026-07-14) -- important fix
 
@@ -1143,10 +1154,10 @@ Reviewed the full ProjectEbonhold and ProjectEbonhold Enhanced addon source (bot
 ### 2.4 (2026-07-13)
 
 - **Smart mode extended:** expected-value thresholds now drive banish (vs. average card, default 60%) and freeze (vs. expected best-of-3, default 110%) alongside reroll; new sliders for both; reroll threshold auto-paces with remaining charges (100% at 8+, 60% at the last one). Debug log headers show `[SMART]`/`[CLASSIC]` with the effective absolute thresholds.
-- **New: build chat links** — `Chat Link` button on every build; clickable for addon users, click-to-fetch from any online owner (public builds only), plain text for everyone else.
+- **New: build chat links** ? `Chat Link` button on every build; clickable for addon users, click-to-fetch from any online owner (public builds only), plain text for everyone else.
 - **Tome Atlas:** "Best farming" zone ranking for your missing tomes.
 - **UI:** retail-style flat buttons across the entire addon (44 buttons reskinned).
-- **Fixed (important):** message sanitizing could corrupt sync payloads whose fields start with `c`+hex digits (about 1 in 16 build ids!) or `r` — silently breaking those transfers. Sanitizing is now anchored to the message start and can no longer touch payload content.
+- **Fixed (important):** message sanitizing could corrupt sync payloads whose fields start with `c`+hex digits (about 1 in 16 build ids!) or `r` ? silently breaking those transfers. Sanitizing is now anchored to the message start and can no longer touch payload content.
 
 ### 2.3 (2026-07-13)
 
@@ -1154,7 +1165,7 @@ Reviewed the full ProjectEbonhold and ProjectEbonhold Enhanced addon source (bot
 
 ### 2.2 (2026-07-13)
 
-- **New: Tome Atlas** — community-shared drop database for echo tomes (mob + zone + observed count). Automatic recording on loot, automatic sharing via sync channel and guild, idempotent merging, search + missing-only filter, `/ebb atlas`. Old client versions safely ignore the new sync messages.
+- **New: Tome Atlas** ? community-shared drop database for echo tomes (mob + zone + observed count). Automatic recording on loot, automatic sharing via sync channel and guild, idempotent merging, search + missing-only filter, `/ebb atlas`. Old client versions safely ignore the new sync messages.
 
 ### 2.1 (2026-07-12)
 
@@ -1167,7 +1178,7 @@ Reviewed the full ProjectEbonhold and ProjectEbonhold Enhanced addon source (bot
 
 **Automation correctness**
 - Peak score now excludes the transient novelty bonus (stable thresholds for the whole run)
-- Peak/EV caches are invalidated on build switch, build save, and new run (previously never — stale thresholds after any change)
+- Peak/EV caches are invalidated on build switch, build save, and new run (previously never ? stale thresholds after any change)
 - Select no longer picks the echo frozen this round; local freeze state is cleared per choice screen and banish can no longer target a just-frozen echo
 - No reroll while a freeze round is in flight
 - Weights for class-prefixed echoes now apply (canonical name lookup shared between table and automation)
@@ -1177,10 +1188,10 @@ Reviewed the full ProjectEbonhold and ProjectEbonhold Enhanced addon source (bot
 - Mode toggle + slider in the Automation tab; Classic remains the default
 
 **Settings tab**
-- All changes persist immediately when editing an existing build (sliders on release, reset, model, family protection, priority ban list) — fixes "reset did nothing"
-- Live conflict warnings: banish ≥ freeze, guard < freeze
+- All changes persist immediately when editing an existing build (sliders on release, reset, model, family protection, priority ban list) ? fixes "reset did nothing"
+- Live conflict warnings: banish ? freeze, guard < freeze
 - Hover tooltips on every threshold slider with a worked example using your current peak
-- Priority-order explainer (Banish → Reroll → Freeze → Select) and reset-to-defaults button
+- Priority-order explainer (Banish ? Reroll ? Freeze ? Select) and reset-to-defaults button
 
 **Diagnostics (new)**
 - `/ebb debug` decision tracing, `/ebb debuglog` copyable log window

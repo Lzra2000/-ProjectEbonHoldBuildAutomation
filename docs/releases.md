@@ -26,12 +26,20 @@ Requires **ProjectEbonhold** or **ProjectEbonhold Enhanced**. Some features addi
 
 | What | Where |
 |------|-------|
-| Latest downloadable build | [GitHub Releases — latest](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest) |
+| Latest downloadable build | [GitHub Releases ? latest](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest) |
 | Full version history | [Changelog](changelog.md) (mirrors `CHANGELOG.md`) |
 | In-game "What's new" | Top entry from `CHANGELOG.md`, regenerated at release time |
 | Version in the client | `## Version:` line in `EbonBuilds.toc` |
 
 Pushing a `v*` tag (for example `v3.85`) triggers the [Release workflow](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/actions/workflows/release.yml): full checks, `dist/EbonBuilds.zip` build, and publication to GitHub Releases with notes extracted from the matching `### <version>` block in `CHANGELOG.md`.
+
+## Next release (3.86)
+
+**3.86 is not tagged yet.** Draft release notes, merged-PR inventory since v3.85, and the pre-tag
+checklist live in **[3.86 release prep](release-386-prep.md)**. EbonBuilds blockers
+([#96](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/96),
+[#102](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/102)) are cleared; do not push
+`v3.86` until you intentionally complete that checklist.
 
 ## Recent releases
 
