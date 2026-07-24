@@ -282,6 +282,15 @@ local function ShowContinentOverlays()
             local tex = overlayPool[used]
             if not tex then
                 tex = parent:CreateTexture(nil, "OVERLAY")
+                -- The zone highlight BLPs (<file>Highlight) carry no alpha
+                -- channel: they're opaque, black everywhere outside the zone
+                -- shape. FrameXML's own WorldMapHighlight texture is declared
+                -- alphaMode="ADD" (WorldMapFrame.xml) for exactly that reason
+                -- -- additive blending makes black texels contribute nothing,
+                -- so only the zone shape lights up. On the default BLEND mode
+                -- those black texels painted as solid grey rectangles over
+                -- the continent map (#36).
+                tex:SetBlendMode("ADD")
                 overlayPool[used] = tex
             end
             tex:SetTexture("Interface\\WorldMap\\" .. geo.file .. "\\" .. geo.file .. "Highlight")
