@@ -2,8 +2,8 @@ local addonName, EbonBuilds = ...
 
 -- EbonBuilds: modules/integration/SharedLoadoutBridge.lua
 -- Lean bridge: ProjectEbonhold Echo Journal community loadouts
--- (PerkService.GetSharedEchoLoadouts) to ephemeral pseudo-builds for Public
--- Builds browsing and CommunityEligibility evidence.
+-- (PerkService.GetSharedEchoLoadouts) to ephemeral pseudo-builds for the
+-- Public Builds "Echo Journal" tab and CommunityEligibility evidence.
 --
 -- Intentionally NOT written into EbonBuildsDB.builds / remoteBuilds and never
 -- returned from Build.ListPublic(), so peer WNT/BLD sync cannot rebroadcast
