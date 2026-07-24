@@ -24,17 +24,103 @@ end
 -- Internal helpers
 ------------------------------------------------------------------------
 
-local function GetRunSoulAshes()
-    local rd = EbonBuilds.ProjectAPI and EbonBuilds.ProjectAPI.GetRunData
-        and EbonBuilds.ProjectAPI.GetRunData() or nil
-    if not rd then
-        rd = EbonholdPlayerRunData
-        if not rd and ProjectEbonhold and ProjectEbonhold.PlayerRunService then
-            local get = ProjectEbonhold.PlayerRunService.GetCurrentData
-            if get then rd = get() end
+-- PE historically used soulPoints for the run's Soul Ashes counter. Some
+-- builds / UI caches expose alternate keys; accept any of them and keep a
+-- session peak so EndCurrentSession still has a value if PE resets the table
+-- to 0 before we observe the death reset.
+local SOUL_ASH_FIELDS = {
+    "soulPoints",
+    "soulAshes",
+    "SoulAshes",
+    "soulAsh",
+    "SoulAsh",
+    "ashes",
+    "currentSoulPoints",
+}
+
+local function StripColorCodes(text)
+    if type(text) ~= "string" then return text end
+    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub(",", ""))
+end
+
+local function ReadSoulAshesFromTable(rd)
+    if type(rd) ~= "table" then return nil end
+    for i = 1, #SOUL_ASH_FIELDS do
+        local n = tonumber(rd[SOUL_ASH_FIELDS[i]])
+        if n ~= nil then return n end
+    end
+    return nil
+end
+
+local function ReadSoulAshesFromUI()
+    local ui = ProjectEbonhold and ProjectEbonhold.PlayerRunUI
+    if not ui then return nil end
+    if type(ui.GetCurrentSoulPoints) == "function" then
+        local ok, value = pcall(ui.GetCurrentSoulPoints)
+        if ok then
+            local n = tonumber(value)
+            if n ~= nil then return n end
         end
     end
-    return (rd and rd.soulPoints) or 0
+    if type(ui.GetUIElements) == "function" then
+        local ok, elements = pcall(ui.GetUIElements)
+        if ok and type(elements) == "table" then
+            local fromTable = ReadSoulAshesFromTable(elements)
+            if fromTable ~= nil then return fromTable end
+            local textWidget = elements.soulPointsText
+            if textWidget and type(textWidget.GetText) == "function" then
+                local textOk, text = pcall(textWidget.GetText, textWidget)
+                if textOk then
+                    local n = tonumber(StripColorCodes(text))
+                    if n ~= nil then return n end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function RequestRunDataRefresh()
+    local service = ProjectEbonhold and ProjectEbonhold.PlayerRunService
+    if service and type(service.RequestData) == "function" then
+        pcall(service.RequestData)
+    end
+end
+
+local function GetRunSoulAshes()
+    -- Prefer authoritative run-data fields; only fall through when a source
+    -- has no ash field at all. Explicit 0 from PE wins over a stale UI cache.
+    local rd = EbonBuilds.ProjectAPI and EbonBuilds.ProjectAPI.GetRunData
+        and EbonBuilds.ProjectAPI.GetRunData() or nil
+    local n = ReadSoulAshesFromTable(rd)
+    if n ~= nil then return n end
+
+    n = ReadSoulAshesFromTable(EbonholdPlayerRunData)
+    if n ~= nil then return n end
+
+    if ProjectEbonhold and ProjectEbonhold.PlayerRunService then
+        local get = ProjectEbonhold.PlayerRunService.GetCurrentData
+        if get then
+            local ok, data = pcall(get)
+            if ok then
+                n = ReadSoulAshesFromTable(data)
+                if n ~= nil then return n end
+            end
+        end
+    end
+
+    n = ReadSoulAshesFromUI()
+    if n ~= nil then return n end
+    return 0
+end
+
+local function RefreshSessionSoulAshes(session)
+    if not session then return 0 end
+    local live = GetRunSoulAshes()
+    local prior = tonumber(session.soulAshes) or 0
+    local best = math.max(prior, live)
+    session.soulAshes = best
+    return best
 end
 
 local function GetRunData()
@@ -361,7 +447,10 @@ function EbonBuilds.Session.EndCurrentSession()
     end
 
     session.endTime   = time()
-    session.soulAshes = GetRunSoulAshes()
+    -- Ask PE for a fresh run snapshot, then re-read with field/UI fallbacks and
+    -- keep the session peak so a post-death zeroed table cannot wipe ashes.
+    RequestRunDataRefresh()
+    RefreshSessionSoulAshes(session)
     local recordedSelections = RecordedSelectionCount(session)
     session.selectionCount = recordedSelections
     session.maxLevel = math.min(80, recordedSelections + 1)
@@ -526,6 +615,7 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source, appli
     }
 
     session.logs[#session.logs + 1] = entry
+    RefreshSessionSoulAshes(session)
     if selectionAction then
         session.selectionCount = pickIndex
         session.maxLevel = runLevel
@@ -553,6 +643,10 @@ function EbonBuilds.Session.GetActiveSession()
     if not idx then return nil end
     return EbonBuildsDB.sessions[idx]
 end
+
+-- Exported for unit tests
+EbonBuilds.Session._GetRunSoulAshesForTests = GetRunSoulAshes
+EbonBuilds.Session._RefreshSessionSoulAshesForTests = RefreshSessionSoulAshes
 
 function EbonBuilds.Session.DeleteSession(id)
     -- Refuse to delete the active session individually
