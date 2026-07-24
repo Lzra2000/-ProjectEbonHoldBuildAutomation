@@ -353,26 +353,38 @@ On disk, builds are not inside the addon folder — like all WoW addon data they
 
 If you ever hand-edit these files, log out of the game first (the client rewrites them on logout, overwriting your edits) and keep a backup. Also note that a build imported from Public Builds can reappear via the community cache after a raw file edit — the in-game Delete button handles that case correctly.
 
-### What do the Auto-sell toggle (Settings, Automation), Settings, the Error log (Settings, Windows & Tools) and the Click Trace log (Settings, Windows & Tools) do? (new in 2.12)
-Four small standalone tools:
+### How does Auto-sell work? What do its filters and keep list do?
+Auto-sell is configured under **Settings → Automation** (gear icon in the main window). It is **off by default**.
 
-- **`the Auto-sell toggle (Settings, Automation)`** — toggle. Auto-sells 0-copper junk items while a vendor window is open. An item carrying an affix you haven't learned yet is always protected, even if it sells for nothing. Off by default; opt in explicitly.
-- **`Settings`** — toggle. Draws a colored dot on bag items whose gear affix you're missing: red for a brand-new affix line, purple for a rank you're missing on one you already partly have. On by default.
-- **`the Error log (Settings, Windows & Tools)`** — opens a small always-on error log (last 20 entries), separate from the Debug log (Settings, Windows & Tools). Useful as a first step when something breaks and you don't have debug tracing already running.
-- **`the Click Trace log (Settings, Windows & Tools)`** — diagnostic for "I clicked a button and nothing happened." Logs every themed button click and view transition, so a bug report can show whether the click even reached EbonBuilds or was intercepted before that.
+When enabled, opening a vendor triggers a sweep of your bags for **zero-copper** items that pass every filter. Items are sold one at a time (with a short delay), and WoW's vendor buyback tab gives you a same-session undo.
+
+**Options (require Settings Save):**
+- **Auto-sell junk at vendors** — master toggle.
+- **Only sell Poor (gray) quality** — restricts the sweep to gray items only; when off, any quality with zero vendor price can be sold.
+- **Never auto-sell Trade Goods** — on by default.
+- **Never auto-sell Recipes** — on by default.
+
+**Keep list** — click **Manage Auto-Sell Keep List...** to add exact item names that should never be sold. Per-character; saves immediately as you add or remove entries (no Settings Save needed).
+
+**Always protected:** non-zero vendor price, unlearned affixes, gear upgrades for your active build, and keep-list names. Category filters use localized item-type names so Trade Goods / Recipe detection works on non-English clients too.
+
+The old `/ebb autosell` slash command was removed when slash commands moved into Settings — use the checkboxes instead. See [Settings → Automation](settings.md#automation) for the full reference.
+
+### What do the Error log and Click Trace log do? (new in 2.12)
+Two diagnostic tools under **Settings → Windows & Tools**:
+
+- **Error log** — opens a small always-on error log (last 20 entries), separate from the Debug log. Useful as a first step when something breaks and you don't have debug tracing already running.
+- **Click Trace log** — diagnostic for "I clicked a button and nothing happened." Logs every themed button click and view transition, so a bug report can show whether the click even reached EbonBuilds or was intercepted before that.
 
 ### Why did Reload get faster / show fewer builds? (2.13)
 The Public Builds **Reload** button now only requests builds for the class currently selected in the dropdown (your own class by default), instead of every class from every peer on every reload. Switch the dropdown to "All Classes" if you want the old everything-at-once behavior back. This cuts sync traffic and page count dramatically on classes many players share builds for.
 
 ### What do the checkboxes in the gear-icon Settings dialog do? (new in 2.16)
-That's the small "EbonBuilds Settings" popup (gear icon next to the window's close button, not the per-build Automation tab). It now covers:
+That's the "EbonBuilds Settings" popup (gear icon next to the window's close button, not the per-build Automation tab). Categories include General (action delay, toast duration), Automation (auto-sell with category filters and keep list, bag affix dots, debug/click-trace toggles), Interface (UI language), Windows & Tools (one-click access to guides and logs), Build (EWL export, clear training data), and Consent (DPS sharing).
 
-- **Action delay** — how long automation waits before acting on a new echo screen. Very low values may cause the addon to malfunction.
-- **Toast duration** — how long pick/reroll/freeze/banish notifications stay on screen.
-- **Auto-sell junk at vendors** — same as `the Auto-sell toggle (Settings, Automation)`, now with a persistent checkbox instead of only a slash command.
-- **Bag affix dots** — same as `Settings`, likewise now a checkbox here.
+Nothing applies until you click **Save** — except the auto-sell keep list, which saves immediately in its own window. A toast confirms what changed (e.g. "Settings saved (Auto-sell ON, Bag dots OFF)").
 
-The dialog scrolls if it ever grows past the window (same fix as the FAQ window in 2.14), so more settings can be added here later without risk of overflow.
+See the [Settings reference](settings.md) for every option. The dialog scrolls if it grows past the window, so more settings can be added later without overflow.
 
 ### EbonBuilds won't even enable / greyed out in the addon list with ProjectEbonhold Enhanced. Fixed?
 Yes (2.22). The `.toc` declared a hard `## Dependencies: ProjectEbonhold` -- WoW's client won't let you enable an addon at all if a hard dependency's exact folder name isn't found, and "ProjectEbonhold Enhanced" ships under a different folder name even though it provides the same API. Switched to `## OptionalDeps: ProjectEbonhold, ProjectEbonholdEnhanced`, which still makes sure whichever one you have loads first (so EbonBuilds sees it), but no longer blocks enabling EbonBuilds if the folder name doesn't match exactly. No more manually editing the `.toc` by hand after every update.
