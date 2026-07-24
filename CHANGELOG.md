@@ -16,9 +16,23 @@ instructions and download links also live on
 [GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
 and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutomation/releases/).
 
-[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.6...HEAD
+[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.7...HEAD
 
-### 3.86.7 (unreleased) -- Public Builds tabs, Tome shopping, sync/Auctionator fixes
+### 3.86.7 (2026-07-24) -- Public Builds tabs, Tome shopping, sync/Auctionator fixes
+
+Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full Details! suite (ProjectEbonhold **1.0.10-pe1**). Auctionator remains **2.6.3-pe2**.
+
+#### Kurznotiz (DE)
+- **Public Builds:** zwei Reiter -- **Peer Sync** und **Echo Journal** (nicht mehr eine gemischte Liste).
+- **Tome Atlas:** **Sync AH list** schreibt fehlende Tomes in Auctionator-Liste **EbonBuilds Tomes**; Zeilen-Button **AH** oeffnet Buy-Suche.
+- **Sync (#132):** nach Public Sync aktualisiert sich die Build-Wizard-Evidenz automatisch.
+- **Autopilot (#148):** Freeze leert IntentQueue, damit SELECT nicht 8s blockiert. Danach /reload.
+
+#### Highlights (EN)
+- **Public Builds tabs:** Peer Sync vs Echo Journal as separate lists; Evidence still uses both on class-wide widen.
+- **Tome Atlas Auctionator shopping:** Sync AH list + per-row AH for missing tomes.
+- **Public Sync (#132):** debounced `SYNC_REVISION_CHANGED` after remoteBuilds mutate.
+- **Autopilot (#148):** clear IntentQueue on freeze confirm; peer-sync strip / Auctionator AddItem / Public Builds sort from #149.
 
 #### Added
 - **Tome Atlas Auctionator shopping:** toolbar **Sync AH list** rebuilds shopping list **EbonBuilds Tomes** with one search term per missing atlas tome; missing tome rows show an **AH** button (opens Auctionator Buy). Soft-fails with toast when Auctionator is missing. Prefer AH over PE vendor until `ItemPurchasePopup` is in TOC.
@@ -29,9 +43,12 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 #### Fixed
 - **Public Sync (#132):** storing/updating/clearing remote builds emits debounced `SYNC_REVISION_CHANGED` so Build Wizard community evidence refreshes without a local library edit.
 - **Autopilot (#148):** clear IntentQueue on freeze confirm so SELECT is not delayed by the 8s freeze TTL.
-- **Peer sync:** oversized public builds (e.g. >36 KB with character snapshot) are auto-stripped for transfer (drop snapshot, then trim description) while the local SavedVariables copy stays complete; toast explains what was stripped. Only builds that remain over the ceiling after shrink are refused.
-- **AuctionatorBridge:** shopping-list sync no longer crashes with `AddItem` nil on Auctionator 2.6.3-pe2 SavedVariables tables -- reattach `Atr_SList` metatable or fall back to `list.items` insert.
-- **Public Builds sort:** densify + table-typed CompareBuilds again (sparse holes); also nil-safe sorts in `Build.ListPublic` and `SharedLoadoutBridge.ListPseudoBuilds`.
+- **Peer sync (#149):** oversized public builds (e.g. >36 KB with character snapshot) are auto-stripped for transfer (drop snapshot, then trim description) while the local SavedVariables copy stays complete; toast explains what was stripped. Only builds that remain over the ceiling after shrink are refused.
+- **AuctionatorBridge (#149):** shopping-list sync no longer crashes with `AddItem` nil on Auctionator 2.6.3-pe2 SavedVariables tables -- reattach `Atr_SList` metatable or fall back to `list.items` insert.
+- **Public Builds sort (#149):** densify + table-typed CompareBuilds again (sparse holes); also nil-safe sorts in `Build.ListPublic` and `SharedLoadoutBridge.ListPseudoBuilds`.
+
+#### Release assets
+- **EbonBuilds.zip**, **Auctionator.zip** (2.6.3-pe2), **Details.zip** (full suite, flat folders, ProjectEbonhold **1.0.10-pe1**). Do not use companion-only Details_ProjectEbonhold.zip / Details_TinyThreat.zip as the primary install.
 
 ### 3.86.6 (2026-07-24) -- Echo Journal bridge, Apply visible, Autopilot Select/Soul Ashes, Details PE 1.0.10-pe1
 
