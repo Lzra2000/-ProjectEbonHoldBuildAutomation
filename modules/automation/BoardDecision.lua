@@ -137,6 +137,15 @@ function D.ClassifyPendingFreeze(board, pendingSlot, pendingEchoID, pendingIdent
     return "waiting"
 end
 
+local function IsRunFrozenEcho(board, slot)
+    if not board or not slot then return false end
+    local key = EchoKey(slot)
+    -- boardState.frozenEchoIDs is run-persistent and survives board-identity
+    -- changes. Servers that omit isFrozen/isCarried still block rerolls when
+    -- the client previously accepted or confirmed a freeze for this Echo.
+    return key ~= nil and board.runFrozenEchoIDs and board.runFrozenEchoIDs[key] and true or false
+end
+
 function D.RefreshFrozenState(board)
     board.frozenCount = 0
     board.frozenBySlot = board.frozenBySlot or {}
@@ -146,10 +155,11 @@ function D.RefreshFrozenState(board)
 
     for i, slot in ipairs(board.slots or {}) do
         local index = tonumber(slot.index) or i
-        if slot.isFrozen or slot.isCarried or WasFrozenThisBoard(board, slot) then
+        local key = EchoKey(slot)
+        if slot.isFrozen or slot.isCarried or WasFrozenThisBoard(board, slot)
+            or IsRunFrozenEcho(board, slot) then
             board.frozenCount = board.frozenCount + 1
             board.frozenBySlot[index] = true
-            local key = EchoKey(slot)
             if key ~= nil then board.frozenEchoIDs[key] = true end
         end
     end
@@ -291,3 +301,4 @@ D._IsLegalSelection = IsLegalSelection
 D._IsValuable = IsValuable
 D._RequiresPreservation = RequiresPreservation
 D._WasFrozenThisBoard = WasFrozenThisBoard
+D._IsRunFrozenEcho = IsRunFrozenEcho

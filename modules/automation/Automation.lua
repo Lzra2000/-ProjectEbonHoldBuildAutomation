@@ -46,6 +46,10 @@ local boardState = {
     identityFingerprint = nil,
     frozenCount = 0,
     frozenBySlot = {},
+    -- Run-persistent Echo IDs that the client accepted or confirmed as frozen.
+    -- Survives board-identity changes and PerkUI hide/show within a run so
+    -- servers that omit isFrozen cannot reopen rerolls while a freeze is held.
+    -- Cleared when the Echo is picked or the run ends.
     frozenEchoIDs = {},
     frozenThisBoardBySlot = {},
     frozenThisBoardEchoIDs = {},
@@ -329,6 +333,7 @@ function EbonBuilds.Automation.ResetInitialActionDelay()
     -- intentionally survives an instant boost to level 50, while reconstructing
     -- a session later in the run cannot re-arm it.
     initialActionDelayPending = IsInitialRunLevel()
+    for key in pairs(boardState.frozenEchoIDs) do boardState.frozenEchoIDs[key] = nil end
 end
 
 -- Shared charge-based pacing: scales a threshold based on how many
@@ -638,7 +643,10 @@ local function MarkFrozenThisBoard(slot)
     local index = tonumber(slot.index)
     local echoID = tonumber(slot.spellId) or slot.echoId or slot.refKey
     if index ~= nil then boardState.frozenThisBoardBySlot[index] = true end
-    if echoID ~= nil then boardState.frozenThisBoardEchoIDs[echoID] = true end
+    if echoID ~= nil then
+        boardState.frozenThisBoardEchoIDs[echoID] = true
+        boardState.frozenEchoIDs[echoID] = true
+    end
 end
 
 local function UnmarkFrozenThisBoard(index, echoID)
@@ -646,6 +654,14 @@ local function UnmarkFrozenThisBoard(index, echoID)
     echoID = tonumber(echoID) or echoID
     if index ~= nil then boardState.frozenThisBoardBySlot[index] = nil end
     if echoID ~= nil then boardState.frozenThisBoardEchoIDs[echoID] = nil end
+    -- Intentionally leave boardState.frozenEchoIDs alone: a "resolved
+    -- unfrozen" recovery after missing server flags must not reopen rerolls
+    -- while the server may still hold the freeze. Pick / run-end clear it.
+end
+
+local function ClearRunFrozenEcho(echoID)
+    echoID = tonumber(echoID) or echoID
+    if echoID ~= nil then boardState.frozenEchoIDs[echoID] = nil end
 end
 
 local function ResetObservedBoard(nextState)
@@ -655,12 +671,17 @@ local function ResetObservedBoard(nextState)
     boardState.frozenCount = 0
     ClearFreezeUncertainty()
     ClearMap(boardState.frozenBySlot)
-    ClearMap(boardState.frozenEchoIDs)
+    -- Keep boardState.frozenEchoIDs: run-persistent across board hide/show.
     ClearMap(boardState.frozenThisBoardBySlot)
     ClearMap(boardState.frozenThisBoardEchoIDs)
     ClearMap(boardState.failedFreezeBySlot)
     ClearPendingFreeze()
     ClearPendingAction()
+end
+
+local function ResetFreezeRound(nextState)
+    ResetObservedBoard(nextState)
+    ClearMap(boardState.frozenEchoIDs)
 end
 
 local function Remaining(total, used)
@@ -780,6 +801,7 @@ local function BuildBoard(choices, settings, build, runData, peakScore)
         canBanish = runData and (tonumber(runData.remainingBanishes) or 0) > 0 or false,
         frozenThisBoardBySlot = boardState.frozenThisBoardBySlot,
         frozenThisBoardEchoIDs = boardState.frozenThisBoardEchoIDs,
+        runFrozenEchoIDs = boardState.frozenEchoIDs,
     }
     Decision.RefreshFrozenState(board)
     board.banishThreshold = GetBanishThreshold(settings, runData, peakScore)
@@ -800,9 +822,8 @@ local function ObserveBoard(board)
     boardState.identityFingerprint = board.identityFingerprint
     boardState.frozenCount = board.frozenCount
     ClearMap(boardState.frozenBySlot)
-    ClearMap(boardState.frozenEchoIDs)
     for key, value in pairs(board.frozenBySlot or {}) do boardState.frozenBySlot[key] = value end
-    for key, value in pairs(board.frozenEchoIDs or {}) do boardState.frozenEchoIDs[key] = value end
+    -- boardState.frozenEchoIDs is run-persistent input, not an observed rebuild.
     board.revision = boardState.revision
 end
 
@@ -826,6 +847,7 @@ local function CommitConfirmedFreeze(build, board, runData, slot, usedCountSnaps
         runData.usedFreezes = (tonumber(runData.usedFreezes) or 0) + 1
         board.freezeResources = math.max(0, (board.freezeResources or 0) - 1)
     end
+    MarkFrozenThisBoard(slot)
     EbonBuilds.DebugLog.AddF("Freeze confirmed%s%s: [%d] %s (%s)",
         late and " after recovery" or "",
         source == "resource" and " by server resource counter" or "",
@@ -930,6 +952,9 @@ local function ResolveFreezeUncertainty(build, board, runData)
     UnmarkFrozenThisBoard(failedSlot, failedEchoID)
     ClearFreezeUncertainty()
     boardState.state = Decision.STATE.EVALUATING
+    -- Correction for the immediate request log/toast: recovery proved the
+    -- slot never received a server freeze flag across stable reads.
+    EbonBuilds.DebugLog.Add("Freeze not confirmed")
     EbonBuilds.DebugLog.AddF("Freeze recovery resolved: slot %d remained unfrozen across stable reads; continuing without retry", failedSlot)
     return "resolved"
 end
@@ -941,6 +966,7 @@ local function AttachRuntimeState(board)
     board.failedFreezeBySlot = boardState.failedFreezeBySlot
     board.frozenThisBoardBySlot = boardState.frozenThisBoardBySlot
     board.frozenThisBoardEchoIDs = boardState.frozenThisBoardEchoIDs
+    board.runFrozenEchoIDs = boardState.frozenEchoIDs
     board.pendingAction = boardState.pendingAction
 end
 
@@ -1069,6 +1095,7 @@ local function ExecuteDecision(build, board, decision)
         end
         boardState.state = Decision.STATE.SELECTING
         if SubmitAction("select", build, board.slots, decision.target.index, decision.target, "Select") then
+            ClearRunFrozenEcho(decision.target.spellId or decision.target.echoId or decision.target.refKey)
             boardState.pendingAction = "select"
             boardState.pendingActionFingerprint = board.fingerprint
             boardState.pendingActionIdentity = board.identityFingerprint
@@ -1163,7 +1190,9 @@ function EbonBuilds.Automation.Evaluate()
             ClearMap(boardState.failedFreezeBySlot)
             ClearMap(boardState.frozenThisBoardBySlot)
             ClearMap(boardState.frozenThisBoardEchoIDs)
+            -- Keep boardState.frozenEchoIDs across identity changes.
             boardState.frozenStateUncertain = false
+            board.runFrozenEchoIDs = boardState.frozenEchoIDs
             Decision.RefreshFrozenState(board)
         end
         ObserveBoard(board)
@@ -1304,6 +1333,9 @@ function EbonBuilds.Automation.Init()
         end
         EbonBuilds.EventHub.On("BUILD_RUNTIME_CHANGED", OnRuntimeChanged, "Automation")
         EbonBuilds.EventHub.On("ACTIVE_BUILD_CHANGED", OnRuntimeChanged, "Automation")
+        EbonBuilds.EventHub.On("RUN_ENDED", function()
+            ClearMap(boardState.frozenEchoIDs)
+        end, "Automation")
     end
     hookInstalled = true
     return true
@@ -1314,7 +1346,7 @@ EbonBuilds.Automation._ScoreChoice       = ScoreChoice
 EbonBuilds.Automation._TrySelect         = TrySelect
 EbonBuilds.Automation._AnnotateScored    = AnnotateScored
 EbonBuilds.Automation._IsProtected       = IsFamilyProtected
-EbonBuilds.Automation._ResetFreezeRound  = ResetObservedBoard
+EbonBuilds.Automation._ResetFreezeRound  = ResetFreezeRound
 EbonBuilds.Automation._GetBoardStateForTests = function() return boardState end
 EbonBuilds.Automation._GetNextEvalDelayForTests = function()
     local delay = GetEvalDelay()
@@ -1333,3 +1365,5 @@ EbonBuilds.Automation._RefreshNativeChoiceGuardForTests = RefreshNativeChoiceGua
 EbonBuilds.Automation._IsNativeChoiceSuppressedForTests = function()
     return nativeChoiceSuppressed
 end
+EbonBuilds.Automation._ExecuteDecisionForTests = ExecuteDecision
+EbonBuilds.Automation._ResetObservedBoardForTests = ResetObservedBoard

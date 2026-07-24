@@ -19,6 +19,7 @@ EbonBuildsDB = { globalSettings = { evalDelay = 2 } }
 
 local scheduledDelays = {}
 local loggedActions = {}
+local debugMessages = {}
 local choices = {}
 local build = { stats = {} }
 local addon = {
@@ -30,13 +31,19 @@ local addon = {
     ProjectAPI = {
         GetCurrentChoice = function() return choices end,
         RequestFreeze = function() return true end,
+        RequestSelect = function() return true end,
+        RequestReroll = function() return true end,
     },
     Scheduler = {
         CRITICAL = 1, INTERACTIVE = 2,
         After = function(id, delay) scheduledDelays[id] = delay; return true end,
         Cancel = function() return true end,
     },
-    DebugLog = { Add = function() end, AddF = function() end, IsEnabled = function() return false end },
+    DebugLog = {
+        Add = function(message) debugMessages[#debugMessages + 1] = tostring(message) end,
+        AddF = function(fmt, ...) debugMessages[#debugMessages + 1] = string.format(fmt, ...) end,
+        IsEnabled = function() return false end,
+    },
     Toast = { Show = function() end, ShowAutomationResult = function() end },
     Session = {
         LogAction = function(_, action, targetIndex)
@@ -198,12 +205,88 @@ check(not stableState.frozenStateUncertain, "stable failure recovery remained st
 check(stableState.failedFreezeBySlot[2], "failed slot lost duplicate-freeze suppression")
 check(not stableState.frozenThisBoardBySlot[2] and not stableState.frozenThisBoardEchoIDs[102],
     "failed freeze remained incorrectly blocked as a current-board freeze")
+local sawCorrection = false
+for _, message in ipairs(debugMessages) do
+    if message == "Freeze not confirmed" then sawCorrection = true; break end
+end
+check(sawCorrection, "resolved-unfrozen path did not write a Freeze not confirmed correction log")
 
 stableBoard.failedFreezeBySlot = stableState.failedFreezeBySlot
 stableBoard.frozenStateUncertain = stableState.frozenStateUncertain
 local nextDecision = D.Decide(stableBoard)
 equal(nextDecision.action, "SELECT", "resolved board did not continue to a safe selection")
 equal(nextDecision.target.index, 1, "resolved board selected the failed freeze target")
+
+-- Servers that omit isFrozen/isCarried must still block rerolls after the
+-- client accepted a freeze, even when board-identity churn clears
+-- frozenThisBoard* marks (the Discord freeze-then-reroll loop).
+addon.Automation._ResetFreezeRound()
+debugMessages = {}
+loggedActions = {}
+local noFlagBoard = Board(false)
+equal(addon.Automation._RequestFreezeForTests(build, noFlagBoard, noFlagBoard.slots[2]),
+    true, "no-flag freeze request was not accepted")
+local noFlagState = addon.Automation._GetBoardStateForTests()
+check(noFlagState.frozenEchoIDs[102], "accepted freeze did not record a run-persistent frozen echo")
+check(noFlagState.frozenThisBoardEchoIDs[102], "accepted freeze did not mark current-board identity")
+
+-- Board hide/show must keep the run-persistent mark.
+addon.Automation._ResetObservedBoardForTests()
+check(noFlagState.frozenEchoIDs[102], "board reset cleared run-persistent frozen echo")
+check(not noFlagState.frozenThisBoardEchoIDs[102], "board reset did not clear current-board freeze marks")
+
+-- Identity change clears this-board marks the way Evaluate does, without
+-- wiping the run-persistent safety net.
+noFlagState.frozenThisBoardBySlot[2] = nil
+noFlagState.frozenThisBoardEchoIDs[102] = nil
+noFlagState.identityFingerprint = "stale-identity"
+local carriedBoard = Board(false)
+carriedBoard.pickIsAcceptable = false
+carriedBoard.canReroll = true
+carriedBoard.runFrozenEchoIDs = noFlagState.frozenEchoIDs
+D.RefreshFrozenState(carriedBoard)
+equal(carriedBoard.frozenCount, 1, "run-persistent freeze was not counted without server isFrozen flags")
+local allowed, reason = D.CanReroll(carriedBoard)
+equal(allowed, false, "reroll was allowed after confirmed client freeze without isFrozen flags")
+check(tostring(reason):find("frozen", 1, true), "reroll block reason did not mention frozen Echo")
+local carriedDecision = D.Decide(carriedBoard)
+equal(carriedDecision.action, "SELECT", "no-flag frozen board did not fall through to selection")
+equal(carriedDecision.target.index, 1, "no-flag frozen board selected the frozen Echo")
+
+-- Picking the frozen Echo clears the run-persistent mark for later boards.
+choices = { { spellId = 101 }, { spellId = 102 } }
+local rawBoard = {
+    slots = {
+        { index = 1, spellId = 101, isFrozen = false, isCarried = false },
+        { index = 2, spellId = 102, isFrozen = false, isCarried = false },
+    },
+}
+local pickBoard = {
+    slots = {
+        { index = 1, spellId = 101, name = "Pick", score = 160, isValid = true },
+        { index = 2, spellId = 102, name = "Frozen", score = 130, isValid = true },
+    },
+    isValid = true,
+    isStable = true,
+    fingerprint = D.Fingerprint(rawBoard),
+    identityFingerprint = D.IdentityFingerprint(rawBoard),
+    frozenCount = 1,
+    maxFrozen = 2,
+    freezeResources = 0,
+    runFrozenEchoIDs = noFlagState.frozenEchoIDs,
+}
+check(addon.Automation._ExecuteDecisionForTests(build, pickBoard, {
+    action = "SELECT",
+    target = pickBoard.slots[2],
+    reason = "pick frozen echo",
+}), "select of run-frozen Echo was rejected")
+check(not noFlagState.frozenEchoIDs[102], "picking the frozen Echo did not clear its run-persistent mark")
+
+-- A new run clears remaining run-persistent marks.
+noFlagState.frozenEchoIDs[999] = true
+addon.Automation.ResetInitialActionDelay()
+check(not noFlagState.frozenEchoIDs[999], "new run did not clear run-persistent frozen echoes")
+addon.Automation._MarkInitialActionDelayCompleteForTests()
 
 -- The server ProjectEbonhold distribution confirms a freeze by setting
 -- justFrozen on the existing choice entry (without resending the board) and
@@ -235,4 +318,4 @@ local plainSlot = addon.Automation._ScoreChoice({ spellId = 303, quality = 0 }, 
 check(plainSlot and not plainSlot.isFrozen and not plainSlot.isGuaranteed,
     "plain choice picked up server flags it does not carry")
 
-print("Verified Freeze Logbook reporting, bounded uncertainty, recovery, and server flag mapping.")
+print("Verified Freeze Logbook reporting, bounded uncertainty, recovery, run-persistent frozen echoes, and server flag mapping.")
