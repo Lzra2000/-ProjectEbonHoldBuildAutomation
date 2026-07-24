@@ -268,6 +268,8 @@ end
 
 -- Capability gating: missing Upload => not enabled; present + flag off => disabled
 do
+    -- pendingBuildSlot probe above stubs Upload; reset before absent-upload assertions.
+    ProjectEbonhold.PerkService.UploadServerBuildSlot = nil
     local caps = addon.ProjectAPI.GetCapabilities()
     assertTrue(not caps.serverBuildSlots, "upload absent should clear serverBuildSlots capability")
 
