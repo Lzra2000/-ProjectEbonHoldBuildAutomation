@@ -56,13 +56,19 @@ for _, path in ipairs(tocFiles) do
     end
 end
 
--- Forward-declaration contract for WorldIntegration RefreshMapPanel (nil upvalue crash class).
+-- Forward-declaration contract for WorldIntegration map refresh (nil upvalue crash class).
 do
     local world = read("modules/ui/WorldIntegration.lua")
-    local decl = world:find("local RefreshMapPanel[%s,\n]")
-    local assign = world:find("function RefreshMapPanel%(")
-    assertTrue(decl and assign and decl < assign,
-        "WorldIntegration.lua must forward-declare `local RefreshMapPanel` before `function RefreshMapPanel()` (SetMapPanelEnabled/SetMapEnabled call it earlier)")
+    for _, pair in ipairs({
+        { "RefreshMapPanel", "SetMapPanelEnabled/SetMapEnabled call it earlier" },
+        { "ShowZonePins", "RefreshMapPanel calls it before its definition" },
+    }) do
+        local name, why = pair[1], pair[2]
+        local decl = world:find("local " .. name .. "[%s,\n]")
+        local assign = world:find("function " .. name .. "%(")
+        assertTrue(decl and assign and decl < assign,
+            "WorldIntegration.lua must forward-declare `local " .. name .. "` before `function " .. name .. "()` (" .. why .. ")")
+    end
 end
 
 -- Lint: ban the `x and nil or y` pattern in shipped code. In Lua the
@@ -226,4 +232,4 @@ do
         "FAQContent.lua has " .. tostring(pages) .. " pages; expected 50+ (what's new + FAQ). Run scripts/build-faq-pages.sh")
 end
 
-print("Architecture invariants passed: private namespace, centralized events (RegisterEvent ban), post-3.3.5a API ban, stable dispatch, native UI fallback, sync ownership, RefreshMapPanel forward-decl, and the `and nil or` toggle ban.")
+print("Architecture invariants passed: private namespace, centralized events (RegisterEvent ban), post-3.3.5a API ban, stable dispatch, native UI fallback, sync ownership, map forward-decls (RefreshMapPanel/ShowZonePins), and the `and nil or` toggle ban.")

@@ -81,6 +81,11 @@ do
     equal(pins[1].x, 0.41, "pin x")
     equal(pins[1].y, 0.51, "pin y")
     equal(#WI.PinsForZone("Nowhere", listByZoneFactory(zones)), 0, "unknown zone has no pins")
+    equal(#WI.PinsForZone(nil, listByZoneFactory(zones)), 0, "nil zone has no pins")
+
+    WI.SetSourceCoords(nil, "Pin Tome", 0.1, 0.2)
+    equal(#WI.PinsForZone("Dragonblight", listByZoneFactory(zones)), 1,
+        "SetSourceCoords ignores nil zone without breaking existing coords")
 end
 
 ------------------------------------------------------------------------
@@ -88,27 +93,32 @@ end
 ------------------------------------------------------------------------
 do
     local src = H.read_file("modules/ui/WorldIntegration.lua")
-    -- Must forward-declare before SetMapPanelEnabled / SetMapEnabled call it.
-    local declPos = src:find("local RefreshMapPanel\n", 1, true)
-        or src:find("local RefreshMapPanel\r\n", 1, true)
-        or src:find("local RefreshMapPanel$", 1, true)
-        or src:find("local RefreshMapPanel\n", 1, true)
-    -- Also accept `local RefreshMapPanel` followed by comma/other locals.
-    if not declPos then
-        declPos = src:find("local RefreshMapPanel[%s,]")
+
+    local function declPosFor(name)
+        return src:find("local " .. name .. "[%s,\n]")
+            or src:find("local " .. name .. "\r\n", 1, true)
     end
-    check(declPos ~= nil, "RefreshMapPanel must be forward-declared (local RefreshMapPanel)")
 
-    local assignPos = src:find("function RefreshMapPanel%(")
-    check(assignPos ~= nil, "RefreshMapPanel must be assigned (function RefreshMapPanel(...))")
-    check(declPos < assignPos, "forward declaration must precede the function assignment")
+    for _, name in ipairs({ "RefreshMapPanel", "ShowZonePins" }) do
+        local declPos = declPosFor(name)
+        local assignPos = src:find("function " .. name .. "%(")
+        check(declPos ~= nil, name .. " must be forward-declared (local " .. name .. ")")
+        check(assignPos ~= nil, name .. " must be assigned (function " .. name .. "(...))")
+        check(declPos < assignPos, name .. " forward declaration must precede assignment")
+    end
 
-    local setMapPos = src:find("function EbonBuilds%.WorldIntegration%.SetMapPanelEnabled")
-    check(setMapPos ~= nil and setMapPos < assignPos,
+    local refreshAssign = src:find("function RefreshMapPanel%(")
+    local setPanelPos = src:find("function EbonBuilds%.WorldIntegration%.SetMapPanelEnabled")
+    local setMapPos = src:find("function EbonBuilds%.WorldIntegration%.SetMapEnabled")
+    check(setPanelPos ~= nil and refreshAssign and setPanelPos < refreshAssign,
         "SetMapPanelEnabled is defined before RefreshMapPanel assignment (needs the forward decl)")
+    check(setMapPos ~= nil and refreshAssign and setMapPos < refreshAssign,
+        "SetMapEnabled is defined before RefreshMapPanel assignment (needs the forward decl)")
 
     check(type(WI._RefreshMapPanelForTests) == "function",
         "RefreshMapPanel test hook is a real function after load (forward-decl was assigned)")
+    check(type(WI._ShowZonePinsForTests) == "function",
+        "ShowZonePins test hook is a real function after load (forward-decl was assigned)")
 
     -- Must not use post-3.3.5a map APIs.
     check(not src:find("C_Map%.", 1), "WorldIntegration must not call C_Map (post-3.3.5a)")
@@ -116,4 +126,4 @@ do
 end
 
 H.exit_if_failed(counters, "WorldIntegration test(s)")
-print("WorldIntegration coverage passed: zone tome lines, pin helpers, and RefreshMapPanel forward-decl.")
+print("WorldIntegration coverage passed: zone tome lines, pin helpers, nil guards, and map forward-decls.")

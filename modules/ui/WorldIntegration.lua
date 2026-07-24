@@ -326,6 +326,20 @@ local function ShowContinentOverlays()
 end
 EbonBuilds.WorldIntegration._ShowContinentOverlaysForTests = ShowContinentOverlays
 
+function EbonBuilds.WorldIntegration.SetMapEnabled(enabled)
+    EbonBuildsDB = EbonBuildsDB or {}
+    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
+    EbonBuildsDB.globalSettings.tomeAtlasMapEnabled = enabled and true or false
+
+    if enabled then
+        if WorldMapFrame and WorldMapFrame.IsShown and WorldMapFrame:IsShown() then
+            RefreshMapPanel()
+        end
+    else
+        HideMapFeatures()
+    end
+end
+
 function RefreshMapPanel()
     if not MapFeatureEnabled() then
         HideMapFeatures()
@@ -546,19 +560,6 @@ end
 EbonBuilds.WorldIntegration._ShowZonePinsForTests = ShowZonePins
 EbonBuilds.WorldIntegration._RefreshMapPanelForTests = RefreshMapPanel
 
-function EbonBuilds.WorldIntegration.SetMapEnabled(enabled)
-    EbonBuildsDB = EbonBuildsDB or {}
-    EbonBuildsDB.globalSettings = EbonBuildsDB.globalSettings or {}
-    EbonBuildsDB.globalSettings.tomeAtlasMapEnabled = enabled and true or false
-
-    if enabled then
-        if WorldMapFrame and WorldMapFrame.IsShown and WorldMapFrame:IsShown() then
-            RefreshMapPanel()
-        end
-    else
-        HideMapFeatures()
-    end
-end
 
 if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
     local function StubListByZone()

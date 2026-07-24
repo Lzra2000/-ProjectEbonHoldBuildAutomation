@@ -351,8 +351,92 @@ do
     _G.__loadedAddons = nil
 end
 
+------------------------------------------------------------------------
+-- 4. v3.84 map zone panel: toggling with world map open must not call a
+-- nil global RefreshMapPanel (forward-decl regression).
+------------------------------------------------------------------------
+do
+    local world = readFile("modules/ui/WorldIntegration.lua")
+    check(world:find("local RefreshMapPanel[%s,\n]") ~= nil,
+        "WorldIntegration must forward-declare local RefreshMapPanel")
+    check(world:find("function RefreshMapPanel%(") ~= nil,
+        "WorldIntegration must assign function RefreshMapPanel()")
+
+    local function stubMapFrame()
+        return {
+            shown = true,
+            SetFrameStrata = function() end, SetSize = function() end, SetPoint = function() end,
+            ClearAllPoints = function() end, Hide = function() end, Show = function() end,
+            SetHeight = function() end, SetScript = function() end, HookScript = function() end,
+            IsShown = function(self) return self.shown end,
+            GetWidth = function() return 512 end, GetHeight = function() return 512 end,
+            CreateFontString = function()
+                return {
+                    SetPoint = function() end, SetText = function() end,
+                    SetTextColor = function() end, SetJustifyH = function() end, SetWidth = function() end,
+                }
+            end,
+            CreateTexture = function()
+                return {
+                    SetTexture = function() end, SetTexCoord = function() end,
+                    SetWidth = function() end, SetHeight = function() end,
+                    ClearAllPoints = function() end, SetPoint = function() end,
+                    SetVertexColor = function() end, SetBlendMode = function() end,
+                    SetDrawLayer = function() end, Show = function() end, Hide = function() end,
+                }
+            end,
+        }
+    end
+
+    WorldMapFrame = stubMapFrame()
+    WorldMapDetailFrame = stubMapFrame()
+    WorldMapButton = stubMapFrame()
+    GameTooltip = { Hide = function() end, SetOwner = function() end, SetText = function() end,
+        Show = function() end, IsOwned = function() return false end }
+    CreateFrame = function() return stubMapFrame() end
+    GetCurrentMapContinent = function() return 0 end
+    GetCurrentMapZone = function() return 0 end
+    GetMapZones = function() return "Test Zone" end
+    GetZoneText = function() return "Test Zone" end
+    UpdateMapHighlight = function() return nil end
+    IsAddOnLoaded = function() return false end
+    EbonBuildsDB = { globalSettings = { tomeAtlasMapEnabled = true } }
+    EbonBuildsCharDB = { mapZonePanelEnabled = true }
+
+    local addon = {
+        Theme = {
+            ACCENT_GOLD = { 1, 0.8, 0 }, TEXT_PRIMARY = { 1, 1, 1 },
+            PRESENCE_TEAL = { 0, 1, 1 }, PRESENCE_TEAL_HEX = "00ffff",
+            ApplyPanel = function() end, AddHeaderRule = function() end,
+            CreateCloseButton = function() return { SetScript = function() end, Hide = function() end } end,
+            CreateCheckbox = function()
+                return {
+                    ClearAllPoints = function() end, SetPoint = function() end,
+                    SetChecked = function() end, SetScript = function() end,
+                    Show = function() end, Hide = function() end, GetChecked = function() return true end,
+                    _labelFS = { SetText = function() end },
+                }
+            end,
+        },
+        TomeAtlas = { ListByZone = function() return {} end },
+        Database = {
+            GetCharacterPreference = function(key) return EbonBuildsCharDB[key] ~= false end,
+            SetCharacterPreference = function(key, value) EbonBuildsCharDB[key] = value end,
+        },
+        Debug = { RegisterTest = function() end },
+        WoWEvents = { On = function() end },
+    }
+
+    assert(loadfile("modules/ui/WorldIntegration.lua"))("EbonBuilds", addon)
+    local ok, err = pcall(function()
+        addon.WorldIntegration.SetMapPanelEnabled(true)
+    end)
+    check(ok, "SetMapPanelEnabled(true) with world map open must not crash (v3.84 RefreshMapPanel nil global)"
+        .. (ok and "" or (" — " .. tostring(err))))
+end
+
 if failures > 0 then
     io.stderr:write(string.format("%d bug-class regression test(s) failed.\n", failures))
     os.exit(1)
 end
-print("Bug-class regressions passed: toggle round-trips, freeze-over-reroll priority, and Bagnon hook compatibility.")
+print("Bug-class regressions passed: toggle round-trips, freeze-over-reroll priority, Bagnon hook compatibility, and v3.84 map panel toggle.")
