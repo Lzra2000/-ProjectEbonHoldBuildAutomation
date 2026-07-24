@@ -4,6 +4,15 @@ One `### <version>` entry per release, newest first. scripts/release.sh
 refuses to tag unless this file changed, and the Release workflow and the
 in-game "What's new" page both read the newest entry from here.
 
+### 3.84 (2026-07-24) -- Teal DE dots, Zone panel crash, and freeze state that sticks
+
+A short bug-fix wave right after 3.83: bag dots, map panel, Autopilot freeze persistence, plus broader test coverage so these classes stay locked.
+
+- **Teal disenchant dots never appeared (#56):** bag affix dots treated `GetContainerItemInfo`'s 3rd return as item quality; on 3.3.5a that value is `locked`, so Disenchant-candidate (teal) dots never matched. Quality now comes from `GetItemInfo`. Also replaced ManualTraining's broken nil-toggle expression with an explicit if/else.
+- **Zone panel crash with the world map open (#58):** toggling "Zone panel" called a nil `RefreshMapPanel` global. Forward-declared like the existing `ShowZonePins` fix. Minimap button drag angle now uses the minimap's effective scale instead of UIParent's.
+- **Frozen Echoes forgotten mid-run (#59):** when the server omitted freeze flags across board hide/show or identity churn, Autopilot could lose which Echoes were frozen and keep rerolling. Accepted freeze IDs now live in run-persistent `frozenEchoIDs`. Logs `Freeze not confirmed` when recovery resolves an unconfirmed freeze as unfrozen.
+- **Test coverage (#60):** bans the classic Lua nil-toggle antipattern via TOC lint, and adds regressions for freeze-over-reroll, toggles, Bagnon bag-dot hooks, plus pure-module and export/import coverage.
+
 ### 3.83 (2026-07-24) -- Autopilot speaks the server addon's language, plus a community bug-fix wave
 
 The freeze-first engine from 3.82's groundwork (PR #41) ships together with a round of fixes driven directly by Discord reports and GitHub issues.
