@@ -284,6 +284,7 @@ do
     EbonBuilds.SessionHistory = { OnHistoryChanged = function() end }
     EbonBuilds.Build = {
         GetActive = function() return { id = "build-meta", title = "Meta Build", revision = 1 } end,
+        StrategyChecksum = function() return "stub-hash" end,
     }
     EbonBuilds.Database = {
         CharacterKey = function() return "Tester-Paladin" end,

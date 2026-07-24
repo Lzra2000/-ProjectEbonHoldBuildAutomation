@@ -18,23 +18,33 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 [Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.85...HEAD
 
-### 3.86 (Unreleased) -- Automation server redesign stepping stones and docs artwork
+### 3.86 (Unreleased) -- Automation stepping stones, Auctionator PE, and reliability fixes
 
-Follow-up to 3.85: client-side automation work packages WP2–WP4 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, tightened ProjectEbonhold capability probes, expanded BoardDecision test vectors, and original WotLK-inspired GitHub Pages branding.
+Follow-up to 3.85: client-side automation work packages WP2–WP5 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, optional Details!: Tiny Threat PE fork, expanded BoardDecision test coverage, reliability fixes for bag dots / AutoSell / SessionHistory / FAQ, and original WotLK-inspired GitHub Pages branding. Open before tag: [#96](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/96), [#102](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/102) — see [docs/release-386-prep.md](docs/release-386-prep.md).
 
 #### Added
 
 - **Intent queue WP3 (#89 / #52):** new `IntentQueue` module — one in-flight autopilot intent (select/freeze/banish/reroll) with duplicate blocking; ack via board identity fingerprint, `GetPendingAction()` pending-flag drop, or 8s TTL. Wired into `Automation.ExecuteDecision` / `RequestFreeze` ahead of server intent-ack support. `ProjectAPI.GetCapabilities` exposes `intentQueueClient` and `serverIntentAck`. Docs in `docs/intent-queue-wp3.md`; tests in `tests/test_intent_queue.lua`.
 - **Shared tie-break policy WP2 (#90 / #51):** centralized score → optional PE `rank` → slot index → spell ID → frozen-preference ordering in `Scoring` (`CompareCandidates` / `IsBetterCandidate`), wired through `BoardDecision` and `Automation.TrySelect` so equal-weight boards pick deterministically and align with the server redesign. Optional per-card `rank` from ProjectEbonhold offers; missing ranks fall back to slot-index ordering. `DebugServerRankMismatch` flags rank disagreements. Tests in `tests/test_tie_break.lua`.
 - **Dry-run simulator WP4 (#93 / #53):** new `AutomationDryRun` module — pure offline evaluator returning policy verdicts (`select`/`freeze`/`banish`/`reroll`/`wait`) from board snapshots without calling ProjectEbonhold `Request*`. Transcript parser/replay for fixture directives and DebugLog/Logbook line hooks; checked-in #38-class fixture. Docs in `docs/dry-run-wp4.md`; tests in `tests/test_dry_run.lua`.
+- **Constraints client WP5 (#97 / #54):** new `AutomationConstraints` module packs Autopilot prefs (protect families, echo policies, thresholds, bans/whitelist, reroll hints) into a versioned table, compact wire blob, and stable `constraintsHash`. Constraints attach on each board eval; `IntentQueue` stores the hash on in-flight intents and clears the queue when prefs change mid-board. `GetCapabilities()` exposes `constraintsClient`; `serverConstraints` and `serverPolicy` stay false until ProjectEbonhold ships upload/policy. Docs in `docs/constraints-wp5.md`; tests in `tests/test_constraints.lua`.
 - **WotLK-inspired docs artwork (#88):** locally generated hero background, runic dividers, slate texture, favicon, and feature-card icon silhouettes via `scripts/generate-docs-art.py` — no Blizzard client assets. Homepage hero, framed sections, and gold/frost chrome in `extra.css`; favicon updated in `mkdocs.yml`.
 - **Auctionator ProjectEbonhold adaptation (#92):** vendored fork **2.6.3-pe1** with affix search helpers (`AtrPE_BuildAffixSearchQuery`), PE hooks for **EbonBuilds Affixes** shopping-list sync, defensive AH scan/query wrappers, and **AuctionatorBridge** query delegation. Tests in `tests/test_auctionator_pe.lua`.
+- **Details!: Tiny Threat PE fork (#103):** optional vendored `Details_TinyThreat` for WotLK 3.3.5a with PE compatibility fixes (threat/name API polyfills, realm-qualified names in `Threater()`). Ships as `Details_TinyThreat.zip` when the release workflow includes it; install guide in `docs/details-tinythreat-pe.md`.
 
 #### Changed
 
-- **Automation server redesign docs:** WP2 tie-break chain, WP3 intent-queue stepping stone, and WP4 dry-run transcript schema documented in `docs/automation-server-redesign.md`, `docs/intent-queue-wp3.md`, and `docs/dry-run-wp4.md` to match landed client behavior.
-- **ProjectEbonhold capability audit (#96):** tightened `ProjectAPI.GetCapabilities()` probes against live PE exports (`pendingFlags` requires `Perks` + `SelectPerk`; `pendingBuildSlot` follows the build-slot API family; `activeLoadout` requires both loadout setters and spell checks); explicit `serverPolicy = false` placeholder for the planned server oracle. Documented server-side gaps in `docs/capabilities.md`. Tests in `tests/test_capabilities_audit.lua`.
+- **Automation server redesign docs:** WP2 tie-break chain, WP3 intent-queue stepping stone, WP4 dry-run transcript schema, and WP5 constraints wire format documented in `docs/automation-server-redesign.md`, `docs/intent-queue-wp3.md`, `docs/dry-run-wp4.md`, and `docs/constraints-wp5.md` to match landed client behavior.
+- **ProjectEbonhold capability audit (#96):** tightened `ProjectAPI.GetCapabilities()` probes against live PE exports (`pendingFlags` requires `Perks` + `SelectPerk`; `pendingBuildSlot` follows the build-slot API family; `activeLoadout` requires both loadout setters and spell checks); explicit `serverPolicy = false` placeholder for the planned server oracle. Documented server-side gaps in `docs/capabilities.md`. Tests in `tests/test_capabilities_audit.lua`. *(Pending — [#96](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/issues/96) not merged.)*
 - **BoardDecision test coverage (#94):** `tests/test_board_decision_coverage.lua` — freeze-first reroll locks, equal-score tie-break ordering (slot index, server rank, frozen preference), pending/slot-busy waits via BSM + IntentQueue, and freeze-penalty threshold scoring through mocked BoardDecision/Automation paths.
+- **SessionHistory logbook UX (#101):** harden Logbook rendering against nil access and scroll edge cases during long runs.
+- **Docs site (#99):** fix broken GitHub Pages links and align the releases page with v3.85 shipping state.
+
+#### Fixed
+
+- **In-game FAQ content (#100):** restore the full generated FAQ after an MkDocs title change truncated in-game pages.
+- **Combuctor bag affix dots (#104):** harden quality-dot integration for 3.3.5a quality detection and combat-lockdown / taint safety on Combuctor item buttons.
+- **AutoSell auction categories (#107):** harden `GetAuctionItemClasses` edge cases so locale/category filters stay stable on 3.3.5a clients.
 
 
 ### 3.85 (2026-07-24) -- Autopilot reliability, Auctionator affix shopping, and UI/data refactors
