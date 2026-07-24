@@ -32,6 +32,9 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 ### Unreleased
 
+#### Added
+- **Details_ProjectEbonhold 1.0.3-pe1:** Left-click a **PE Proc Sources** bar opens a Details-style attribution summary (damage, hits, average, other sources for that proc, other procs from that source). Custom Display script v4; hover tooltip shows the same stats. Prefer `Details.zip` for the full suite.
+
 #### Fixed
 - **Details_ProjectEbonhold 1.0.2-pe1:** PE Proc Sources labels no longer use ` (<- Source)` ? Details `GetOnlyName` strips from the first hyphen (`%-.*`), which mangled bars to `Name (<` and empty `()`. Labels are now plain `Proc [Source]`. Custom Display v3 keys rows by unique label, attaches spell id + icon after create (avoids UNKNOW role-sword), and fills the percent column.
 - **Details_ProjectEbonhold 1.0.1-pe1:** PE Proc Sources no longer shows empty `()` (Details percent brackets + missing source), shortens bar labels to reduce truncation/overlap, soft-grows the window and keeps percent on for scrollable full lists, and fills spell icons from ProjectEbonhold `PerkDatabase` / `GetPerkData` (server sync) when client `GetSpellInfo` lacks them.

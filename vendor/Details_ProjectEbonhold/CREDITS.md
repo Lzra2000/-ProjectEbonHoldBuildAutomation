@@ -53,6 +53,10 @@ release zip).
   scrollable list, spell icons (client `GetSpellInfo` then PE `PerkDatabase` /
   `GetPerkData` from the server sync), real `%` column, no empty `()` when
   source is unknown.
+- **Left-click** a PE Proc Sources row opens a breakdown panel (amount, hits,
+  average, other sources of that proc, other procs from the same cast). Custom
+  displays (Details attribute 5) do not open the normal DPS player-details
+  window — this companion hooks `row_singleclick_overwrite[5]` for that index.
 
 ### Icons
 
@@ -82,7 +86,8 @@ release zip).
 4. In Details: open a window → attribute menu → **Custom** → **PE Proc Sources**
    (optional). Player spell breakdowns show `(Echo)` / `[Source]` labels
    automatically when tracking is on. Mousewheel scrolls long PE Proc Sources
-   lists; hover a bar for the full name + spell id.
+   lists; hover a bar for attribution tooltip; **click** a bar for the
+   breakdown summary.
 
 ## Residual risks
 
@@ -93,3 +98,7 @@ release zip).
   granted perk or PE-band combat hit.
 - Custom Display scripts run inside Details' sandbox; if Details updates break
   `InstallCustomObject`, labels still work via spellcache.
+
+## 1.0.3-pe1
+
+Left-click PE Proc Sources rows open an attribution summary (damage, hits, average, sibling sources/procs). Custom Display script_version 4.

@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: Details!: Project Ebonhold
-## Version: 1.0.2-pe1
+## Version: 1.0.3-pe1
 ## Author: EbonBuilds / Project Ebonhold
 ## Notes: PE fine-tune for Details! — Echo DPS labels, proc source attribution (which cast procced what), sensible PE defaults. Requires Details! core — see CREDITS.md.
 ## RequiredDeps: Details

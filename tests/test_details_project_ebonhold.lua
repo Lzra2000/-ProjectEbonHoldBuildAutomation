@@ -109,6 +109,53 @@ equal(rows[1].icon, [[Interface\Icons\Spell_Shadow_ShadowBolt]], "icon from reso
 equal(rows[2].amount, 1500, "accumulated same proc+source")
 equal(rows[2].icon, Core.QUESTION_ICON, "missing icon falls back to question")
 
+-- Hits accumulate with amount
+equal(rows[2].hits, 2, "two hits accumulated for ProcA")
+equal(rows[1].hits, 1, "one hit for ProcB")
+
+-- Breakdown for click summary
+local bd = Core.BuildProcRowBreakdown(attr, 50001, 20, function(id)
+    if id == 50001 then return "ProcA" end
+    if id == 50002 then return "ProcB" end
+    if id == 20 then return "Incinerate" end
+    if id == 30 then return "Shadow Bolt" end
+    return tostring(id)
+end)
+check(bd ~= nil, "breakdown exists")
+equal(bd.amount, 1500, "breakdown amount")
+equal(bd.hits, 2, "breakdown hits")
+equal(bd.average, 750, "breakdown average")
+equal(bd.key, "ProcA [Incinerate]", "breakdown key")
+equal(#bd.siblingSources, 0, "no other sources for ProcA yet")
+
+attr = Core.RecordProcDamage(attr, 50001, 30, 400)
+bd = Core.BuildProcRowBreakdown(attr, 50001, 20, function(id)
+    if id == 50001 then return "ProcA" end
+    if id == 30 then return "Shadow Bolt" end
+    if id == 20 then return "Incinerate" end
+    return tostring(id)
+end)
+equal(#bd.siblingSources, 1, "sibling source after second cast")
+equal(bd.siblingSources[1].sourceName, "Shadow Bolt", "sibling source name")
+equal(bd.siblingSources[1].amount, 400, "sibling source amount")
+
+bd = Core.BuildProcRowBreakdown(attr, 50002, 30, function(id)
+    if id == 50002 then return "ProcB" end
+    if id == 50001 then return "ProcA" end
+    if id == 30 then return "Shadow Bolt" end
+    return tostring(id)
+end)
+equal(#bd.siblingProcs, 1, "sibling proc from same source")
+equal(bd.siblingProcs[1].procName, "ProcA", "sibling proc name")
+
+-- NormalizeProcEntry legacy number
+local a, h = Core.NormalizeProcEntry(1234)
+equal(a, 1234, "legacy amount")
+equal(h, 1, "legacy hits default 1")
+a, h = Core.NormalizeProcEntry({ amount = 50, hits = 3 })
+equal(a, 50, "table amount")
+equal(h, 3, "table hits")
+
 -- Empty nameResolver source must not create " ()"
 local attr2 = Core.RecordProcDamage(nil, 9, 8, 100)
 local rows2 = Core.BuildProcRows(attr2, function(id)

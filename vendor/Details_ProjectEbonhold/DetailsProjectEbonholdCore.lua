@@ -166,7 +166,29 @@ function Core.ResolveProcSource(recentCasts, now, window)
     return bestId, bestName
 end
 
--- Accumulate proc damage into attribution[procId][sourceId] = amount.
+-- Normalize a stored attribution cell: legacy number or { amount=, hits= }.
+-- Returns amount, hits.
+function Core.NormalizeProcEntry(entry)
+    if type(entry) == "number" then
+        local amount = tonumber(entry) or 0
+        if amount > 0 then
+            return amount, 1
+        end
+        return 0, 0
+    end
+    if type(entry) == "table" then
+        local amount = tonumber(entry.amount) or 0
+        local hits = tonumber(entry.hits) or 0
+        if amount > 0 and hits <= 0 then
+            hits = 1
+        end
+        return amount, hits
+    end
+    return 0, 0
+end
+
+-- Accumulate proc damage into attribution[procId][sourceId] = { amount=, hits= }.
+-- Legacy numeric cells are upgraded in place on the next hit.
 function Core.RecordProcDamage(attribution, procSpellId, sourceSpellId, amount)
     procSpellId = tonumber(procSpellId)
     sourceSpellId = tonumber(sourceSpellId) or 0
@@ -180,12 +202,16 @@ function Core.RecordProcDamage(attribution, procSpellId, sourceSpellId, amount)
         bySource = {}
         attribution[procSpellId] = bySource
     end
-    bySource[sourceSpellId] = (bySource[sourceSpellId] or 0) + amount
+    local prevAmount, prevHits = Core.NormalizeProcEntry(bySource[sourceSpellId])
+    bySource[sourceSpellId] = {
+        amount = prevAmount + amount,
+        hits = prevHits + 1,
+    }
     return attribution
 end
 
 -- Flatten attribution into sorted rows for UI / Custom Display:
--- { key=, procName=, sourceName=, sourceSuffix=, procId=, sourceId=, amount=, icon= }
+-- { key=, procName=, sourceName=, sourceSuffix=, procId=, sourceId=, amount=, hits=, icon= }
 -- nameResolver(id) -> string; iconResolver(id) -> texture path (optional).
 function Core.BuildProcRows(attribution, nameResolver, iconResolver)
     local rows = {}
@@ -197,8 +223,8 @@ function Core.BuildProcRows(attribution, nameResolver, iconResolver)
     end
     for procId, bySource in pairs(attribution) do
         if type(bySource) == "table" then
-            for sourceId, amount in pairs(bySource) do
-                amount = tonumber(amount) or 0
+            for sourceId, entry in pairs(bySource) do
+                local amount, hits = Core.NormalizeProcEntry(entry)
                 if amount > 0 then
                     local procName = nameResolver(procId)
                     if type(procName) ~= "string" or procName == "" then
@@ -224,6 +250,7 @@ function Core.BuildProcRows(attribution, nameResolver, iconResolver)
                         procId = tonumber(procId),
                         sourceId = tonumber(sourceId) or 0,
                         amount = amount,
+                        hits = hits,
                         icon = icon,
                     }
                 end
@@ -234,6 +261,97 @@ function Core.BuildProcRows(attribution, nameResolver, iconResolver)
         return a.amount > b.amount
     end)
     return rows
+end
+
+-- Click / tooltip breakdown for one proc↔source row, plus sibling lists.
+-- Returns nil when the pair has no damage; otherwise a table:
+-- { procId, sourceId, procName, sourceName, key, amount, hits, average,
+--   siblingSources = { {sourceId, sourceName, amount, hits}, ... },
+--   siblingProcs = { {procId, procName, amount, hits}, ... } }
+function Core.BuildProcRowBreakdown(attribution, procId, sourceId, nameResolver)
+    procId = tonumber(procId)
+    sourceId = tonumber(sourceId) or 0
+    if not procId or type(attribution) ~= "table" then
+        return nil
+    end
+    nameResolver = nameResolver or function(id)
+        return tostring(id or 0)
+    end
+    local bySource = attribution[procId]
+    if type(bySource) ~= "table" then
+        return nil
+    end
+    local amount, hits = Core.NormalizeProcEntry(bySource[sourceId])
+    if amount <= 0 then
+        return nil
+    end
+    local procName = nameResolver(procId)
+    if type(procName) ~= "string" or procName == "" then
+        procName = "Spell #" .. tostring(procId)
+    end
+    local sourceName
+    if sourceId > 0 then
+        sourceName = Core.NormalizeSourceName(nameResolver(sourceId))
+    end
+    local siblingSources = {}
+    for sid, entry in pairs(bySource) do
+        sid = tonumber(sid) or 0
+        if sid ~= sourceId then
+            local a, h = Core.NormalizeProcEntry(entry)
+            if a > 0 then
+                local sn
+                if sid > 0 then
+                    sn = Core.NormalizeSourceName(nameResolver(sid))
+                end
+                siblingSources[#siblingSources + 1] = {
+                    sourceId = sid,
+                    sourceName = sn,
+                    amount = a,
+                    hits = h,
+                }
+            end
+        end
+    end
+    table.sort(siblingSources, function(a, b)
+        return a.amount > b.amount
+    end)
+    local siblingProcs = {}
+    if sourceId > 0 then
+        for pid, sources in pairs(attribution) do
+            pid = tonumber(pid)
+            if pid and pid ~= procId and type(sources) == "table" then
+                local a, h = Core.NormalizeProcEntry(sources[sourceId])
+                if a > 0 then
+                    local pn = nameResolver(pid)
+                    if type(pn) ~= "string" or pn == "" then
+                        pn = "Spell #" .. tostring(pid)
+                    end
+                    siblingProcs[#siblingProcs + 1] = {
+                        procId = pid,
+                        procName = pn,
+                        amount = a,
+                        hits = h,
+                    }
+                end
+            end
+        end
+        table.sort(siblingProcs, function(a, b)
+            return a.amount > b.amount
+        end)
+    end
+    local average = (hits > 0) and (amount / hits) or amount
+    return {
+        procId = procId,
+        sourceId = sourceId,
+        procName = procName,
+        sourceName = sourceName,
+        key = Core.FormatProcLabel(procName, sourceName),
+        amount = amount,
+        hits = hits,
+        average = average,
+        siblingSources = siblingSources,
+        siblingProcs = siblingProcs,
+    }
 end
 
 -- Match actor spell totals to known echo spell ids / names.
