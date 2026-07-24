@@ -27,7 +27,7 @@ Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full 
 - **Tome Atlas:** **Sync AH list** schreibt fehlende Tomes in Auctionator-Liste **EbonBuilds Tomes**; Zeilen-Button **AH** oeffnet Buy-Suche.
 - **Sync (#132):** nach Public Sync aktualisiert sich die Build-Wizard-Evidenz automatisch.
 - **Autopilot (#148):** Freeze leert IntentQueue, damit SELECT nicht 8s blockiert. Danach /reload.
-- **Details_ProjectEbonhold 1.0.11-pe1:** kein doppelter Targets-Header und kein ?No Targets? über den Proc-Balken. Danach /reload.
+- **Details_ProjectEbonhold 1.0.11-pe1:** kein doppelter Targets-Header und kein "No Targets" ueber den Proc-Balken. Danach /reload.
 
 #### Highlights (EN)
 - **Public Builds tabs:** Peer Sync vs Echo Journal as separate lists; Evidence still uses both on class-wide widen.
@@ -43,7 +43,7 @@ Cumulative GitHub Latest since **v3.86.6**. Prefer **Details.zip** for the full 
 - **Public Builds:** Peer Sync and Echo Journal are separate tabs (no longer one merged list). CommunityEligibility still uses both sources for recommendations (class-wide widen for Journal loadouts).
 
 #### Fixed
-- **Details_ProjectEbonhold 1.0.11-pe1:** PE Proc Sources Breakdown bottom-left Targets ? only one "Procs from source:" header (stock `info.targets` re-anchored; stray SummaryWindowWidgets labels cleared); stock "No Targets" Show hooked so Fade/skin cannot overlay sibling proc bars. Prefer `Details.zip`. Custom Display script v11.
+- **Details_ProjectEbonhold 1.0.11-pe1:** PE Proc Sources Breakdown bottom-left Targets -- only one "Procs from source:" header (stock `info.targets` re-anchored; stray SummaryWindowWidgets labels cleared); stock "No Targets" Show hooked so Fade/skin cannot overlay sibling proc bars. Prefer `Details.zip`. Custom Display script v11.
 - **Public Sync (#132):** storing/updating/clearing remote builds emits debounced `SYNC_REVISION_CHANGED` so Build Wizard community evidence refreshes without a local library edit.
 - **Autopilot (#148):** clear IntentQueue on freeze confirm so SELECT is not delayed by the 8s freeze TTL.
 - **Peer sync (#149):** oversized public builds (e.g. >36 KB with character snapshot) are auto-stripped for transfer (drop snapshot, then trim description) while the local SavedVariables copy stays complete; toast explains what was stripped. Only builds that remain over the ceiling after shrink are refused.

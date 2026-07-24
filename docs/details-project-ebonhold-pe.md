@@ -54,6 +54,6 @@ das alte Auto-Löschen will: Details-Optionen → Overall →
 5. Segment **Overall Data** wählen — Balken zeigen die Summe über alle Overall-Fights
    (wie DPS Overall). Zeile anklicken öffnet natives Player Details! Breakdown
    (dicht gefüllt; Fenster dockt neben dem Meter). Weitere Procs/Quellen in den
-   linken Panels sind klickbar; unten links ein Header, kein „No Targets“ über den Balken.
+   linken Panels sind klickbar; unten links ein Header, kein "No Targets" ueber den Balken.
 
 Siehe auch: [Details!: Tiny Threat (PE)](details-tinythreat-pe.md).
