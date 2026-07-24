@@ -20,18 +20,21 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 ### 3.86 (Unreleased) -- Automation server redesign stepping stones and docs artwork
 
-Follow-up to 3.85: client-side work packages WP2 (shared tie-break policy) and WP3 (intent queue) from the server-authoritative Autopilot redesign, plus original WotLK-inspired GitHub Pages branding. Auctionator ProjectEbonhold adaptation and full UI localization were not merged before this cut.
+Follow-up to 3.85: client-side automation work packages WP2–WP4 from the server-authoritative Autopilot redesign, Auctionator ProjectEbonhold adaptation, tightened ProjectEbonhold capability probes, expanded BoardDecision test vectors, and original WotLK-inspired GitHub Pages branding.
 
 #### Added
 
 - **Intent queue WP3 (#89 / #52):** new `IntentQueue` module — one in-flight autopilot intent (select/freeze/banish/reroll) with duplicate blocking; ack via board identity fingerprint, `GetPendingAction()` pending-flag drop, or 8s TTL. Wired into `Automation.ExecuteDecision` / `RequestFreeze` ahead of server intent-ack support. `ProjectAPI.GetCapabilities` exposes `intentQueueClient` and `serverIntentAck`. Docs in `docs/intent-queue-wp3.md`; tests in `tests/test_intent_queue.lua`.
 - **Shared tie-break policy WP2 (#90 / #51):** centralized score → optional PE `rank` → slot index → spell ID → frozen-preference ordering in `Scoring` (`CompareCandidates` / `IsBetterCandidate`), wired through `BoardDecision` and `Automation.TrySelect` so equal-weight boards pick deterministically and align with the server redesign. Optional per-card `rank` from ProjectEbonhold offers; missing ranks fall back to slot-index ordering. `DebugServerRankMismatch` flags rank disagreements. Tests in `tests/test_tie_break.lua`.
+- **Dry-run simulator WP4 (#93 / #53):** new `AutomationDryRun` module — pure offline evaluator returning policy verdicts (`select`/`freeze`/`banish`/`reroll`/`wait`) from board snapshots without calling ProjectEbonhold `Request*`. Transcript parser/replay for fixture directives and DebugLog/Logbook line hooks; checked-in #38-class fixture. Docs in `docs/dry-run-wp4.md`; tests in `tests/test_dry_run.lua`.
 - **WotLK-inspired docs artwork (#88):** locally generated hero background, runic dividers, slate texture, favicon, and feature-card icon silhouettes via `scripts/generate-docs-art.py` — no Blizzard client assets. Homepage hero, framed sections, and gold/frost chrome in `extra.css`; favicon updated in `mkdocs.yml`.
 - **Auctionator ProjectEbonhold adaptation (#92):** vendored fork **2.6.3-pe1** with affix search helpers (`AtrPE_BuildAffixSearchQuery`), PE hooks for **EbonBuilds Affixes** shopping-list sync, defensive AH scan/query wrappers, and **AuctionatorBridge** query delegation. Tests in `tests/test_auctionator_pe.lua`.
 
 #### Changed
 
-- **Automation server redesign docs:** WP2 tie-break chain and WP3 intent-queue stepping stone documented in `docs/automation-server-redesign.md` and `docs/intent-queue-wp3.md` to match landed client behavior.
+- **Automation server redesign docs:** WP2 tie-break chain, WP3 intent-queue stepping stone, and WP4 dry-run transcript schema documented in `docs/automation-server-redesign.md`, `docs/intent-queue-wp3.md`, and `docs/dry-run-wp4.md` to match landed client behavior.
+- **ProjectEbonhold capability audit (#96):** tightened `ProjectAPI.GetCapabilities()` probes against live PE exports (`pendingFlags` requires `Perks` + `SelectPerk`; `pendingBuildSlot` follows the build-slot API family; `activeLoadout` requires both loadout setters and spell checks); explicit `serverPolicy = false` placeholder for the planned server oracle. Documented server-side gaps in `docs/capabilities.md`. Tests in `tests/test_capabilities_audit.lua`.
+- **BoardDecision test coverage (#94):** `tests/test_board_decision_coverage.lua` — freeze-first reroll locks, equal-score tie-break ordering (slot index, server rank, frozen preference), pending/slot-busy waits via BSM + IntentQueue, and freeze-penalty threshold scoring through mocked BoardDecision/Automation paths.
 
 
 ### 3.85 (2026-07-24) -- Autopilot reliability, Auctionator affix shopping, and UI/data refactors
