@@ -6,7 +6,15 @@ local counters = H.new_counters()
 local check, equal = H.attach_assertions(counters)
 
 -- Load only needs the module table; UI frames are not exercised here.
-local addon = H.load_addon("modules/ui/WorldIntegration.lua")
+-- WorldIntegration captures EbonBuilds.L at load time (i18n PR #109).
+local addon = {
+    L = setmetatable({}, {
+        __index = function(_, key)
+            return key
+        end,
+    }),
+}
+addon = H.load_addon("modules/ui/WorldIntegration.lua", addon)
 local WI = addon.WorldIntegration
 
 local function listByZoneFactory(zones)
