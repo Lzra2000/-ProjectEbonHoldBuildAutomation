@@ -12,10 +12,11 @@ local addonName, EbonBuilds = ...
 --             active build's spec
 -- Hooks the default Blizzard container frame the same low-cost way
 -- AutoDelete's proven affix-dot feature does (per-slot link-change cache,
--- visibility short-circuit). When Bagnon is installed it replaces the
--- default container frames entirely (ContainerFrame_Update never fires for
--- its window), so this module also feature-detects Bagnon and hooks its
--- ItemSlot update path -- see the "Bagnon compatibility" section below.
+-- visibility short-circuit). When Bagnon or Combuctor (same Tuller lineage)
+-- is installed it replaces the default container frames entirely
+-- (ContainerFrame_Update never fires for its window), so this module also
+-- feature-detects those addons and hooks their ItemSlot update path -- see
+-- the "Bagnon / Combuctor compatibility" section below.
 -- This module only marks items -- it never acts on them; see
 -- modules/vendor/AutoSell.lua for the module that actually sells things.
 
@@ -151,8 +152,8 @@ local function DecideDot(bag, slot, link)
 end
 
 -- Shared per-button update with a change cache: recomputes the dot only when
--- the slot's link, the button's bag/slot assignment (Bagnon recycles buttons
--- across slots), or the global dot version changed.
+-- the slot's link, the button's bag/slot assignment (Bagnon/Combuctor recycle
+-- buttons across slots), or the global dot version changed.
 local function UpdateButton(button, bag, slot)
     local link = GetContainerItemLink(bag, slot)
     if button._ebbCachedLink ~= link
@@ -183,34 +184,42 @@ local function UpdateFrame(frame)
 end
 
 -- ---------------------------------------------------------------------------
--- Bagnon compatibility (issue #37)
+-- Bagnon / Combuctor compatibility (issue #37 + Combuctor follow-up)
 --
--- Bagnon (WotLK 2.x line, the version used on 3.3.5a) builds its single-window
--- bag out of its own ItemSlot buttons; the default ContainerFrames stay hidden
--- and ContainerFrame_Update never runs, so the hook above draws nothing.
--- Bagnon exposes its item-button class as the global `Bagnon.ItemSlot` (a
--- plain method table), and every visual refresh of a button funnels through
--- its `Update` method -- hooking that table entry with hooksecurefunc covers
--- opening the window, item changes, and button recycling in one place.
+-- Bagnon and Combuctor (WotLK 2.x Tuller line used on 3.3.5a) each build a
+-- single-window bag out of their own ItemSlot buttons; the default
+-- ContainerFrames stay hidden and ContainerFrame_Update never runs, so the
+-- hook above draws nothing. Both expose the item-button class as
+-- `<Addon>.ItemSlot` (a plain method table; some forks use `.Item`), and every
+-- visual refresh funnels through `Update` -- hooking that table entry with
+-- hooksecurefunc covers opening the window, item changes, and button recycling.
 --
--- Bagnon guarantees `button:GetParent():GetID() == bag` (its "dummy bag"
--- hack, needed for the inherited ContainerFrameItemButtonTemplate code) and
--- `button:GetID() == slot`, which it wraps as `button:GetBag()`; that maps a
--- Bagnon button straight onto the live-container APIs DecideDot already uses.
+-- Both guarantee `button:GetParent():GetID() == bag` (the shared "dummy bag"
+-- hack for ContainerFrameItemButtonTemplate) and `button:GetID() == slot`,
+-- wrapped as `button:GetBag()`; that maps straight onto the live-container
+-- APIs DecideDot already uses. Verified against Combuctor 2.2.2
+-- (TrinityCore/wow_335a_addons Combuctor/item.lua) -- same shape as Bagnon.
 -- ---------------------------------------------------------------------------
 
--- Weak-keyed registry of every Bagnon button we've dotted, so RefreshAll can
--- redraw them without knowing Bagnon's frame layout.
-local bagnonButtons
+-- Addons that replace default bags with a Tuller-lineage ItemSlot:Update path.
+local BAG_ADDONS = { "Bagnon", "Combuctor" }
 
-local function UpdateBagnonButton(button)
+-- Weak-keyed registry of every bag-addon button we've dotted, so RefreshAll
+-- can redraw them without knowing each addon's frame layout.
+local bagAddonButtons
+
+-- Per-addon "already hooked" flags (Bagnon and Combuctor are mutually exclusive
+-- in practice, but hooking both is harmless if someone somehow loads both).
+local bagAddonHooked = {}
+
+local function UpdateBagAddonButton(button)
     -- hooksecurefunc fires even when Update() short-circuited on a hidden
     -- button; mirror its visibility check.
     if not button:IsVisible() then return end
-    bagnonButtons[button] = true
+    bagAddonButtons[button] = true
 
-    -- Bagnon can display cached data of other characters (Bagnon_Forever) or
-    -- of the bank while away from it; live bag APIs don't apply there.
+    -- Bagnon_Forever / Combuctor cached views of other characters (or the bank
+    -- while away) are not live containers; GetContainerItemLink would lie.
     if button.IsCached and button:IsCached() then
         button._ebbCachedLink = nil
         SetButtonDot(button, nil)
@@ -223,25 +232,28 @@ local function UpdateBagnonButton(button)
     UpdateButton(button, bag, button:GetID())
 end
 
--- Hooks Bagnon's item-button class once it exists. Returns true when hooked
--- (or already hooked), false if Bagnon isn't ready / isn't a known layout.
-local function TryHookBagnon()
-    if bagnonButtons then return true end
-    local bagnon = _G.Bagnon
-    -- `ItemSlot` in the standard 2.x WotLK line; `Item` in some forks.
-    local itemClass = bagnon and (bagnon.ItemSlot or bagnon.Item)
+-- Hooks one bag addon's item-button class once it exists. Returns true when
+-- hooked (or already hooked), false if that addon isn't ready / isn't known.
+local function TryHookBagAddon(addonName)
+    if bagAddonHooked[addonName] then return true end
+    local addon = _G[addonName]
+    -- `ItemSlot` in the standard 2.x WotLK line; `Item` in some later forks.
+    local itemClass = addon and (addon.ItemSlot or addon.Item)
     if not (type(itemClass) == "table" and type(itemClass.Update) == "function") then
         return false
     end
-    -- Weak keys: buttons Bagnon frees can be collected without us holding on.
-    bagnonButtons = setmetatable({}, { __mode = "k" })
-    hooksecurefunc(itemClass, "Update", UpdateBagnonButton)
+    if not bagAddonButtons then
+        -- Weak keys: buttons the addon frees can be collected without us holding on.
+        bagAddonButtons = setmetatable({}, { __mode = "k" })
+    end
+    bagAddonHooked[addonName] = true
+    hooksecurefunc(itemClass, "Update", UpdateBagAddonButton)
     return true
 end
 
--- Forces every currently-visible bag frame (default or Bagnon) to redraw its
--- dots (e.g. after the learned-affix list updates from the server, or the
--- show/hide setting changes). Cheap: only iterates shown frames/buttons.
+-- Forces every currently-visible bag frame (default, Bagnon, or Combuctor) to
+-- redraw its dots (e.g. after the learned-affix list updates from the server,
+-- or the show/hide setting changes). Cheap: only iterates shown frames/buttons.
 function EbonBuilds.BagAffixDots.RefreshAll()
     dotVersion = dotVersion + 1
     for i = 1, (NUM_CONTAINER_FRAMES or 12) do
@@ -250,10 +262,10 @@ function EbonBuilds.BagAffixDots.RefreshAll()
             UpdateFrame(frame)
         end
     end
-    if bagnonButtons then
-        for button in pairs(bagnonButtons) do
+    if bagAddonButtons then
+        for button in pairs(bagAddonButtons) do
             if button:IsVisible() then
-                UpdateBagnonButton(button)
+                UpdateBagAddonButton(button)
             end
         end
     end
@@ -269,16 +281,24 @@ function EbonBuilds.BagAffixDots.Init()
         hooksecurefunc("ContainerFrame_Update", UpdateFrame)
     end
 
-    -- Bagnon loads before EbonBuilds in normal alphabetical addon order, so
-    -- this usually hooks immediately; the ADDON_LOADED listener covers a
-    -- late/on-demand load and unregisters itself once the hook is in.
-    if IsAddOnLoaded and IsAddOnLoaded("Bagnon") then
-        TryHookBagnon()
+    -- Bagnon/Combuctor load before EbonBuilds in normal alphabetical addon
+    -- order, so this usually hooks immediately; the ADDON_LOADED listener
+    -- covers a late/on-demand load and unregisters itself on the first
+    -- successful hook (same one-shot pattern as the original Bagnon path --
+    -- the two bag addons are mutually exclusive in practice).
+    local pending = {}
+    for _, name in ipairs(BAG_ADDONS) do
+        if IsAddOnLoaded and IsAddOnLoaded(name) then
+            TryHookBagAddon(name)
+        end
+        if not bagAddonHooked[name] then
+            pending[name] = true
+        end
     end
-    if not bagnonButtons and EbonBuilds.WoWEvents then
+    if next(pending) and EbonBuilds.WoWEvents then
         local token
         token = EbonBuilds.WoWEvents.On("ADDON_LOADED", function(_, name)
-            if name == "Bagnon" and TryHookBagnon() and token then
+            if pending[name] and TryHookBagAddon(name) and token then
                 EbonBuilds.WoWEvents.Off(token)
                 token = nil
             end
