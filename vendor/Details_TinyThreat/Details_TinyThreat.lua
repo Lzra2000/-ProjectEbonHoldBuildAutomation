@@ -248,7 +248,7 @@ local function CreatePluginFrames ()
 			if (_IsInRaid()) then
 				for i = 1, _GetNumGroupMembers(), 1 do
 
-					local thisplayer_name = GetUnitName ("raid"..i)
+					local thisplayer_name = GetUnitName ("raid"..i, true)
 					local threat_table_index = ThreatMeter.player_list_hash [thisplayer_name]
 					local threat_table = ThreatMeter.player_list_indexes [threat_table_index]
 
@@ -273,7 +273,7 @@ local function CreatePluginFrames ()
 
 			elseif (_IsInGroup()) then
 				for i = 1, _GetNumGroupMembers(), 1 do
-					local thisplayer_name = GetUnitName ("party"..i)
+					local thisplayer_name = GetUnitName ("party"..i, true)
 					local threat_table_index = ThreatMeter.player_list_hash [thisplayer_name]
 					local threat_table = ThreatMeter.player_list_indexes [threat_table_index]
 
