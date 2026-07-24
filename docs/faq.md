@@ -233,6 +233,7 @@ EbonBuilds optionally integrates with **Auctionator 2.6.3** (WotLK / Interface 3
 When Auctionator is installed and you have scan data:
 
 - **Affixes tab:** missing rows show an **AH** button that opens Auctionator's Buy tab and searches for gear `of <Affix Name>`. **Sync AH list** rebuilds an Auctionator shopping list named **EbonBuilds Affixes** with one search term per missing affix. Tooltips show Auctionator's affix-line price when available.
+- **Tome Atlas:** missing tome rows show an **AH** button that searches Auctionator Buy for the tome item name. **Sync AH list** rebuilds **EbonBuilds Tomes** with one term per missing atlas tome (owned echoes skipped). Soft-fails with a toast when Auctionator is not installed.
 - **Item tooltips:** gear hovers include an Auctionator buyout line (exact item name, falling back to the affix line).
 - **Bag affix dots:** a gold dot marks bag gear carrying a missing affix when Auctionator has a buyout price at or below that affix's apply cost (cheap learn/extract fodder).
 

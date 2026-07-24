@@ -18,7 +18,10 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 [Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.86.6...HEAD
 
-### 3.86.7 (unreleased) -- sync transfer strip, Auctionator AddItem, Public Builds tabs
+### 3.86.7 (unreleased) -- Public Builds tabs, Tome shopping, sync/Auctionator fixes
+
+#### Added
+- **Tome Atlas Auctionator shopping:** toolbar **Sync AH list** rebuilds shopping list **EbonBuilds Tomes** with one search term per missing atlas tome; missing tome rows show an **AH** button (opens Auctionator Buy). Soft-fails with toast when Auctionator is missing. Prefer AH over PE vendor until `ItemPurchasePopup` is in TOC.
 
 #### Changed
 - **Public Builds:** Peer Sync and Echo Journal are separate tabs (no longer one merged list). CommunityEligibility still uses both sources for recommendations (class-wide widen for Journal loadouts).

@@ -9,11 +9,13 @@ local addonName, EbonBuilds = ...
 EbonBuilds.AuctionatorBridge = {}
 local Bridge = EbonBuilds.AuctionatorBridge
 
-local SHOPPING_LIST_NAME = "EbonBuilds Affixes"
+local AFFIX_SHOPPING_LIST_NAME = "EbonBuilds Affixes"
+local TOME_SHOPPING_LIST_NAME = "EbonBuilds Tomes"
 -- Auctionator.lua: local BUY_TAB = 3 (stable in 2.6.3).
 local AUCTIONATOR_BUY_TAB = 3
 
-local shoppingListEnsured = false
+-- Per-list create attempts (avoid hammering Atr_SList.create on soft-fail).
+local shoppingListCreateAttempted = {}
 
 function Bridge.IsAvailable()
     return IsAddOnLoaded and IsAddOnLoaded("Auctionator")
@@ -52,6 +54,18 @@ function Bridge.BuildAffixSearchQuery(affixName)
     return "of " .. affixName
 end
 
+-- Exact item-name search for echo tomes (Tome/Codex/Scroll/Manual of ...).
+-- Strips a trailing " - Quality" suffix if present so AH matches the item.
+function Bridge.BuildTomeSearchQuery(tomeName)
+    tomeName = tostring(tomeName or ""):match("^%s*(.-)%s*$") or ""
+    if tomeName == "" then return "" end
+    local stripped = tomeName:match("^(.-)%s+%-%s+%S+$")
+    if stripped and stripped ~= "" then
+        return stripped
+    end
+    return tomeName
+end
+
 function Bridge.FormatCopper(copper)
     copper = tonumber(copper)
     if not copper or copper <= 0 then return nil end
@@ -87,16 +101,24 @@ local function EnsureBuyPaneReady()
     return _G.Atr_IsModeBuy and _G.Atr_IsModeBuy() or true
 end
 
--- Prefills Auctionator's Buy tab and starts a scan for gear carrying this affix.
--- Returns ok, reasonToken ("ok", "missing", "no-ah", "ui-not-ready").
-function Bridge.OpenAffixSearch(affixName)
-    local query = Bridge.BuildAffixSearchQuery(affixName)
+local function OpenBuySearch(query)
     if query == "" then return false, "empty" end
     if not Bridge.IsAvailable() then return false, "missing" end
     if not EnsureBuyPaneReady() then return false, "no-ah" end
     _G.Atr_Search_Box:SetText(query)
     _G.Atr_Search_Onclick()
     return true, "ok"
+end
+
+-- Prefills Auctionator's Buy tab and starts a scan for gear carrying this affix.
+-- Returns ok, reasonToken ("ok", "missing", "no-ah", "ui-not-ready").
+function Bridge.OpenAffixSearch(affixName)
+    return OpenBuySearch(Bridge.BuildAffixSearchQuery(affixName))
+end
+
+-- Prefills Auctionator's Buy tab for an echo tome item name.
+function Bridge.OpenTomeSearch(tomeName)
+    return OpenBuySearch(Bridge.BuildTomeSearchQuery(tomeName))
 end
 
 -- SavedVariables restore plain tables; Atr_ShoppingListsInit reattaches the
@@ -127,37 +149,35 @@ local function AddShoppingItem(list, itemName)
     return true
 end
 
-local function FindShoppingList()
+local function FindShoppingList(listName)
     if type(_G.AUCTIONATOR_SHOPPING_LISTS) ~= "table" then return nil end
     for _, slist in ipairs(_G.AUCTIONATOR_SHOPPING_LISTS) do
-        if slist and slist.name == SHOPPING_LIST_NAME then
+        if slist and slist.name == listName then
             return EnsureListMethods(slist)
         end
     end
     return nil
 end
 
-local function EnsureShoppingList()
+local function EnsureShoppingList(listName)
     if not Bridge.IsAvailable() or type(_G.Atr_SList) ~= "table" then return nil end
-    local list = FindShoppingList()
+    local list = FindShoppingList(listName)
     if list then return list end
-    if shoppingListEnsured or type(_G.Atr_SList.create) ~= "function" then
+    if shoppingListCreateAttempted[listName] or type(_G.Atr_SList.create) ~= "function" then
         return nil
     end
     -- Soft-fail when Auctionator shopping lists are not ready yet (nil SV).
-    local ok, created = pcall(_G.Atr_SList.create, SHOPPING_LIST_NAME)
+    local ok, created = pcall(_G.Atr_SList.create, listName)
     if not ok or not created then
         return nil
     end
-    shoppingListEnsured = true
+    shoppingListCreateAttempted[listName] = true
     return EnsureListMethods(created)
 end
 
--- Rebuilds Auctionator's "EbonBuilds Affixes" shopping list from affixes the
--- character has not learned yet. Soft-fails when Auctionator or the list is absent.
-function Bridge.SyncMissingAffixShoppingList()
+local function RebuildShoppingList(listName, terms)
     if not Bridge.IsAvailable() then return false, "missing" end
-    local list = EnsureShoppingList()
+    local list = EnsureShoppingList(listName)
     if not list or type(list.items) ~= "table" then return false, "list" end
 
     while #list.items > 0 do
@@ -165,10 +185,11 @@ function Bridge.SyncMissingAffixShoppingList()
     end
 
     local added = 0
-    for _, affix in ipairs(EbonBuilds.Affix.GetLearned()) do
-        if affix and not affix.learned and affix.name and affix.name ~= "" then
-            local query = Bridge.BuildAffixSearchQuery(affix.name)
-            if query ~= "" and AddShoppingItem(list, query) then
+    local seen = {}
+    for _, term in ipairs(terms or {}) do
+        if type(term) == "string" and term ~= "" and not seen[term] then
+            seen[term] = true
+            if AddShoppingItem(list, term) then
                 added = added + 1
             end
         end
@@ -180,9 +201,69 @@ function Bridge.SyncMissingAffixShoppingList()
     return true, added
 end
 
--- Test hooks (metatable reattach + AddItem fallback).
+-- Rebuilds Auctionator's "EbonBuilds Affixes" shopping list from affixes the
+-- character has not learned yet. Soft-fails when Auctionator or the list is absent.
+function Bridge.SyncMissingAffixShoppingList()
+    local terms = {}
+    if EbonBuilds.Affix and EbonBuilds.Affix.GetLearned then
+        for _, affix in ipairs(EbonBuilds.Affix.GetLearned()) do
+            if affix and not affix.learned and affix.name and affix.name ~= "" then
+                local query = Bridge.BuildAffixSearchQuery(affix.name)
+                if query ~= "" then
+                    terms[#terms + 1] = query
+                end
+            end
+        end
+    end
+    return RebuildShoppingList(AFFIX_SHOPPING_LIST_NAME, terms)
+end
+
+local function IsTomeOwned(tomeName, ownedSet, spellbookReady)
+    if not spellbookReady or not tomeName then return false end
+    local norm = EbonBuilds.BuildOverview and EbonBuilds.BuildOverview._NormalizeEchoName
+    if not norm then return false end
+    return ownedSet[norm(tomeName)] or false
+end
+
+-- Collect missing atlas tome names as AH search terms (deduped).
+function Bridge.CollectMissingTomeSearchTerms()
+    local terms = {}
+    if not (EbonBuilds.TomeAtlas and EbonBuilds.TomeAtlas.List) then
+        return terms
+    end
+    local ownedSet, spellbookReady = {}, false
+    if EbonBuilds.BuildOverview and EbonBuilds.BuildOverview.GetOwnedEchoSets then
+        local ok, set = pcall(EbonBuilds.BuildOverview.GetOwnedEchoSets, true)
+        if ok and type(set) == "table" then
+            ownedSet = set
+            spellbookReady = true
+        end
+    end
+    local seen = {}
+    for _, entry in ipairs(EbonBuilds.TomeAtlas.List()) do
+        local name = entry and entry.name
+        if name and name ~= "" and not IsTomeOwned(name, ownedSet, spellbookReady) then
+            local query = Bridge.BuildTomeSearchQuery(name)
+            if query ~= "" and not seen[query] then
+                seen[query] = true
+                terms[#terms + 1] = query
+            end
+        end
+    end
+    table.sort(terms)
+    return terms
+end
+
+-- Rebuilds Auctionator's "EbonBuilds Tomes" shopping list from missing atlas tomes.
+function Bridge.SyncMissingTomeShoppingList()
+    return RebuildShoppingList(TOME_SHOPPING_LIST_NAME, Bridge.CollectMissingTomeSearchTerms())
+end
+
+-- Test hooks (metatable reattach + AddItem fallback + list names).
 Bridge._EnsureListMethodsForTest = EnsureListMethods
 Bridge._AddShoppingItemForTest = AddShoppingItem
+Bridge._AFFIX_SHOPPING_LIST_NAME = AFFIX_SHOPPING_LIST_NAME
+Bridge._TOME_SHOPPING_LIST_NAME = TOME_SHOPPING_LIST_NAME
 
 function Bridge.AppendTooltipLines(tooltip, itemRef, affixName)
     if not tooltip or not Bridge.IsAvailable() then return end
@@ -210,12 +291,12 @@ end
 
 function Bridge.Init()
     -- Nothing to hook at load time; integration is on-demand from AffixView,
-    -- GearTooltip, and BagAffixDots. Register for late Auctionator loads so
-    -- shopping-list sync works if the player enables it mid-session.
+    -- TomeAtlasView, GearTooltip, and BagAffixDots. Register for late
+    -- Auctionator loads so shopping-list sync works mid-session.
     if EbonBuilds.WoWEvents then
         EbonBuilds.WoWEvents.On("ADDON_LOADED", function(_, name)
             if name == "Auctionator" then
-                shoppingListEnsured = false
+                shoppingListCreateAttempted = {}
             end
         end, "AuctionatorBridge", false, true)
     end
