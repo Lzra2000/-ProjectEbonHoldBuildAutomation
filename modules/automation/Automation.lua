@@ -543,9 +543,24 @@ local function RecordBanish(build, s)
     st.mostBanned[s.name] = (st.mostBanned[s.name] or 0) + 1
 end
 
-local function LogAndToast(scored, action, targetIndex)
+local function AnnotateFrozenThisBoard(scored)
+    if type(scored) ~= "table" then return end
+    local bySlot = boardState.frozenThisBoardBySlot
+    local byEcho = boardState.frozenThisBoardEchoIDs
+    for _, s in ipairs(scored) do
+        local index = tonumber(s.index)
+        local echoID = tonumber(s.spellId) or s.echoId or s.refKey
+        if (index ~= nil and bySlot and bySlot[index])
+            or (echoID ~= nil and byEcho and byEcho[echoID]) then
+            s.frozenThisBoard = true
+        end
+    end
+end
+
+local function LogAndToast(scored, action, targetIndex, appliedThreshold)
+    AnnotateFrozenThisBoard(scored)
     EbonBuilds.Toast.ShowAutomationResult(scored, action, targetIndex)
-    EbonBuilds.Session.LogAction(scored, action, targetIndex)
+    EbonBuilds.Session.LogAction(scored, action, targetIndex, nil, appliedThreshold)
 end
 
 local function CommitDecision(decision)
@@ -559,10 +574,10 @@ local function CommitDecision(decision)
         UpdateStat(decision.build, "rerollsUsed")
     end
 
-    LogAndToast(decision.scored, decision.displayAction, decision.targetIndex or 0)
+    LogAndToast(decision.scored, decision.displayAction, decision.targetIndex or 0, decision.appliedThreshold)
 end
 
-local function SubmitAction(action, build, scored, targetIndex, entry, displayAction)
+local function SubmitAction(action, build, scored, targetIndex, entry, displayAction, appliedThreshold)
     local api = EbonBuilds.ProjectAPI
     if not api then return false end
 
@@ -583,6 +598,7 @@ local function SubmitAction(action, build, scored, targetIndex, entry, displayAc
         targetIndex = targetIndex or 0,
         entry = entry,
         displayAction = displayAction or action,
+        appliedThreshold = appliedThreshold,
     })
     ArmRequestFallback()
     return true
@@ -1215,7 +1231,7 @@ local function RequestFreeze(build, board, target)
     -- only through recovery), so using confirmation as the Logbook trigger can
     -- silently lose the action. CommitConfirmedFreeze deliberately does not log
     -- again; it only reconciles confirmed stats and resources.
-    LogAndToast(board.slots, "Freeze", target.index)
+    LogAndToast(board.slots, "Freeze", target.index, board.freezeThreshold)
     EbonBuilds.DebugLog.AddF("-> REQUEST FREEZE [%d] %s (score %.0f); waiting for confirmation",
         target.index, target.name, target.score or 0)
     EbonBuilds.DebugLog.Add("Reroll status: Blocked because freeze confirmation is pending")
@@ -1252,7 +1268,7 @@ local function ExecuteDecision(build, board, decision)
             return true
         end
         boardState.state = Decision.STATE.SELECTING
-        if SubmitAction("select", build, board.slots, decision.target.index, decision.target, "Select") then
+        if SubmitAction("select", build, board.slots, decision.target.index, decision.target, "Select", board.rerollThreshold) then
             ClearRunFrozenEcho(decision.target.spellId or decision.target.echoId or decision.target.refKey)
             boardState.pendingAction = "select"
             boardState.pendingActionFingerprint = board.fingerprint
@@ -1269,7 +1285,7 @@ local function ExecuteDecision(build, board, decision)
             return false
         end
         boardState.state = Decision.STATE.BANISHING
-        if SubmitAction("banish", build, board.slots, decision.target.index, decision.target, "Banish") then
+        if SubmitAction("banish", build, board.slots, decision.target.index, decision.target, "Banish", board.banishThreshold) then
             boardState.pendingAction = "banish"
             boardState.pendingActionFingerprint = board.fingerprint
             boardState.pendingActionIdentity = board.identityFingerprint
@@ -1290,7 +1306,7 @@ local function ExecuteDecision(build, board, decision)
         end
         boardState.state = Decision.STATE.REROLLING
         if not GuardIntent("REROLL", board, nil) then return true end
-        if SubmitAction("reroll", build, board.slots, 0, nil, "Reroll") then
+        if SubmitAction("reroll", build, board.slots, 0, nil, "Reroll", board.rerollThreshold) then
             boardState.pendingAction = "reroll"
             boardState.pendingActionFingerprint = board.fingerprint
             boardState.pendingActionIdentity = board.identityFingerprint

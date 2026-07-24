@@ -108,6 +108,14 @@ function PolicyEvidence.IsEligible(choice, entry)
         or choice.policyEffect == "banish" or choice.policyEffect == "exclude")
 end
 
+-- Freeze-first withholds an Echo frozen on the current board from Select.
+-- Carried/frozen Echoes from earlier boards remain legal picks.
+function PolicyEvidence.IsSelectable(choice, entry)
+    if not PolicyEvidence.IsEligible(choice, entry) then return false end
+    if choice and choice.frozenThisBoard then return false end
+    return true
+end
+
 function PolicyEvidence.RuleLabel(choice)
     if not choice then return "policy" end
     if choice.isBanned then return "priority ban list" end
@@ -120,13 +128,20 @@ function PolicyEvidence.RuleLabel(choice)
     return "policy"
 end
 
-local function BestAlternative(entry, eligibleOnly)
+local function BestAlternative(entry, eligibleOnly, selectableOnly)
     local target, targetArrayIndex = TargetChoice(entry)
     local best
     for arrayIndex, choice in ipairs((entry and entry.choices) or {}) do
-        if choice ~= target and arrayIndex ~= targetArrayIndex
-            and (not eligibleOnly or PolicyEvidence.IsEligible(choice, entry)) then
-            if not best or (tonumber(choice.score) or 0) > (tonumber(best.score) or 0) then best = choice end
+        if choice ~= target and arrayIndex ~= targetArrayIndex then
+            local allowed = true
+            if selectableOnly then
+                allowed = PolicyEvidence.IsSelectable(choice, entry)
+            elseif eligibleOnly then
+                allowed = PolicyEvidence.IsEligible(choice, entry)
+            end
+            if allowed then
+                if not best or (tonumber(choice.score) or 0) > (tonumber(best.score) or 0) then best = choice end
+            end
         end
     end
     return best
@@ -195,7 +210,16 @@ local function ReasonSentence(entry)
         if decision.reasonCode == "ECHO_POLICY_BANISH" or target.policyEffect == "banish" then
             return string.format("The %s required this banish", PolicyEvidence.RuleLabel(target))
         end
-        if threshold then return string.format("%.0f below threshold %.0f", tonumber(target.score) or 0, threshold) end
+        local targetScore = tonumber(target.score) or 0
+        -- Only claim "below threshold" when the recorded score is actually below
+        -- the applied threshold. Legacy rows can store an unpaced peak%% value
+        -- that disagrees with ChargePacing / cached peak used at decision time.
+        if threshold and targetScore < threshold then
+            return string.format("%.0f below threshold %.0f", targetScore, threshold)
+        end
+        if threshold then
+            return string.format("Removed low-value Echo (%.0f; recorded threshold %.0f)", targetScore, threshold)
+        end
         return reason or "Removed the chosen low-value Echo"
     elseif action == "Reroll" then
         if alternative then return string.format("Best eligible current option: %s at %.0f", alternative.name or "Echo", tonumber(alternative.score) or 0) end
@@ -205,18 +229,40 @@ local function ReasonSentence(entry)
         end
         return reason or "Replaced the current offer"
     elseif action == "Freeze" and target then
-        if threshold then return string.format("%.0f exceeded threshold %.0f", tonumber(target.score) or 0, threshold) end
+        local freezeScore = tonumber(target.score) or 0
+        if threshold and freezeScore >= threshold then
+            return string.format("%.0f exceeded threshold %.0f", freezeScore, threshold)
+        end
+        if threshold then
+            return string.format("%.0f preserved (locked/priority; threshold %.0f)", freezeScore, threshold)
+        end
         return reason or "Preserved a strong Echo for later"
     elseif (action == "Select" or action == "Manual") and target then
         local targetScore = tonumber(target.score) or 0
-        if alternative and (tonumber(alternative.score) or 0) > targetScore then
-            return string.format("Higher eligible option: %s at %.0f", alternative.name or "Echo", tonumber(alternative.score) or 0)
+        -- Prefer selectable alternatives so freeze-first picks do not look like
+        -- Autopilot selected a worse Echo while the higher one was withheld.
+        local selectable = BestAlternative(entry, true, true)
+        if selectable and (tonumber(selectable.score) or 0) > targetScore then
+            return string.format("Higher eligible option: %s at %.0f", selectable.name or "Echo", tonumber(selectable.score) or 0)
         end
         if ineligible and (tonumber(ineligible.score) or 0) > targetScore then
             return string.format("Highest eligible; %s at %.0f was ineligible under the %s",
                 ineligible.name or "Echo", tonumber(ineligible.score) or 0, PolicyEvidence.RuleLabel(ineligible))
         end
-        if alternative then return string.format("Next eligible: %s at %.0f", alternative.name or "Echo", tonumber(alternative.score) or 0) end
+        if alternative and alternative.frozenThisBoard and (tonumber(alternative.score) or 0) > targetScore then
+            return string.format("Next eligible; %s at %.0f was frozen this board",
+                alternative.name or "Echo", tonumber(alternative.score) or 0)
+        end
+        if selectable then
+            return string.format("Next eligible: %s at %.0f", selectable.name or "Echo", tonumber(selectable.score) or 0)
+        end
+        if alternative and not alternative.frozenThisBoard then
+            return string.format("Next eligible: %s at %.0f", alternative.name or "Echo", tonumber(alternative.score) or 0)
+        end
+        if alternative and alternative.frozenThisBoard then
+            return string.format("Next eligible; %s at %.0f was frozen this board",
+                alternative.name or "Echo", tonumber(alternative.score) or 0)
+        end
         return reason or "Selected the highest eligible Echo"
     end
     return reason or "Detailed reason was not recorded"

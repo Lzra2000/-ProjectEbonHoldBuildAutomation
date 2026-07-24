@@ -1314,6 +1314,43 @@ do
         os.exit(1)
     end
 
+    local mismatchedBanishReason = EbonBuilds.SessionHistory._ReasonSentence({
+        action = "Banish",
+        targetIndex = 1,
+        choices = { { index = 1, name = "Arcane Bond", score = 30 } },
+        decision = { reasonCode = "BELOW_BANISH_THRESHOLD", threshold = 20 },
+    })
+    if mismatchedBanishReason ~= "Removed low-value Echo (30; recorded threshold 20)" then
+        io.stderr:write("LOGBOOK POLICY REASON FAIL: score above recorded threshold still claimed below: " .. tostring(mismatchedBanishReason) .. "\n")
+        os.exit(1)
+    end
+
+    local freezeFirstSelectReason = EbonBuilds.SessionHistory._ReasonSentence({
+        action = "Select",
+        targetIndex = 1,
+        eligibilitySchema = 1,
+        choices = {
+            { index = 1, name = "Lightning Charged", score = 72 },
+            { index = 2, name = "Rend the Weak", score = 115, frozenThisBoard = true, isFrozen = true },
+        },
+        decision = { reasonCode = "HIGHEST_FINAL_SCORE" },
+    })
+    if freezeFirstSelectReason ~= "Next eligible; Rend the Weak at 115 was frozen this board" then
+        io.stderr:write("LOGBOOK POLICY REASON FAIL: freeze-first Select looked like a worse pick: " .. tostring(freezeFirstSelectReason) .. "\n")
+        os.exit(1)
+    end
+
+    local lockedFreezeReason = EbonBuilds.SessionHistory._ReasonSentence({
+        action = "Freeze",
+        targetIndex = 1,
+        choices = { { index = 1, name = "Efficient Casting", score = 15 } },
+        decision = { reasonCode = "TWO_OFFERS_ABOVE_FREEZE_THRESHOLD", threshold = 164 },
+    })
+    if lockedFreezeReason ~= "15 preserved (locked/priority; threshold 164)" then
+        io.stderr:write("LOGBOOK POLICY REASON FAIL: locked freeze below threshold mislabeled: " .. tostring(lockedFreezeReason) .. "\n")
+        os.exit(1)
+    end
+
     if EbonBuilds.SessionHistory._NextWheelScrollValue(0, -1, 0, 100) ~= 34 then
         io.stderr:write("LOGBOOK UX FAIL: wheel scroll helper must use a safe default step\n")
         os.exit(1)

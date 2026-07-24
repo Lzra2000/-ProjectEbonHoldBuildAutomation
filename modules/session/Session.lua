@@ -413,7 +413,10 @@ function EbonBuilds.Session.MarkStrategyChanged(build, oldHash, newHash)
     return true
 end
 
-function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
+-- optional appliedThreshold: the live board threshold Autopilot actually used
+-- (ChargePacing + cached peak/EV). When omitted, DecisionMetadata falls back
+-- to an unpaced rebuild that can disagree with the decision.
+function EbonBuilds.Session.LogAction(scored, action, targetIndex, source, appliedThreshold)
     -- Detect run reset: player is level 1 but we tracked a higher peak.
     -- This catches resets that happen without a loading screen where
     -- PLAYER_ENTERING_WORLD never fires.
@@ -457,6 +460,12 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
             -- Logbook cannot safely reconstruct these build/run-specific
             -- flags later, after the active build or selected Echoes change.
             isBanned      = s.isBanned and true or nil,
+            isFrozen      = s.isFrozen and true or nil,
+            isCarried     = s.isCarried and true or nil,
+            -- Echoes frozen on the current board are withheld from Select
+            -- (freeze-first). Persist so Logbook reasons do not treat them as
+            -- higher eligible alternatives.
+            frozenThisBoard = s.frozenThisBoard and true or nil,
         }
     end
 
@@ -469,6 +478,10 @@ function EbonBuilds.Session.LogAction(scored, action, targetIndex, source)
     }
 
     local decision = DecisionMetadata(action, settings, build, source)
+    local applied = tonumber(appliedThreshold)
+    if applied ~= nil then
+        decision.threshold = applied
+    end
     local policyTarget = choices[targetIndex or 0]
     if policyTarget and policyTarget.policyEffect == "banish" and tostring(action or ""):find("^Banish") then
         decision.reasonCode = "ECHO_POLICY_BANISH"
