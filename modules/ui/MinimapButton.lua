@@ -21,7 +21,7 @@ end
 local function GetCursorAngle()
     local cx, cy   = Minimap:GetCenter()
     local mx, my   = GetCursorPosition()
-    local scale    = UIParent:GetEffectiveScale()
+    local scale    = Minimap:GetEffectiveScale()
     mx, my         = mx / scale, my / scale
     return math.deg(math.atan2(my - cy, mx - cx))
 end

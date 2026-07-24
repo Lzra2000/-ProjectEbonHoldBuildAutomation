@@ -40,13 +40,15 @@ EbonBuilds.WorldIntegration._AugmentUnitTooltipForTests = AugmentUnitTooltip
 -- (2) World map: tomes of the open zone
 ------------------------------------------------------------------------
 
--- Forward-declared: RefreshMapPanel (below) calls this, but its full
--- definition lives down in section (4) next to the rest of the pin
--- system it belongs with. Without this declaration, the reference inside
--- RefreshMapPanel would resolve to a nonexistent global instead of the
--- local defined later in the file -- exactly the "attempt to call global
--- 'ShowZonePins' (a nil value)" crash this fixes.
+-- Forward-declared: SetMapPanelEnabled (above) calls RefreshMapPanel, and
+-- RefreshMapPanel (below) calls ShowZonePins. Their full definitions live
+-- further down (RefreshMapPanel with the map-panel refresh, ShowZonePins
+-- in section (4) with the rest of the pin system). Without these
+-- declarations, early references would resolve to nonexistent globals
+-- instead of the locals defined later -- exactly the "attempt to call
+-- global 'RefreshMapPanel'/'ShowZonePins' (a nil value)" crash this fixes.
 local ShowZonePins
+local RefreshMapPanel
 local mapPanel, mapLines
 local pinPool = {}        -- reusable pin+hit-area pairs on WorldMapDetailFrame
 local legendPanel, legendRows = nil, {}
@@ -324,7 +326,7 @@ local function ShowContinentOverlays()
 end
 EbonBuilds.WorldIntegration._ShowContinentOverlaysForTests = ShowContinentOverlays
 
-local function RefreshMapPanel()
+function RefreshMapPanel()
     if not MapFeatureEnabled() then
         HideMapFeatures()
         return
@@ -542,6 +544,7 @@ function ShowZonePins(zoneName)
     legendPanel:Show()
 end
 EbonBuilds.WorldIntegration._ShowZonePinsForTests = ShowZonePins
+EbonBuilds.WorldIntegration._RefreshMapPanelForTests = RefreshMapPanel
 
 function EbonBuilds.WorldIntegration.SetMapEnabled(enabled)
     EbonBuildsDB = EbonBuildsDB or {}
@@ -605,6 +608,16 @@ if EbonBuilds.Debug and EbonBuilds.Debug.RegisterTest then
         -- file finished loading.
         if type(EbonBuilds.WorldIntegration._ShowZonePinsForTests) ~= "function" then
             error("ShowZonePins was never assigned -- a forward declaration without a matching assignment stays nil")
+        end
+    end)
+
+    EbonBuilds.Debug.RegisterTest("WorldIntegration: forward-declared RefreshMapPanel is actually assigned after full load", function()
+        -- Same class as ShowZonePins: SetMapPanelEnabled calls RefreshMapPanel
+        -- before its definition; without a forward declaration that resolves
+        -- to a nil global and crashes when toggling "Zone panel" with the
+        -- world map open.
+        if type(EbonBuilds.WorldIntegration._RefreshMapPanelForTests) ~= "function" then
+            error("RefreshMapPanel was never assigned -- a forward declaration without a matching assignment stays nil")
         end
     end)
 end
