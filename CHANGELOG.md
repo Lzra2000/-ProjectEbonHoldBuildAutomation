@@ -16,28 +16,33 @@ instructions and download links also live on
 [GitHub Releases](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases)
 and in [docs/releases.md](docs/releases.md).
 
-[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.84...HEAD
+[Unreleased]: https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/compare/v3.85...HEAD
 
-### 3.86 (unreleased) -- Auctionator integration for affix shopping
+### 3.85 (2026-07-24) -- Autopilot reliability, Auctionator affix shopping, and UI/data refactors
 
-Optional companion integration with vendored Auctionator 2.6.3 (WotLK / Interface 30300).
+[Release v3.85](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.85)
 
-- **Packaging:** `vendor/Auctionator/` ships as a separate AddOn (`dist/Auctionator.zip`); EbonBuilds declares `## OptionalDeps: Auctionator`.
-- **AuctionatorBridge:** soft-fail price helpers (`Atr_GetAuctionBuyout` / `Atr_GetAuctionPrice`), Affixes tab AH search + shopping-list sync, tooltip buyout lines, gold bag dot for cheap missing-affix gear.
-- **Tests:** `tests/test_auctionator_bridge.lua` for query building, soft-deps, and shopping-list sync stubs.
-
-### 3.85 (2026-07-24) -- Tome draw-pool toggle + permanent LockPerk APIs (#62)
-
-*Not yet released — on `main` ahead of [v3.84](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/tag/v3.84).*
-
-Wires ProjectEbonhold tome toggle and permanent echo lock APIs into EbonBuilds, capability-gated for older PE builds.
+Follow-up to 3.84: ProjectEbonhold API alignment for pending rolls and tome/permanent locks, a client board state machine for freeze-lock, optional vendored Auctionator for AH affix shopping, UI monolith splits, docs/site polish, regenerated TGA UI assets, and a much larger automated test suite.
 
 #### Added
 
-- **Tome Atlas:** collected tomes show draw-pool state (collected vs pool off). Right-click at level 1 toggles via `ToggleTomeEcho` / `IsTomeEchoDisabled`.
-- **Build Overview:** Permanent locks row from `GetLockedPerks` / `GetMaximumPermanentEchoes`. Click a permanent lock to unlock; right-click a build-locked echo to request `LockPerk`.
-- **Snapshot Run:** optional one-click draft build from `SnapshotCurrentEchoes` (granted + permanent stacks).
-- **ProjectAPI:** wrappers and capability flags; graceful no-op when PE methods are absent.
+- **Auctionator integration (#74):** optional companion AddOn (vendored Auctionator 2.6.3 for WotLK). Ships as `dist/Auctionator.zip`; EbonBuilds declares `## OptionalDeps: Auctionator`. **AuctionatorBridge** adds soft-fail buyout helpers, Affixes-tab AH search and shopping-list sync, tooltip buyout lines, and a gold bag dot for cheap missing-affix gear. Tests in `tests/test_auctionator_bridge.lua`.
+- **Board state machine WP1 (#75):** client-side automation board state + freeze-lock groundwork (#50) so Autopilot tracks board lifecycle more reliably.
+- **ProjectEbonhold Autopilot reliability (#67):** pending-roll handling, auto-accept, and slot-busy guards so Autopilot stops fighting in-flight server requests.
+- **Tome draw-pool + permanent LockPerk APIs (#68 / #62):** Tome Atlas shows draw-pool state; right-click toggles via `ToggleTomeEcho` / `IsTomeEchoDisabled`. Build Overview surfaces permanent locks from `GetLockedPerks` / `GetMaximumPermanentEchoes`, with unlock / `LockPerk` gestures. Optional **Snapshot Run** drafts from `SnapshotCurrentEchoes`. **ProjectAPI** wrappers are capability-gated for older PE builds.
+- **UI data-layer splits (#73, #85, #86):** SessionHistory, CharacterView, and BuildOverview data modules extracted from the UI monolith (issue #19).
+- **TGA UI assets (#70):** regenerate in-game textures from documented sources instead of shipping opaque binaries alone.
+- **Docs and community:** professional README (#76), localized README parity (#84), FAQ polish for Discord/PE topics (#72), changelog/releases docs (#79), MkDocs/Pages polish (#78, #87), community governance files (#77), and GitHub social preview image (#83).
+
+#### Changed
+
+- **Test suite:** shared 3.3.5a API stub harness, architecture lint hardening, maximize coverage for pure modules (#81), and AutoSell category test stubs (#80).
+- **Developer experience (#69):** clearer local `check.sh` output and CI failure artifacts for debugging.
+
+#### Fixed
+
+- **AutoSell localized categories (#71):** category filters use `GetAuctionItemClasses` so non-English clients match the intended auction categories.
+
 
 ### 3.84 (2026-07-24) -- Bag dots, freeze persistence, server loadouts, and combat DPS in the Logbook
 

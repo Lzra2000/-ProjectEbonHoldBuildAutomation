@@ -58,7 +58,12 @@ TITLE="EbonBuilds $VERSION"
 # The asset download URL is deterministic; the asset itself is uploaded
 # right after the release is created below.
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/EbonBuilds.zip"
-BODY="**Install:** [Download EbonBuilds.zip]($DOWNLOAD_URL)$(printf '\n')Extract it and drop the \`EbonBuilds\` folder into \`Interface/AddOns/\`.
+ATR_LINE=""
+if [ -f dist/Auctionator.zip ]; then
+    ATR_URL="https://github.com/$REPO/releases/download/$TAG/Auctionator.zip"
+    ATR_LINE=$(printf '\n')"Optional affix shopping: [Download Auctionator.zip]($ATR_URL) — extract to \`Interface/AddOns/Auctionator\` (EbonBuilds enables bridge features when present)."
+fi
+BODY="**Install:** [Download EbonBuilds.zip]($DOWNLOAD_URL)$(printf '\n')Extract it and drop the \`EbonBuilds\` folder into \`Interface/AddOns/\`.$ATR_LINE
 $(printf '\n')$(printf '%s' "$NOTES")"
 
 PAYLOAD_FILE="$(mktemp)"
@@ -94,6 +99,20 @@ if [ "$ASSET_STATE" != "uploaded" ]; then
     echo "Release created but asset upload failed -- upload dist/EbonBuilds.zip manually on the release page. Response:" >&2
     echo "$ASSET" >&2
     exit 1
+fi
+
+if [ -f dist/Auctionator.zip ]; then
+    ATR_ASSET="$(curl -s -X POST \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Content-Type: application/zip" \
+        --data-binary @dist/Auctionator.zip \
+        "$UPLOAD_URL?name=Auctionator.zip")"
+    ATR_STATE="$(printf '%s' "$ATR_ASSET" | python3 -c "import json,sys; print(json.load(sys.stdin).get('state',''))" 2>/dev/null || true)"
+    if [ "$ATR_STATE" != "uploaded" ]; then
+        echo "Auctionator.zip upload failed -- upload dist/Auctionator.zip manually. Response:" >&2
+        echo "$ATR_ASSET" >&2
+        exit 1
+    fi
 fi
 
 echo "Published: $URL"

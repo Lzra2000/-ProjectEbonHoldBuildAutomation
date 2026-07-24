@@ -62,14 +62,21 @@ jobs:
           {
               echo "**Install:** [Download EbonBuilds.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/EbonBuilds.zip)"
               echo "Extract it and drop the \`EbonBuilds\` folder into \`Interface/AddOns/\`."
+              if [ -f dist/Auctionator.zip ]; then
+                  echo "Optional affix shopping: [Download Auctionator.zip](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/Auctionator.zip) — extract to \`Interface/AddOns/Auctionator\` (EbonBuilds enables bridge features when present)."
+              fi
               echo
               cat /tmp/notes_raw.md
           } > /tmp/body.md
 
-      - name: Create GitHub Release with asset
+      - name: Create GitHub Release with assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/EbonBuilds.zip \
+          ASSETS="dist/EbonBuilds.zip"
+          if [ -f dist/Auctionator.zip ]; then
+              ASSETS="$ASSETS dist/Auctionator.zip"
+          fi
+          gh release create "$GITHUB_REF_NAME" $ASSETS \
               --title "$(cat /tmp/title.txt)" \
               --notes-file /tmp/body.md
