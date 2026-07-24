@@ -288,7 +288,11 @@ local function IsSafeTree(root, maxDepth, maxNodes)
 	return Visit(root, 0)
 end
 
-local function BuildExportData(build)
+-- opts (optional):
+--   omitSnapshot    -- drop characterSnapshot from the payload (local build unchanged)
+--   maxCommentBytes -- hard-cap comments length for peer-sync size budgets
+local function BuildExportData(build, opts)
+	opts = opts or {}
 	if EbonBuilds.EchoReferenceMigration then EbonBuilds.EchoReferenceMigration.Ensure(build) end
 	local filteredWeights, filteredRefWeights = {}, {}
 	if build.echoWeights then
@@ -306,12 +310,27 @@ local function BuildExportData(build)
 		end
 	end
 
+	local comments = build.comments
+	local maxComments = tonumber(opts.maxCommentBytes)
+	if maxComments and type(comments) == "string" and #comments > maxComments then
+		if maxComments <= 0 then
+			comments = ""
+		else
+			comments = comments:sub(1, maxComments)
+		end
+	end
+
+	local snapshot = nil
+	if not opts.omitSnapshot then
+		snapshot = build.characterSnapshot or nil
+	end
+
 	return {
 		v = EXPORT_VERSION,
 		title = build.title,
 		class = build.class,
 		spec = build.spec,
-		comments = build.comments,
+		comments = comments,
 		lockedEchoes = build.lockedEchoes or { nil, nil, nil, nil, nil, nil },
 		echoWeights = filteredWeights,
 		echoWeightsByRef = filteredRefWeights,
@@ -332,16 +351,68 @@ local function BuildExportData(build)
 		-- Optional: the gear/talents/glyphs snapshot adopted on the
 		-- Character tab travels with the build, so a shared Public Build
 		-- can carry its author's full setup, not just weights.
-		characterSnapshot = build.characterSnapshot or nil,
+		characterSnapshot = snapshot,
 	}
 end
 
-function EbonBuilds.ExportImport.ExportBuild(build)
+function EbonBuilds.ExportImport.ExportBuild(build, opts)
 	if not build then return nil end
-	local data = BuildExportData(build)
+	local data = BuildExportData(build, opts)
 	local json = EbonBuilds.ExportImport.JSONEncode(data)
 	local encoded = Base64Encode(json)
 	return encoded and #encoded <= MAX_ENCODED_BYTES and encoded or nil
+end
+
+-- Peer-sync encoder: keep the local build intact, but shrink the transfer
+-- payload when it would exceed maxBytes. Prefer dropping characterSnapshot,
+-- then progressively trimming comments. Returns b64, meta where meta is
+-- { strippedSnapshot=, trimmedComments=, bytes= } or nil on hard failure.
+function EbonBuilds.ExportImport.ExportBuildForTransfer(build, maxBytes)
+	maxBytes = tonumber(maxBytes) or 36000
+	if not build or maxBytes < 1 then return nil, nil end
+
+	local function attempt(opts)
+		local b64 = EbonBuilds.ExportImport.ExportBuild(build, opts)
+		if b64 and #b64 <= maxBytes then
+			return b64, {
+				strippedSnapshot = opts and opts.omitSnapshot == true or false,
+				trimmedComments = opts and opts.maxCommentBytes ~= nil or false,
+				bytes = #b64,
+			}
+		end
+		return b64, nil
+	end
+
+	local b64, meta = attempt(nil)
+	if meta then return b64, meta end
+
+	local hadSnapshot = type(build.characterSnapshot) == "table"
+	if hadSnapshot then
+		b64, meta = attempt({ omitSnapshot = true })
+		if meta then
+			meta.strippedSnapshot = true
+			return b64, meta
+		end
+	end
+
+	-- Progressive comment caps (bytes of the comments field before JSON/base64).
+	local caps = { 2000, 1000, 400, 100, 0 }
+	for i = 1, #caps do
+		b64, meta = attempt({ omitSnapshot = true, maxCommentBytes = caps[i] })
+		if meta then
+			meta.strippedSnapshot = hadSnapshot or meta.strippedSnapshot
+			meta.trimmedComments = true
+			return b64, meta
+		end
+	end
+
+	-- Still over budget: return the smallest attempt size for diagnostics.
+	local last = EbonBuilds.ExportImport.ExportBuild(build, { omitSnapshot = true, maxCommentBytes = 0 })
+	return nil, {
+		strippedSnapshot = hadSnapshot,
+		trimmedComments = true,
+		bytes = last and #last or (b64 and #b64) or 0,
+	}
 end
 
 function EbonBuilds.ExportImport.DecodeBuild(b64String)

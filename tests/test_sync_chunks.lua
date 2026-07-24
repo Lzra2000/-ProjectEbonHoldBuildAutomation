@@ -49,9 +49,23 @@ do
     check(src:find("MAX_BUILD_TRANSFER"), "transfer size ceiling exists")
     check(src:find("ReportOversizedBuild"), "oversized builds are reported with size + toast")
     check(src:find("GetMaxBuildTransfer"), "transfer ceiling is queryable for UI warnings")
+    check(src:find("ExportBuildForTransfer") or src:find("EncodeBuildForTransfer"),
+        "peer sync uses transfer encoder (auto-strip path)")
+    check(src:find("ReportStrippedTransfer"), "auto-stripped transfers surface a toast")
     check(not src:find("C_ChatInfo", 1, true), "Sync must not use C_ChatInfo (post-3.3.5a)")
     check(not src:find(":RegisterEvent%s*%("),
         "Sync must register events via WoWEvents, not frame:RegisterEvent")
+end
+
+------------------------------------------------------------------------
+-- ExportImport.ExportBuildForTransfer auto-strip contracts
+------------------------------------------------------------------------
+do
+    local src = H.read_file("modules/build/ExportImport.lua")
+    check(src:find("function EbonBuilds%.ExportImport%.ExportBuildForTransfer"),
+        "ExportBuildForTransfer is defined")
+    check(src:find("omitSnapshot"), "transfer strip can omit characterSnapshot")
+    check(src:find("maxCommentBytes"), "transfer strip can trim comments")
 end
 
 ------------------------------------------------------------------------

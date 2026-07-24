@@ -77,19 +77,25 @@ local function FetchPublicBuilds()
     if not (bridge and bridge.ListPseudoBuilds) then return out end
 
     local seenTitle = {}
+    local dense = {}
     for _, b in ipairs(out) do
-        local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        if key ~= "" then seenTitle[key] = true end
-    end
-    for _, b in ipairs(bridge.ListPseudoBuilds()) do
-        local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        -- Prefer richer peer-synced copies when titles collide.
-        if key == "" or not seenTitle[key] then
-            out[#out + 1] = b
+        if type(b) == "table" then
+            dense[#dense + 1] = b
+            local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
             if key ~= "" then seenTitle[key] = true end
         end
     end
-    return out
+    for _, b in ipairs(bridge.ListPseudoBuilds()) do
+        if type(b) == "table" then
+            local key = (b.title or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            -- Prefer richer peer-synced copies when titles collide.
+            if key == "" or not seenTitle[key] then
+                dense[#dense + 1] = b
+                if key ~= "" then seenTitle[key] = true end
+            end
+        end
+    end
+    return dense
 end
 
 ------------------------------------------------------------------------
@@ -1273,9 +1279,12 @@ end
 -- non-number never errors mid-compare. timeFn is optional and forwarded
 -- to ParseLastModified / TrendingScore (defaults to real time()).
 local function CompareBuilds(a, b, mode, now, timeFn)
-    if a == nil or b == nil then
-        if a == nil and b == nil then return false end
-        return b == nil
+    -- Treat nil / non-table holes as sortable sentinels so table.sort never
+    -- raises "attempt to index local 'b' (a nil value)" on sparse merges
+    -- (Echo Journal bridge + remoteBuilds pairs()).
+    if type(a) ~= "table" or type(b) ~= "table" then
+        if type(a) ~= "table" and type(b) ~= "table" then return false end
+        return type(b) ~= "table"
     end
 
     mode = mode or sortMode
@@ -1330,12 +1339,13 @@ local function SortBuilds(list, mode, now, timeFn)
     local write = 1
     for read = 1, maxIndex do
         local v = list[read]
-        if v ~= nil then
+        if type(v) == "table" then
             if write ~= read then list[write] = v end
             write = write + 1
         end
     end
     for i = write, maxIndex do list[i] = nil end
+    if write <= 1 then return list end
     table.sort(list, function(a, b)
         return CompareBuilds(a, b, mode, now, timeFn)
     end)

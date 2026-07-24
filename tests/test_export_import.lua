@@ -321,6 +321,58 @@ do
 end
 
 ------------------------------------------------------------------------
+-- Peer-sync transfer encoder: strip snapshot / trim comments under budget
+------------------------------------------------------------------------
+do
+    check(type(EI.ExportBuildForTransfer) == "function", "ExportBuildForTransfer exists")
+
+    local fatSnapshot = {
+        classToken = "DEATHKNIGHT",
+        talents = {},
+        gear = {},
+    }
+    for slot = 1, 19 do
+        fatSnapshot.gear[slot] = {
+            itemId = 40000 + slot,
+            itemLevel = 264,
+            name = string.rep("GearPieceName", 8) .. tostring(slot),
+            enchant = string.rep("EnchantText", 10),
+            gems = { 1, 2, 3 },
+        }
+    end
+
+    local fat = EbonBuilds.Build.NewObject({
+        title = "DK DD ",
+        class = "DEATHKNIGHT",
+        comments = string.rep("Long public description for peer sync. ", 400),
+        lockedEchoes = { 49020 },
+        echoWeightsByRef = { ["g:9001"] = { [0] = 10, [1] = 0, [2] = 0, [3] = 0 } },
+        settings = EbonBuilds.Build.DefaultSettings(),
+        isPublic = true,
+        characterSnapshot = fatSnapshot,
+        author = "Tester",
+    })
+
+    local full = EI.ExportBuild(fat)
+    check(type(full) == "string", "full export encodes")
+    -- Force a tight budget that full payload exceeds but stripped may fit.
+    local budget = math.max(1000, math.floor(#full * 0.55))
+    check(#full > budget, "fixture is over the artificial transfer budget")
+
+    local transfer, meta = EI.ExportBuildForTransfer(fat, budget)
+    check(type(transfer) == "string", "transfer encoder returns payload under budget")
+    check(#transfer <= budget, "transfer payload respects maxBytes")
+    check(meta and meta.strippedSnapshot == true, "transfer strips characterSnapshot")
+    check(fat.characterSnapshot ~= nil, "local build snapshot left intact")
+    equal(fat.comments, string.rep("Long public description for peer sync. ", 400),
+        "local build comments left intact")
+
+    local decoded = EI.DecodeBuild(transfer)
+    check(decoded ~= nil, "stripped transfer decodes")
+    check(decoded.characterSnapshot == nil, "peer receives no snapshot")
+end
+
+------------------------------------------------------------------------
 -- EWL generation gate
 ------------------------------------------------------------------------
 do

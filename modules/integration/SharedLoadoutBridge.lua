@@ -122,11 +122,15 @@ function Bridge.ListPseudoBuilds(classToken)
     if want == "" then want = nil end
     local out = {}
     for _, build in pairs(cache) do
-        if not want or build.class == want then
+        if type(build) == "table" and (not want or build.class == want) then
             out[#out + 1] = build
         end
     end
     table.sort(out, function(a, b)
+        if type(a) ~= "table" or type(b) ~= "table" then
+            if type(a) ~= "table" and type(b) ~= "table" then return false end
+            return type(b) ~= "table"
+        end
         local ca, cb = a.class or "", b.class or ""
         if ca ~= cb then return ca < cb end
         return (a.title or "") < (b.title or "")

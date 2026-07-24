@@ -347,7 +347,7 @@ local function ReportOversizedBuild(buildOrId, byteCount)
     end
     local bytes = tonumber(byteCount) or 0
     local msg = string.format(
-        "Build \"%s\" is %d bytes (limit %d / ~%.0f KB) -- too large for peer sync; shorten the description or remove the character snapshot",
+        "Build \"%s\" is %d bytes (limit %d / ~%.0f KB) -- too large for peer sync even after stripping snapshot/description; shorten weights or locked echoes",
         title, bytes, MAX_BUILD_TRANSFER, MAX_BUILD_TRANSFER / 1024)
     if not oversizedWarned[id] then
         oversizedWarned[id] = true
@@ -358,9 +358,43 @@ local function ReportOversizedBuild(buildOrId, byteCount)
         if EbonBuilds.Toast and EbonBuilds.Toast.Show and (Now() - oversizedToastAt) >= OVERSIZED_TOAST_GAP then
             oversizedToastAt = Now()
             EbonBuilds.Toast.Show(string.format(
-                "Public build \"%s\" is too large to sync (%.0f KB > %.0f KB). Shorten the description or remove the character snapshot.",
+                "Public build \"%s\" is still too large to sync (%.0f KB > %.0f KB) after auto-shrink. Shorten weights or locked echoes.",
                 title, math.ceil(bytes / 1024), math.ceil(MAX_BUILD_TRANSFER / 1024)))
         end
+    end
+end
+
+-- One toast per build per session when we successfully auto-stripped for
+-- peer transfer (local SavedVariables copy stays full).
+local strippedTransferWarned = {} -- [buildId] = true
+
+local function ReportStrippedTransfer(buildOrId, meta)
+    if type(meta) ~= "table" then return end
+    if not (meta.strippedSnapshot or meta.trimmedComments) then return end
+    local id, title
+    if type(buildOrId) == "table" then
+        id = tostring(buildOrId.id or "?")
+        title = tostring(buildOrId.title or id)
+    else
+        id = tostring(buildOrId or "?")
+        local stored = EbonBuildsDB and EbonBuildsDB.builds and EbonBuildsDB.builds[id]
+        title = stored and tostring(stored.title or id) or id
+    end
+    if strippedTransferWarned[id] then return end
+    strippedTransferWarned[id] = true
+    local parts = {}
+    if meta.strippedSnapshot then parts[#parts + 1] = "character snapshot" end
+    if meta.trimmedComments then parts[#parts + 1] = "description" end
+    local what = table.concat(parts, " + ")
+    local msg = string.format(
+        "Build \"%s\" peer-sync payload auto-stripped (%s); local build unchanged (%.0f KB transfer)",
+        title, what, math.ceil((tonumber(meta.bytes) or 0) / 1024))
+    VerboseLog(msg)
+    if EbonBuilds.Toast and EbonBuilds.Toast.Show and (Now() - oversizedToastAt) >= OVERSIZED_TOAST_GAP then
+        oversizedToastAt = Now()
+        EbonBuilds.Toast.Show(string.format(
+            "Synced \"%s\" without %s (your local build is unchanged).",
+            title, what))
     end
 end
 
@@ -368,8 +402,28 @@ function EbonBuilds.Sync.GetMaxBuildTransfer()
     return MAX_BUILD_TRANSFER
 end
 
--- Returns encoded size in bytes, or nil if the build cannot be exported.
+-- Encode a build for peer sync (auto-strips snapshot/description when needed).
+-- Returns b64 or nil. Does not mutate the stored build.
+local function EncodeBuildForTransfer(build)
+    local EI = EbonBuilds.ExportImport
+    if not build or not EI then return nil, nil end
+    if type(EI.ExportBuildForTransfer) == "function" then
+        return EI.ExportBuildForTransfer(build, MAX_BUILD_TRANSFER)
+    end
+    if type(EI.ExportBuild) ~= "function" then return nil, nil end
+    local b64 = EI.ExportBuild(build)
+    if not b64 then return nil, nil end
+    return b64, { bytes = #b64 }
+end
+
+-- Returns encoded transfer size in bytes (after auto-strip), or nil.
 function EbonBuilds.Sync.EncodedBuildSize(build)
+    local b64 = EncodeBuildForTransfer(build)
+    return b64 and #b64 or nil
+end
+
+-- Full clipboard-style size (no strip) — used by the build-form early warning.
+function EbonBuilds.Sync.EncodedBuildSizeFull(build)
     if not build or not EbonBuilds.ExportImport or not EbonBuilds.ExportImport.ExportBuild then
         return nil
     end
@@ -521,11 +575,14 @@ local function SendBatchBuilds(requester, wantedUuids)
     for i = start, finish do
         local b = pb.builds[i]
         if wanted[b.id] then
-            local b64 = EbonBuilds.ExportImport.ExportBuild(b)
+            local b64, meta = EncodeBuildForTransfer(b)
             if b64 then
+                ReportStrippedTransfer(b, meta)
                 VerboseLog(string.format("BLD enqueued for %s: %s (%d bytes)",
                     requester, b.id, #b64))
                 if SendChunked(requester, "BLD", b.id, b64) then pb.sent = pb.sent + 1 end
+            elseif meta then
+                ReportOversizedBuild(b, meta.bytes)
             end
         end
     end
@@ -581,14 +638,14 @@ local function HandleRequest(requester, classFilter)
             if VALIDATION_REQUIRED and not build.validated then
                 VerboseLog("  build " .. (build.title or "?") .. " skipped: no completed local run reported")
             else
-                -- Exclude oversized exports from LST so peers never WNT/RTX
-                -- them (avoids ErrorLog spam + wasted whisper budget).
-                local exportFn = EbonBuilds.ExportImport and EbonBuilds.ExportImport.ExportBuild
-                local b64 = exportFn and exportFn(build)
-                if not b64 or #b64 > MAX_BUILD_TRANSFER then
-                    ReportOversizedBuild(build, b64 and #b64 or 0)
+                -- Encode with auto-strip; only exclude builds that still
+                -- exceed the ceiling after snapshot/description shrink.
+                local b64, meta = EncodeBuildForTransfer(build)
+                if not b64 then
+                    ReportOversizedBuild(build, meta and meta.bytes or 0)
                     VerboseLog("  build " .. (build.title or "?") .. " skipped: exceeds transfer limit")
                 else
+                    ReportStrippedTransfer(build, meta)
                     eligible[#eligible + 1] = build
                 end
             end
@@ -919,9 +976,12 @@ local function HandleRtx(payload, sender)
         local uuid = parts[i]
         local b = uuid and EbonBuildsDB.builds[uuid]
         if b and b.isPublic then
-            local b64 = EbonBuilds.ExportImport.ExportBuild(b)
+            local b64, meta = EncodeBuildForTransfer(b)
             if b64 then
+                ReportStrippedTransfer(b, meta)
                 if SendChunked(sender, "BLD", uuid, b64) then resent = resent + 1 end
+            elseif meta then
+                ReportOversizedBuild(b, meta.bytes)
             end
         end
     end
@@ -937,11 +997,14 @@ function HandleGet(payload, sender)
     local id8 = parts[3]
     for id, b in pairs(EbonBuildsDB.builds or {}) do
         if b.isPublic and id:gsub("%-", ""):sub(1, 8) == id8 then
-            local b64 = EbonBuilds.ExportImport.ExportBuild(b)
+            local b64, meta = EncodeBuildForTransfer(b)
             if b64 then
+                ReportStrippedTransfer(b, meta)
                 if SendChunked(sender, "BLD", id, b64) then
                     SyncTrace(("GET from %s: served %s"):format(sender, id))
                 end
+            elseif meta then
+                ReportOversizedBuild(b, meta.bytes)
             end
             return
         end
