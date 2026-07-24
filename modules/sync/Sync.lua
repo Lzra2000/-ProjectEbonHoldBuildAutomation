@@ -491,6 +491,20 @@ end
 -- Assembly
 ------------------------------------------------------------------------
 
+-- RecommendationService listens for SYNC_REVISION_CHANGED so wizard cohorts
+-- rebuild after Public Sync mutates remoteBuilds. Debounce across a burst of
+-- BLD completions so one sync session does not thrash the cache per build.
+local function NotifyRecommendationSourcesChanged()
+    if not EbonBuilds.EventHub then return end
+    if EbonBuilds.Scheduler then
+        EbonBuilds.Scheduler.After("sync.recommendationSourcesChanged", 0.75, function()
+            EbonBuilds.EventHub.Bump("SYNC_REVISION_CHANGED")
+        end, EbonBuilds.Scheduler.MAINTENANCE, false)
+        return
+    end
+    EbonBuilds.EventHub.Bump("SYNC_REVISION_CHANGED")
+end
+
 local function AssembleBuild(sender, buildId, base64)
     local imported = EbonBuilds.ExportImport.DecodeBuild(base64)
     if not imported then return end
@@ -507,6 +521,7 @@ local function AssembleBuild(sender, buildId, base64)
     imported._claimedAuthor = imported.author
 
     -- Store in remote builds (market), not in local collection.
+    local changed = false
     local rb = EbonBuildsDB.remoteBuilds[remoteKey]
     if rb then
         rb._lastSeenAt = time()
@@ -516,16 +531,22 @@ local function AssembleBuild(sender, buildId, base64)
             imported.id = buildId
             imported._lastSeenAt = time()
             EbonBuildsDB.remoteBuilds[remoteKey] = imported
+            changed = true
             VerboseLog("Build " .. buildId .. " updated in remote (incoming=" .. incomingDate .. ")")
         end
     else
         imported.id = buildId
         imported._lastSeenAt = time()
         EbonBuildsDB.remoteBuilds[remoteKey] = imported
+        changed = true
         VerboseLog("Build " .. buildId .. " stored in remote (author: " .. (imported.author or "?") .. ")")
     end
     EbonBuilds.Scheduler.After("database.pruneRemoteBuilds", 0.5,
         EbonBuilds.Database.PruneRemoteBuilds, EbonBuilds.Scheduler.MAINTENANCE, false)
+
+    if changed then
+        NotifyRecommendationSourcesChanged()
+    end
 
     if EbonBuilds.PublicBuildsView and EbonBuilds.PublicBuildsView.RefreshIfMounted then
         EbonBuilds.PublicBuildsView.RefreshIfMounted()
@@ -1468,11 +1489,13 @@ function EbonBuilds.Sync.Init()
     if storedVersion < SYNC_VERSION then
         if EbonBuildsDB.remoteBuilds and next(EbonBuildsDB.remoteBuilds) then
             EbonBuildsDB.remoteBuilds = {}
+            NotifyRecommendationSourcesChanged()
             Log("Sync version bumped to " .. SYNC_VERSION .. " — remote builds purged.")
         end
         EbonBuildsDB.syncVersion = SYNC_VERSION
     end
 end
+
 
 SLASH_EBBSYNC1 = "/ebbsync"
 SlashCmdList["EBBSYNC"] = function(cmd)
@@ -1492,6 +1515,7 @@ SlashCmdList["EBBSYNC"] = function(cmd)
         lastRequestTime = 0
         EbonBuildsDB.lastSyncDate = nil
         EbonBuildsDB.remoteBuilds = {}
+        NotifyRecommendationSourcesChanged()
         CommandLog("Sync cooldown and lastSyncDate reset. Remote builds cleared.")
     elseif cmd == "verbose" then
         EbonBuilds.Sync.SetVerboseLogEnabled(not VERBOSE_LOG)
