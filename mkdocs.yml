@@ -81,6 +81,7 @@ nav:
     - FAQ: faq.md
     - Troubleshooting: troubleshooting.md
     - "Details!: Tiny Threat (PE)": details-tinythreat-pe.md
+    - "Details!: Project Ebonhold (PE)": details-project-ebonhold-pe.md
   - Project:
     - Releases: releases.md
     - "3.86 release prep": release-386-prep.md

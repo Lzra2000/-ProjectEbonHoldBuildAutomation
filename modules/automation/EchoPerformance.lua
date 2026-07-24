@@ -15,6 +15,8 @@ local addonName, EbonBuilds = ...
 -- not control, and its exact internals can change between versions. Only
 -- the documented public API (Details:GetCurrentCombat, combat:GetActor,
 -- actor.total, combat:GetCombatTime -- see Details' own API.lua) is used.
+-- When optional Details_ProjectEbonhold is installed, Sample() also
+-- records spell-attributed Echo damage via Echo.GetPlayerEchoDamage().
 
 EbonBuilds.EchoPerformance = {}
 
@@ -217,6 +219,16 @@ function EbonBuilds.EchoPerformance.Sample()
 
     local store = GetStore()
     local changed = false
+    -- Optional Details PE layer: spell-attributed Echo damage for the
+    -- current combat (labels + matching). Soft-fail when absent.
+    local echoSpellDamage = nil
+    local pe = _G.DetailsProjectEbonhold
+    if pe and pe.Echo and type(pe.Echo.GetPlayerEchoDamage) == "function" then
+        local okPe, map = SafeCall(pe.Echo.GetPlayerEchoDamage)
+        if okPe and type(map) == "table" then
+            echoSpellDamage = map
+        end
+    end
     -- New model: one whole-set sample per tick (every active echo
     -- together with this DPS reading) into EchoSamples -- the honest
     -- basis for with/without analysis. The legacy per-echo sum/count
@@ -241,6 +253,16 @@ function EbonBuilds.EchoPerformance.Sample()
             end
             entry.sum = entry.sum + dps
             entry.count = entry.count + 1
+            -- When Details PE can see this echo's spell damage in the
+            -- current combat, accumulate a parallel spell-attributed
+            -- signal (does not replace the whole-loadout average).
+            if echoSpellDamage then
+                local spellAmt = tonumber(echoSpellDamage[name])
+                if spellAmt and spellAmt > 0 then
+                    entry.spellSum = (tonumber(entry.spellSum) or 0) + spellAmt
+                    entry.spellCount = (tonumber(entry.spellCount) or 0) + 1
+                end
+            end
             changed = true
             -- Cap by halving instead of dropping oldest one-by-one -- cheap,
             -- and keeps the running average meaningful rather than
@@ -248,6 +270,10 @@ function EbonBuilds.EchoPerformance.Sample()
             if entry.count > MAX_SAMPLES_PER_ECHO then
                 entry.sum = entry.sum / 2
                 entry.count = math.floor(entry.count / 2)
+                if entry.spellCount and entry.spellCount > MAX_SAMPLES_PER_ECHO then
+                    entry.spellSum = (tonumber(entry.spellSum) or 0) / 2
+                    entry.spellCount = math.floor(entry.spellCount / 2)
+                end
             end
         end
     end

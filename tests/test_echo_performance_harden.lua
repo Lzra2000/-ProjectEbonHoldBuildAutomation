@@ -97,6 +97,22 @@ status = select(1, EbonBuilds.EchoPerformance.GetTrackingStatus())
 equal(status, "collecting", "samples without evidence stats stays collecting")
 equal(EbonBuilds.EchoPerformance.HasStoredStats(), true, "stored stats detected")
 
+-- Details PE spell-attributed path: soft-fail when absent, accumulate when present.
+DetailsProjectEbonhold = {
+    Echo = {
+        GetPlayerEchoDamage = function()
+            return { ["Echo-990001"] = 2500 }
+        end,
+    },
+}
+EbonBuildsCharDB.echoPerformance = {}
+EbonBuilds.EchoPerformance.Sample()
+local peEntry = EbonBuildsCharDB.echoPerformance["Echo-990001"]
+check(peEntry ~= nil, "sample created with Details PE present")
+equal(peEntry and peEntry.spellSum, 2500, "spell-attributed echo damage recorded")
+equal(peEntry and peEntry.spellCount, 1, "spell-attributed sample count")
+DetailsProjectEbonhold = nil
+
 equal(EbonBuilds.EchoPerformance.ParseBatch(nil), nil, "nil payload rejected")
 equal(EbonBuilds.EchoPerformance.ParseBatch("not-prf"), nil, "invalid payload rejected")
 local class, entries = EbonBuilds.EchoPerformance.ParseBatch("PRF|MAGE|Echo-A:1000:5")

@@ -20,6 +20,12 @@ and on the [Releases page](https://lzra2000.github.io/ProjectEbonHoldBuildAutoma
 
 ### Unreleased
 
+#### Added
+- **Details!: Project Ebonhold companion:** lean PE fine-tune layer for Details! (not a full core vendor) -- Echo spell labels `(Echo)`, CLEU proc-to-source attribution `Proc (<- Cast)`, Custom Display **PE Proc Sources**, soft PE defaults. Ships as `Details_ProjectEbonhold.zip`. Docs: [details-project-ebonhold-pe.md](details-project-ebonhold-pe.md). Tests: `tests/test_details_project_ebonhold.lua`.
+
+#### Changed
+- **EchoPerformance:** when `Details_ProjectEbonhold` is present, accumulate optional spell-attributed Echo damage (`spellSum`/`spellCount`) alongside whole-loadout DPS samples.
+
 #### Fixed
 - Public Builds sort hardening on top of #126: coerce numeric sort keys with `tonumber`, densify sparse list holes before `table.sort`, and expand the CompareBuilds self-test with the v3.86 Alpha/Zebra conflict reproduction, pairwise total-order checks across all modes, and sparse-list compaction.
 

@@ -23,8 +23,9 @@ Requires **ProjectEbonhold** or **ProjectEbonhold Enhanced**. Some features addi
 | --- | --- | --- |
 | **Auctionator** | Affix shopping / AH buyout hints with EbonBuilds | [`vendor/Auctionator/CREDITS.md`](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/blob/main/vendor/Auctionator/CREDITS.md) |
 | **Details!: Tiny Threat (PE)** | Threat meter Details! plugin for 3.3.5a | [Details!: Tiny Threat (PE)](details-tinythreat-pe.md) |
+| **Details!: Project Ebonhold** | Echo DPS labels + proc source attribution for Details! | [Details!: Project Ebonhold (PE)](details-project-ebonhold-pe.md) |
 
-Extract optional zips (`Auctionator.zip`, `Details_TinyThreat.zip` when shipped) into `Interface/AddOns/` with folder names matching each `.toc`. Tiny Threat **requires Details!** in `Interface/AddOns/Details` — not included in EbonBuilds releases.
+Extract optional zips (`Auctionator.zip`, `Details_TinyThreat.zip`, `Details_ProjectEbonhold.zip` when shipped) into `Interface/AddOns/` with folder names matching each `.toc`. Details companions **require Details!** in `Interface/AddOns/Details` — not included in EbonBuilds releases.
 
 ## First login
 

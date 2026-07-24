@@ -24,7 +24,7 @@ cp -r modules "$PKG/"
 [ -d media ] && cp -r media "$PKG/"
 
 mkdir -p dist
-rm -f dist/EbonBuilds.zip dist/Auctionator.zip dist/Details_TinyThreat.zip
+rm -f dist/EbonBuilds.zip dist/Auctionator.zip dist/Details_TinyThreat.zip dist/Details_ProjectEbonhold.zip
 
 # Verify every file the .toc references made it into the package before
 # zipping, so a stale build script can't silently ship a broken addon.
@@ -51,6 +51,14 @@ if [ -d vendor/Details_TinyThreat ] && [ -f vendor/Details_TinyThreat/Details_Ti
     cp -r vendor/Details_TinyThreat/. "$TT_PKG/"
     (cd "$STAGE" && zip -rq -X "$OLDPWD/dist/Details_TinyThreat.zip" Details_TinyThreat)
     echo "Built dist/Details_TinyThreat.zip ($(du -h dist/Details_TinyThreat.zip | cut -f1)) — Project Ebonhold fork; requires Details! core; see vendor/Details_TinyThreat/CREDITS.md"
+fi
+
+if [ -d vendor/Details_ProjectEbonhold ] && [ -f vendor/Details_ProjectEbonhold/Details_ProjectEbonhold.toc ]; then
+    PE_PKG="$STAGE/Details_ProjectEbonhold"
+    mkdir -p "$PE_PKG"
+    cp -r vendor/Details_ProjectEbonhold/. "$PE_PKG/"
+    (cd "$STAGE" && zip -rq -X "$OLDPWD/dist/Details_ProjectEbonhold.zip" Details_ProjectEbonhold)
+    echo "Built dist/Details_ProjectEbonhold.zip ($(du -h dist/Details_ProjectEbonhold.zip | cut -f1)) — Details PE fine-tune (Echo/procs); requires Details! core; see vendor/Details_ProjectEbonhold/CREDITS.md"
 fi
 
 echo "Built dist/EbonBuilds.zip ($(du -h dist/EbonBuilds.zip | cut -f1))"

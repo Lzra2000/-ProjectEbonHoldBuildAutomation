@@ -1,0 +1,41 @@
+# Details!: Project Ebonhold (Echo DPS + Procs)
+
+Lean **Details!** companion for Project Ebonhold on WoW **3.3.5a**.
+Does **not** ship the Details! core (~22 MB) — install Details separately.
+
+    Kurzanleitung: [Deutsch](#deutsch-kurzfassung)
+
+## What it fixes
+
+| Area | Before | After |
+|------|--------|-------|
+| **Echo DPS** | Echo/secondary hits look like anonymous custom spell IDs in the Details spell list | Labeled `Name (Echo)`; optional breakdown API for EbonBuilds EchoPerformance |
+| **Procs** | Proc damage has no link to the cast that triggered it | Labeled `ProcName (← SourceCast)`; Custom Display **PE Proc Sources** |
+| **Core** | Stock Details defaults | Soft PE defaults (`override_spellids` on); TinyThreat-style shim, not a full fork |
+
+## Install
+
+1. Ensure **Details!** is in `Interface/AddOns/Details`.
+2. Download **`Details_ProjectEbonhold.zip`** from the
+   [latest release](https://github.com/Lzra2000/ProjectEbonHoldBuildAutomation/releases/latest)
+   (when attached) **or** copy `vendor/Details_ProjectEbonhold/` from this repo.
+3. Folder name must be exactly **`Details_ProjectEbonhold`**.
+4. `/reload`. Optional: Details window → Custom → **PE Proc Sources**.
+5. Toggles: `/detailspe echoes`, `/detailspe procs`.
+
+Works alongside **Details_TinyThreat** (threat plugin) and EbonBuilds
+**Track DPS by echo** (EchoPerformance).
+
+## Deutsch (Kurzfassung)
+
+**Details!: Project Ebonhold** kennzeichnet Echo-Schaden in Details als
+`(Echo)` und zeigt bei Procs, **welcher Spell** sie ausgelöst hat
+(`Proc (← Quell-Spell)`). Zusätzlich gibt es die Custom-Anzeige
+**PE Proc Sources**.
+
+1. Details!-Core muss bereits unter `Interface/AddOns/Details` liegen.
+2. `Details_ProjectEbonhold.zip` nach `Interface/AddOns/Details_ProjectEbonhold`
+   entpacken.
+3. `/reload` — Labels erscheinen in der Spell-Aufschlüsselung automatisch.
+
+Siehe auch: [Details!: Tiny Threat (PE)](details-tinythreat-pe.md).

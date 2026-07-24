@@ -7,26 +7,30 @@
 #   sh scripts/verify-package.sh --build   # build first when dist/ is missing
 #
 # Optional companions:
-#   vendor/Auctionator/       -> dist/Auctionator.zip       (see vendor/Auctionator/CREDITS.md)
-#   vendor/Details_TinyThreat/ -> dist/Details_TinyThreat.zip (see vendor/Details_TinyThreat/CREDITS.md)
+#   vendor/Auctionator/            -> dist/Auctionator.zip              (see vendor/Auctionator/CREDITS.md)
+#   vendor/Details_TinyThreat/     -> dist/Details_TinyThreat.zip       (see vendor/Details_TinyThreat/CREDITS.md)
+#   vendor/Details_ProjectEbonhold/ -> dist/Details_ProjectEbonhold.zip (see vendor/Details_ProjectEbonhold/CREDITS.md)
 set -eu
 cd "$(dirname "$0")/.."
 
 BUILD_FIRST=0
 SKIP_AUCTIONATOR=0
 SKIP_DETAILS_TINYTHREAT=0
+SKIP_DETAILS_PE=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --build) BUILD_FIRST=1; shift ;;
         --skip-auctionator) SKIP_AUCTIONATOR=1; shift ;;
         --skip-details-tinythreat) SKIP_DETAILS_TINYTHREAT=1; shift ;;
+        --skip-details-pe) SKIP_DETAILS_PE=1; shift ;;
         --help|-h)
             cat <<'EOF'
-Usage: sh scripts/verify-package.sh [--build] [--skip-auctionator] [--skip-details-tinythreat]
+Usage: sh scripts/verify-package.sh [--build] [--skip-auctionator] [--skip-details-tinythreat] [--skip-details-pe]
 
   --build                    Run scripts/build-dist.sh first if dist/EbonBuilds.zip is missing
   --skip-auctionator         Do not validate dist/Auctionator.zip even when present
   --skip-details-tinythreat  Do not validate dist/Details_TinyThreat.zip even when present
+  --skip-details-pe          Do not validate dist/Details_ProjectEbonhold.zip even when present
 EOF
             exit 0 ;;
         *)
@@ -156,6 +160,20 @@ elif [ -d vendor/Details_TinyThreat ] && [ -f vendor/Details_TinyThreat/Details_
     fail=1
 fi
 
+if [ "$SKIP_DETAILS_PE" -eq 0 ] && [ -f dist/Details_ProjectEbonhold.zip ]; then
+    echo ""
+    echo "== Verifying optional dist/Details_ProjectEbonhold.zip =="
+    unzip -q dist/Details_ProjectEbonhold.zip -d "$STAGE"
+    PE_ROOT="$STAGE/Details_ProjectEbonhold"
+    verify_toc_package "$PE_ROOT/Details_ProjectEbonhold.toc" "$PE_ROOT" "Details_ProjectEbonhold"
+    echo "Optional Details_ProjectEbonhold bundle verified — see vendor/Details_ProjectEbonhold/CREDITS.md"
+elif [ -d vendor/Details_ProjectEbonhold ] && [ -f vendor/Details_ProjectEbonhold/Details_ProjectEbonhold.toc ] && [ ! -f dist/Details_ProjectEbonhold.zip ]; then
+    echo ""
+    echo "WARN: vendor/Details_ProjectEbonhold present but dist/Details_ProjectEbonhold.zip was not built" >&2
+    annotate "vendor/Details_ProjectEbonhold present but dist/Details_ProjectEbonhold.zip missing"
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo ""
     echo "Package smoke check FAILED." >&2
@@ -169,4 +187,7 @@ if [ -f dist/Auctionator.zip ]; then
 fi
 if [ -f dist/Details_TinyThreat.zip ]; then
     echo "Optional Details_TinyThreat.zip included — requires Details! core; see vendor/Details_TinyThreat/CREDITS.md"
+fi
+if [ -f dist/Details_ProjectEbonhold.zip ]; then
+    echo "Optional Details_ProjectEbonhold.zip included — requires Details! core; see vendor/Details_ProjectEbonhold/CREDITS.md"
 fi
