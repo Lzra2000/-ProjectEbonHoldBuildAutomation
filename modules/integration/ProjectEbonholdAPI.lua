@@ -793,5 +793,7 @@ function API.GetCapabilities()
         serverBoardState = (type(perks) == "table" and BSM and (
             type(perks.GetBoardState) == "function" or BSM.IsValidState(perks.boardState)
         )) or false,
+        intentQueueClient = EbonBuilds.AutomationIntentQueue ~= nil,
+        serverIntentAck = (type(perks) == "table" and type(perks.GetIntentAck) == "function") or false,
     }
 end

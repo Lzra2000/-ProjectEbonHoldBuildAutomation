@@ -123,6 +123,7 @@ assertTrue(not addon.ProjectAPI.HasActionObservers(), "unmodified base addon was
 local caps = addon.ProjectAPI.GetCapabilities()
 assertTrue(caps.boardState, "boardState capability missing")
 assertTrue(not caps.serverBoardState, "serverBoardState should be false without PE boardState")
+assertTrue(not caps.serverIntentAck, "serverIntentAck should be false without PE GetIntentAck")
 local derived = addon.ProjectAPI.GetBoardState({
     choices = { { spellId = 1 }, { spellId = 2, justFrozen = true } },
     frozenCount = 1,

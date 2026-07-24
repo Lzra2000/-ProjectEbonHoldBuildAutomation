@@ -37,6 +37,7 @@ local function IsInitialRunLevel()
 end
 
 local Decision = EbonBuilds.AutomationBoardDecision
+local IntentQueue = EbonBuilds.AutomationIntentQueue
 local MAX_FREEZE_CONFIRM_POLLS = 3
 local MAX_FREEZE_RECOVERY_POLLS = 2
 local boardState = {
@@ -667,6 +668,7 @@ local function ClearPendingAction()
     boardState.pendingAction = nil
     boardState.pendingActionFingerprint = nil
     boardState.pendingActionIdentity = nil
+    if IntentQueue then IntentQueue.Clear("pending_action_cleared") end
 end
 
 local function ClearFreezeUncertainty()
@@ -717,6 +719,7 @@ local function ResetObservedBoard(nextState)
     ClearMap(boardState.failedFreezeBySlot)
     ClearPendingFreeze()
     ClearPendingAction()
+    if IntentQueue then IntentQueue.Reset() end
 end
 
 local function ResetFreezeRound(nextState)
@@ -1027,7 +1030,65 @@ local function AttachRuntimeState(board, choices)
     end
 end
 
+local function IntentActionFromDecision(action)
+    if action == "SELECT" then return "select" end
+    if action == "BANISH" then return "banish" end
+    if action == "REROLL" then return "reroll" end
+    if action == "FREEZE" then return "freeze" end
+    return nil
+end
+
+local function BuildIntentSnapshot(board, target)
+    if IntentQueue and IntentQueue.BuildSnapshot then
+        local snapshot = IntentQueue.BuildSnapshot(board, target)
+        snapshot.pendingAction = boardState.pendingAction
+        return snapshot
+    end
+    return {
+        offerId = board and board.offerId,
+        identityFingerprint = board and board.identityFingerprint,
+        targetSlot = target and target.index,
+        serverPendingAction = board and board.serverPendingAction,
+        pendingAction = boardState.pendingAction,
+    }
+end
+
+local function GuardIntent(action, board, target)
+    if not IntentQueue then return true end
+    local intentAction = IntentActionFromDecision(action)
+    if not intentAction then return true end
+    local accepted, reason = IntentQueue.TryBegin(intentAction, BuildIntentSnapshot(board, target))
+    if accepted then return true end
+    boardState.state = Decision.STATE.WAITING_FOR_BOARD_UPDATE
+    EbonBuilds.DebugLog.Add(IntentQueue.DescribeBlock(reason))
+    StartEvalTimer()
+    return false
+end
+
+local function ResolveIntentQueueAck(board)
+    if not IntentQueue then return "none" end
+    local ack = IntentQueue.PollAck(BuildIntentSnapshot(board))
+    if ack == "none" or ack == "waiting" then return ack end
+    if boardState.pendingAction then
+        EbonBuilds.DebugLog.Add("Intent queue ack: " .. ack
+            .. " after " .. tostring(boardState.pendingAction))
+        ClearPendingAction()
+        boardState.state = Decision.STATE.EVALUATING
+    elseif ack == "timeout" then
+        EbonBuilds.DebugLog.Add("Intent queue: in-flight intent timed out; clearing block")
+    end
+    return ack
+end
+
 local function ResolvePendingAction(board)
+    ResolveIntentQueueAck(board)
+    if IntentQueue and IntentQueue.IsBlocking(BuildIntentSnapshot(board)) then
+        boardState.state = Decision.STATE.WAITING_FOR_BOARD_UPDATE
+        EbonBuilds.DebugLog.Add("Intent queue: " .. (IntentQueue.BlockReason() or "waiting"))
+        StartEvalTimer()
+        return "waiting"
+    end
+
     if not boardState.pendingAction then
         -- The server ProjectEbonhold distribution rejects a request while its
         -- own one is in flight (player click or its auto-accept). Wait for the
@@ -1104,7 +1165,9 @@ local function LogBoardDecision(board, decision)
 end
 
 local function RequestFreeze(build, board, target)
+    if not GuardIntent("FREEZE", board, target) then return true end
     if board.frozenCount >= (board.maxFrozen or 2) then
+        if IntentQueue then IntentQueue.Clear("freeze_blocked") end
         EbonBuilds.DebugLog.Add("Freeze blocked: board already contains two frozen Echoes")
         return false
     end
@@ -1119,6 +1182,7 @@ local function RequestFreeze(build, board, target)
 
     local accepted = EbonBuilds.ProjectAPI.RequestFreeze(target.index - 1)
     if not accepted then
+        if IntentQueue then IntentQueue.Clear("freeze_rejected") end
         boardState.failedFreezeBySlot[target.index] = true
         ClearPendingFreeze()
         ClearFreezeUncertainty()
@@ -1163,6 +1227,7 @@ local function ExecuteDecision(build, board, decision)
     end
 
     if decision.action == "SELECT" then
+        if not GuardIntent("SELECT", board, decision.target) then return true end
         if boardState.pendingFreezeSlot or boardState.frozenStateUncertain
             or Decision.HasUnsecuredFreezeCandidate(board, decision.target) then
             EbonBuilds.DebugLog.Add("Selection blocked: a freeze is pending or an unsecured freeze candidate remains")
@@ -1181,6 +1246,7 @@ local function ExecuteDecision(build, board, decision)
             return true
         end
     elseif decision.action == "BANISH" then
+        if not GuardIntent("BANISH", board, decision.target) then return true end
         if board.frozenCount > 0 or boardState.pendingFreezeSlot or boardState.frozenStateUncertain then
             EbonBuilds.DebugLog.Add("Banish blocked: frozen-board safety guard")
             return false
@@ -1206,6 +1272,7 @@ local function ExecuteDecision(build, board, decision)
             return false
         end
         boardState.state = Decision.STATE.REROLLING
+        if not GuardIntent("REROLL", board, nil) then return true end
         if SubmitAction("reroll", build, board.slots, 0, nil, "Reroll") then
             boardState.pendingAction = "reroll"
             boardState.pendingActionFingerprint = board.fingerprint
@@ -1216,6 +1283,7 @@ local function ExecuteDecision(build, board, decision)
     end
 
     boardState.state = Decision.STATE.RECOVERY
+    if IntentQueue then IntentQueue.Clear("request_rejected") end
     lastNoActionReason = "Autopilot request was rejected; choose manually"
     return false
 end

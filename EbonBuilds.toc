@@ -120,5 +120,6 @@ modules/automation/EchoDeltaSync.lua
 modules/automation/EchoPerformance.lua
 modules/automation/BoardStateMachine.lua
 modules/automation/BoardDecision.lua
+modules/automation/IntentQueue.lua
 modules/automation/Automation.lua
 modules/automation/ManualTraining.lua
