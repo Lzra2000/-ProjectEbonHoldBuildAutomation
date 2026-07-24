@@ -97,22 +97,13 @@ function Bridge.OpenMerchantUi()
     if not Bridge.IsProjectEbonholdLoaded() then
         return false, "missing-pe"
     end
+    if not Bridge.IsMerchantAffixAvailable() then
+        return false, "no-affix-vendor"
+    end
     if Bridge.IsMerchantOpen() then
         return true, "ok"
     end
-    if LoadAddOn then
-        pcall(LoadAddOn, "Blizzard_MerchantUI")
-    end
-    if MerchantFrame and ShowUIPanel then
-        ShowUIPanel(MerchantFrame)
-        if MerchantFrame:IsShown() then
-            return true, "ok"
-        end
-    end
-    if Bridge.IsMerchantAffixAvailable() then
-        return false, "no-merchant"
-    end
-    return false, "no-affix-vendor"
+    return false, "no-merchant"
 end
 
 function Bridge.Init()
