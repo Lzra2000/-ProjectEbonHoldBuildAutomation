@@ -141,6 +141,12 @@ end
 function EbonBuilds.BuildTabs.OnBuildSaved(savedBuild)
     savedBuild = savedBuild or EbonBuilds.Build.GetActive()
     if not savedBuild then return end
+    -- Always rebind to the canonical SavedVariables object. A stale context
+    -- copy (for example Overview's pre-save pointer) would make the next tab
+    -- remount reload first-save weights after a successful second Save.
+    if savedBuild.id and EbonBuilds.Build and EbonBuilds.Build.Get then
+        savedBuild = EbonBuilds.Build.Get(savedBuild.id) or savedBuild
+    end
 
     -- Mutate the existing context so a mounted view holding this table keeps
     -- the same object, while future tab switches see the committed build (and
@@ -301,6 +307,7 @@ end
 function view.Hide()
     EbonBuilds.Runtime.isEditingBuild = nil
     EbonBuilds.Runtime.pendingWeights = nil
+    EbonBuilds.Runtime.pendingRefWeights = nil
     EbonBuilds.Runtime.wizardPrefill = nil
     UnmountAll()
     dirty = false

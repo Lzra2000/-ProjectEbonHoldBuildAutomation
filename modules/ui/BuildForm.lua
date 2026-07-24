@@ -782,14 +782,77 @@ LoadFromBuild = function(build)
     EbonBuilds.Runtime.pendingRefWeights = EbonBuilds.Weights.CloneRefWeights(build.echoWeightsByRef or {})
 end
 
+-- Copy src's entries into dst without replacing dst's table identity. Mounted
+-- Priorities / Modifiers / Autopilot views may already hold this table (or its
+-- nested maps); swapping the Runtime pointer after Save made later edits write
+-- into an orphan while Save kept reading the fresh empty clone.
+local function AdoptTableInPlace(dst, src)
+    if type(dst) ~= "table" then return src end
+    for key in pairs(dst) do dst[key] = nil end
+    if type(src) == "table" then
+        for key, value in pairs(src) do dst[key] = value end
+    end
+    return dst
+end
+
+local function AdoptSettingsInPlace(dst, src)
+    if type(dst) ~= "table" then return CloneSettings(src) end
+    src = src or {}
+    for key in pairs(dst) do
+        if src[key] == nil then dst[key] = nil end
+    end
+    for key, value in pairs(src) do
+        if type(value) == "table" then
+            if type(dst[key]) ~= "table" then dst[key] = {} end
+            local nested = dst[key]
+            for nestedKey in pairs(nested) do
+                if value[nestedKey] == nil then nested[nestedKey] = nil end
+            end
+            for nestedKey, nestedValue in pairs(value) do
+                nested[nestedKey] = nestedValue
+            end
+        else
+            dst[key] = value
+        end
+    end
+    return dst
+end
+
 -- Replace the editor's saved baseline after an in-place Save without
 -- unmounting the active tab. Keeping the mount intact preserves filters,
 -- selection, and scroll position on Priorities and the other editor views.
+-- Weight/settings drafts keep their table identities so a second Save still
+-- commits the live editor model instead of a stale post-save clone.
 function EbonBuilds.BuildForm.AcceptSavedBuild(build)
     if not build then return nil end
+    if build.id and EbonBuilds.Build and EbonBuilds.Build.Get then
+        build = EbonBuilds.Build.Get(build.id) or build
+    end
+
+    local keepWeights = type(EbonBuilds.Runtime.pendingWeights) == "table"
+    local keepRefWeights = type(EbonBuilds.Runtime.pendingRefWeights) == "table"
+    local keepSettings = type(state.settings) == "table"
+    local pendingWeights = EbonBuilds.Runtime.pendingWeights
+    local pendingRefWeights = EbonBuilds.Runtime.pendingRefWeights
+    local editingSettings = state.settings
+
     LoadFromBuild(build)
+
+    if keepWeights then
+        EbonBuilds.Runtime.pendingWeights = AdoptTableInPlace(pendingWeights, EbonBuilds.Runtime.pendingWeights)
+    end
+    if keepRefWeights then
+        EbonBuilds.Runtime.pendingRefWeights = AdoptTableInPlace(pendingRefWeights, EbonBuilds.Runtime.pendingRefWeights)
+    end
+    if keepSettings then
+        state.settings = AdoptSettingsInPlace(editingSettings, state.settings)
+    end
+
     if viewFrame and viewFrame:IsShown() then
         ApplyStateToInputs()
+    end
+    if EbonBuilds.EchoTable and EbonBuilds.EchoTable.RefreshCurrentView then
+        EbonBuilds.EchoTable.RefreshCurrentView(false)
     end
     return build
 end

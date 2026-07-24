@@ -1213,6 +1213,30 @@ do
 end
 print("Verified Save commits in place without remounting the active editor tab.")
 
+-- Repeated in-place Save must keep the live pending weight draft identity so a
+-- second priority edit is not orphaned onto a discarded clone (Street0r report).
+do
+    local formFile = assert(io.open("modules/ui/BuildForm.lua", "r"))
+    local formSource = NormalizeNewlines(formFile:read("*a"))
+    formFile:close()
+    if not formSource:find("AdoptTableInPlace", 1, true)
+        or not formSource:find("AdoptSettingsInPlace", 1, true) then
+        io.stderr:write("IN-PLACE SAVE FAIL: AcceptSavedBuild no longer adopts drafts in place\n")
+        os.exit(1)
+    end
+    local tabsFile = assert(io.open("modules/ui/BuildTabs.lua", "r"))
+    local tabsSource = NormalizeNewlines(tabsFile:read("*a"))
+    tabsFile:close()
+    local handlerBegin = assert(tabsSource:find("function EbonBuilds.BuildTabs.OnBuildSaved(savedBuild)", 1, true))
+    local handlerEnd = assert(tabsSource:find("local function CreateTabs", handlerBegin, true))
+    local handlerBody = tabsSource:sub(handlerBegin, handlerEnd - 1)
+    if not handlerBody:find("Build.Get(savedBuild.id)", 1, true) then
+        io.stderr:write("IN-PLACE SAVE FAIL: OnBuildSaved does not rebind to the canonical SavedVariables build\n")
+        os.exit(1)
+    end
+end
+print("Verified repeated in-place Save keeps the live editor draft identity.")
+
 -- Overview-shell regression: the dashboard must use themed flat tabs and a
 -- shared page header rather than native parchment tab geometry.
 do
